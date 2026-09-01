@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "app-celu",
+    "name": "Tracker App",
     "slug": "app-celu",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,19 +16,23 @@
     "android": {
       "package": "com.facucp102.appcelu",
       "versionCode": 1,
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
+      "icon": "./assets/icon.png",
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sharing"
-    ]
+      "expo-sharing",
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0333bc33-170d-4c11-a992-36ec995f2515"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0333bc33-170d-4c11-a992-36ec995f2515"
+    }
   }
 }

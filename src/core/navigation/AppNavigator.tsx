@@ -1,21 +1,88 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
-import { HomeScreen } from '../../presentation/screens/home/HomeScreen';
-import { SettingsScreen } from '../../presentation/screens/settings/SettingsScreen';
+import { container } from '../di/container';
+import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
+import { FinancesScreen } from '../../presentation/screens/finances/FinancesScreen';
+import { ListDetailScreen } from '../../presentation/screens/list-detail/ListDetailScreen';
+import { ListsScreen } from '../../presentation/screens/lists/ListsScreen';
 import { MoodProgressScreen } from '../../presentation/screens/mood-progress/MoodProgressScreen';
+import { OnboardingScreen } from '../../presentation/screens/onboarding/OnboardingScreen';
+import { SettingsScreen } from '../../presentation/screens/settings/SettingsScreen';
 import { CreateTrackerScreen } from '../../presentation/screens/tracker-form/CreateTrackerScreen';
 import { EditTrackerScreen } from '../../presentation/screens/tracker-form/EditTrackerScreen';
 import { TrackerProgressScreen } from '../../presentation/screens/tracker-progress/TrackerProgressScreen';
+import { TrackersScreen } from '../../presentation/screens/trackers/TrackersScreen';
+import { theme } from '../theme';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const navTheme: Theme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: theme.colors.background,
+    card: theme.colors.header,
+    border: theme.colors.border,
+    text: theme.colors.text,
+    primary: theme.colors.accent,
+  },
+};
+
+/**
+ * Header de las pantallas hub: el título es el nombre de la pestaña (abre el
+ * menú al tocarlo), sin flecha de volver, y el cambio entre pestañas es un
+ * fundido suave en vez del deslizamiento del stack.
+ */
+const hubOptions = (current: 'Trackers' | 'Lists' | 'Finances') => ({
+  headerTitle: () => <HubMenuButton current={current} />,
+  headerTitleAlign: 'left' as const,
+  headerBackVisible: false,
+  animation: 'fade' as const,
+});
+
+type Boot = 'loading' | 'onboarding' | 'ready';
+
 export function AppNavigator() {
+  const [boot, setBoot] = useState<Boot>('loading');
+
+  useEffect(() => {
+    container.getUserProfile
+      .execute()
+      .then((profile) => setBoot(profile ? 'ready' : 'onboarding'))
+      .catch(() => setBoot('onboarding'));
+  }, []);
+
+  if (boot === 'loading') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.colors.background, justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={theme.colors.accent} />
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
+    <NavigationContainer theme={navTheme}>
+      <Stack.Navigator
+        initialRouteName={boot === 'onboarding' ? 'Onboarding' : 'Trackers'}
+        screenOptions={{
+          headerStyle: { backgroundColor: theme.colors.header },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: theme.colors.background },
+        }}
+      >
+        <Stack.Screen
+          name="Onboarding"
+          component={OnboardingScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen name="Trackers" component={TrackersScreen} options={hubOptions('Trackers')} />
+        <Stack.Screen name="Lists" component={ListsScreen} options={hubOptions('Lists')} />
+        <Stack.Screen name="ListDetail" component={ListDetailScreen} options={{ title: 'Lista' }} />
+        <Stack.Screen name="Finances" component={FinancesScreen} options={hubOptions('Finances')} />
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}

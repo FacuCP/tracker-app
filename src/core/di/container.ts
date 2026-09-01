@@ -1,13 +1,15 @@
 import { generateId } from '../utils/id';
-import { InMemoryUserLocalDataSource } from '../../data/datasources/UserLocalDataSource';
-import { UserRepositoryImpl } from '../../data/repositories/UserRepositoryImpl';
+import { AsyncStorageUserLocalDataSource } from '../../data/user/datasources/UserLocalDataSource';
+import { UserRepositoryImpl } from '../../data/user/repositories/UserRepositoryImpl';
 import { AsyncStorageMoodLocalDataSource } from '../../data/mood/datasources/MoodLocalDataSource';
 import { MoodRepositoryImpl } from '../../data/mood/repositories/MoodRepositoryImpl';
 import { AsyncStorageTrackerLocalDataSource } from '../../data/tracker/datasources/TrackerLocalDataSource';
 import { AsyncStorageTrackerEntryLocalDataSource } from '../../data/tracker/datasources/TrackerEntryLocalDataSource';
 import { TrackerRepositoryImpl } from '../../data/tracker/repositories/TrackerRepositoryImpl';
 import { TrackerEntryRepositoryImpl } from '../../data/tracker/repositories/TrackerEntryRepositoryImpl';
-import { GetWelcomeMessage } from '../../domain/usecases/GetWelcomeMessage';
+import { GetUserProfile } from '../../domain/user/usecases/GetUserProfile';
+import { GetWelcomeMessage } from '../../domain/user/usecases/GetWelcomeMessage';
+import { SaveUserName } from '../../domain/user/usecases/SaveUserName';
 import { DeleteMoodEntry } from '../../domain/mood/usecases/DeleteMoodEntry';
 import { GetMoodEntry } from '../../domain/mood/usecases/GetMoodEntry';
 import { GetMoodRange } from '../../domain/mood/usecases/GetMoodRange';
@@ -24,6 +26,17 @@ import { GetTrackerRange } from '../../domain/tracker/usecases/GetTrackerRange';
 import { GetTrackers } from '../../domain/tracker/usecases/GetTrackers';
 import { SaveTrackerEntry } from '../../domain/tracker/usecases/SaveTrackerEntry';
 import { UpdateTracker } from '../../domain/tracker/usecases/UpdateTracker';
+import { AsyncStorageListLocalDataSource } from '../../data/list/datasources/ListLocalDataSource';
+import { AsyncStorageListEntryLocalDataSource } from '../../data/list/datasources/ListEntryLocalDataSource';
+import { ListRepositoryImpl } from '../../data/list/repositories/ListRepositoryImpl';
+import { ListEntryRepositoryImpl } from '../../data/list/repositories/ListEntryRepositoryImpl';
+import { CreateList } from '../../domain/list/usecases/CreateList';
+import { DeleteList } from '../../domain/list/usecases/DeleteList';
+import { DeleteListEntry } from '../../domain/list/usecases/DeleteListEntry';
+import { GetList } from '../../domain/list/usecases/GetList';
+import { GetListEntries } from '../../domain/list/usecases/GetListEntries';
+import { GetLists } from '../../domain/list/usecases/GetLists';
+import { SaveListEntry } from '../../domain/list/usecases/SaveListEntry';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -32,8 +45,7 @@ import { UpdateTracker } from '../../domain/tracker/usecases/UpdateTracker';
  */
 
 // --- Usuario ---
-const userLocalDataSource = new InMemoryUserLocalDataSource();
-const userRepository = new UserRepositoryImpl(userLocalDataSource);
+const userRepository = new UserRepositoryImpl(new AsyncStorageUserLocalDataSource());
 
 // --- Mood tracker ---
 const moodLocalDataSource = new AsyncStorageMoodLocalDataSource();
@@ -45,10 +57,16 @@ const trackerEntryRepository = new TrackerEntryRepositoryImpl(
   new AsyncStorageTrackerEntryLocalDataSource(),
 );
 
+// --- Listas del usuario ---
+const listRepository = new ListRepositoryImpl(new AsyncStorageListLocalDataSource());
+const listEntryRepository = new ListEntryRepositoryImpl(new AsyncStorageListEntryLocalDataSource());
+
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
 
 export const container = {
+  getUserProfile: new GetUserProfile(userRepository),
+  saveUserName: new SaveUserName(userRepository),
   getWelcomeMessage: new GetWelcomeMessage(userRepository),
 
   getMoodEntry: new GetMoodEntry(moodRepository),
@@ -65,6 +83,14 @@ export const container = {
   saveTrackerEntry: new SaveTrackerEntry(trackerRepository, trackerEntryRepository),
   deleteTrackerEntry: new DeleteTrackerEntry(trackerEntryRepository),
   getTrackerRange: new GetTrackerRange(trackerEntryRepository),
+
+  getLists: new GetLists(listRepository),
+  getList: new GetList(listRepository),
+  createList: new CreateList(listRepository, generateId),
+  deleteList: new DeleteList(listRepository, listEntryRepository),
+  getListEntries: new GetListEntries(listEntryRepository),
+  saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),
+  deleteListEntry: new DeleteListEntry(listEntryRepository),
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),

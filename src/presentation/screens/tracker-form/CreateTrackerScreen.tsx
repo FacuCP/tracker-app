@@ -26,7 +26,7 @@ export function CreateTrackerScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f4f5f7' }} edges={['bottom']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#e9ebf2' }} edges={['bottom']}>
       <TrackerForm form={form} submitLabel="Crear tracker" saving={saving} onSubmit={submit} />
     </SafeAreaView>
   );

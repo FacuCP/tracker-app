@@ -29,7 +29,7 @@ export function EditTrackerScreen({ route, navigation }: Props) {
         <EditForm
           tracker={tracker}
           onDone={() => navigation.goBack()}
-          onDeleted={() => navigation.navigate('Home')}
+          onDeleted={() => navigation.navigate('Trackers')}
         />
       )}
     </SafeAreaView>
@@ -87,7 +87,7 @@ function EditForm({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f4f5f7',
+    backgroundColor: '#e9ebf2',
   },
   center: {
     flex: 1,

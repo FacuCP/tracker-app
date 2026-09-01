@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
   card: {
     width: '47.5%',
     flexGrow: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#eef0f2',

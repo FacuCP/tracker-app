@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { MAX_TRACKER_NAME } from '../../../domain/tracker/entities/Tracker';
+import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 import { useTrackerForm } from '../viewmodels/useTrackerForm';
 import { OptionColorPicker } from './OptionColorPicker';
 
@@ -23,9 +24,10 @@ interface Props {
 /** Formulario compartido por crear y editar un tracker. */
 export function TrackerForm({ form, submitLabel, saving, onSubmit, onDelete }: Props) {
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.field}>
-        <Text style={styles.label}>Nombre</Text>
+    <KeyboardAvoider>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.field}>
+          <Text style={styles.label}>Nombre</Text>
         <TextInput
           style={styles.input}
           placeholder="Ej. Fui al gimnasio"
@@ -107,7 +109,8 @@ export function TrackerForm({ form, submitLabel, saving, onSubmit, onDelete }: P
           <Text style={styles.deleteText}>Borrar tracker</Text>
         </TouchableOpacity>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoider>
   );
 }
 
@@ -137,6 +140,7 @@ function KindOption({
 const styles = StyleSheet.create({
   content: {
     padding: 16,
+    paddingBottom: 48,
     gap: 20,
   },
   field: {
@@ -153,7 +157,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     color: '#111827',
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
   },
   error: {
     color: '#b91c1c',
@@ -170,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 3,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
   },
   kindOptionActive: {
     borderColor: '#2563eb',
@@ -194,7 +198,7 @@ const styles = StyleSheet.create({
     borderColor: '#eef0f2',
     borderRadius: 12,
     padding: 10,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
   },
   optionTop: {
     flexDirection: 'row',

@@ -367,16 +367,17 @@ gesto/animación nativos de cada plataforma.
 
 ---
 
-## 16. El saludo "Bienvenido Facu" pasa por un caso de uso
+## 16. El saludo pasa por un caso de uso
 
-**Contexto.** La pantalla inicial muestra "Bienvenido Facu".
+**Contexto.** La pantalla principal muestra "Bienvenido {nombre}".
 
-**Decisión.** No está hardcodeado en la vista: `HomeScreen` pide
-`container.getWelcomeMessage.execute()`, que arma el string a partir de un
-`User` traído por `UserRepository`. Hoy el usuario es fijo (`InMemoryUserLocalDataSource`).
+**Decisión.** No está hardcodeado en la vista: `TrackersScreen` pide
+`container.getWelcomeMessage.execute()`, que arma el string a partir del
+`UserProfile` traído por `UserRepository`. El nombre lo elige el usuario en el
+onboarding y sale de AsyncStorage (ver #34).
 
-**Motivo.** Sirve de ejemplo mínimo y honesto de la arquitectura, y deja el
-lugar para cuando el nombre venga de un login o de configuración.
+**Motivo.** Mantiene la lógica del saludo en el dominio, testeable y sin
+depender de la UI.
 
 ---
 
@@ -385,8 +386,8 @@ lugar para cuando el nombre venga de un login o de configuración.
 **Contexto.** La primera versión tenía una segunda pantalla placeholder.
 
 **Decisión.** Al llegar el mood tracker, esa pantalla se eliminó y su lugar en
-la navegación lo toma `MoodProgress`. El "Bienvenido Facu" se conservó como
-encabezado del `Home`.
+la navegación lo toma `MoodProgress`. El saludo de bienvenida se conservó como
+encabezado de la pantalla principal.
 
 ---
 
@@ -691,12 +692,201 @@ centralizaron en [`core/storage/keys.ts`](../src/core/storage/keys.ts)
   para una app personal y local-first.
 
 **Consecuencias.** El import es destructivo (reemplaza todo); la pantalla lo
-confirma con un `Alert`. Después de importar se vuelve al Home, que recarga solo
-por sus `useFocusEffect`.
+confirma con un `Alert`. Después de importar se vuelve a Trackers, que recarga
+solo por sus `useFocusEffect`.
 
 ---
 
-## Deudas conocidas / a revisar más adelante
+## 31. Menú del header como hub de navegación *(elección del usuario)*
+
+**Contexto.** El usuario pidió que en vez de "Inicio" haya un **menú** en el
+header que despliegue tres destinos: **Trackers** (lo que hoy es la pantalla
+principal), **Listas** y **Finanzas**.
+
+**Decisión.**
+
+- La ruta `Home` se renombró a **`Trackers`** (misma pantalla: mood + trackers
+  del usuario). Se agregaron `Lists` (ver #35) y `Finances` (todavía un
+  [`ComingSoon`](../src/presentation/components/ComingSoon.tsx)).
+- El `headerTitle` de esas tres pantallas es
+  [`HubMenuButton`](../src/presentation/navigation/HubMenuButton.tsx): muestra el
+  **nombre de la pestaña actual** con un ▾ y, al tocarlo, abre un `Modal` con las
+  tres opciones (la actual marcada con ✓).
+- Las tres pantallas hub ocultan la flecha de volver (`headerBackVisible:
+  false`); se navega entre ellas por el menú. `navigation.navigate` sobre un
+  stack hace pop si la pantalla ya está abajo, así que el back-stack no crece
+  sin control.
+- El cambio entre pestañas hub usa `animation: 'fade'` (un fundido corto) en
+  vez del deslizamiento del stack, para que sea suave y poco notorio. Las
+  pantallas push (progreso, formularios) mantienen la animación normal.
+
+**Alternativas descartadas.**
+
+- **Drawer (`@react-navigation/drawer`).** Es lo "canónico" para un menú lateral
+  pero suma `react-native-reanimated` + `react-native-gesture-handler` y todo su
+  setup nativo, para tres destinos. El usuario pidió "un menú que se despliega",
+  no un cajón lateral.
+- **Bottom tabs.** Igual de válido, pero cambia toda la navegación y no es lo
+  que se pidió.
+
+**Consecuencias.** Si más adelante hay muchos destinos o cada uno necesita su
+propio stack, conviene migrar a tabs o drawer.
+
+---
+
+## 32. Fondos claros, nunca blancos *(elección del usuario)*
+
+**Contexto.** Se pidió que la app tenga fondos de colores claros, pero que no
+sean blancos.
+
+**Decisión.** Una paleta en [`core/theme.ts`](../src/core/theme.ts):
+
+- **Fondo de pantalla y header**: `#e9ebf2` (gris azulado muy claro).
+- **Cards y hojas modales**: `#f8f9fc` (un tono por encima, tampoco blanco).
+- **Celdas vacías del calendario**: `#f1f2f7`.
+
+Se aplica en dos lugares: el `theme` de `NavigationContainer` +
+`screenOptions` (`headerStyle`, `contentStyle`, `headerShadowVisible: false`)
+para header y fondo por defecto, y el resto de componentes usan los hex directo
+(el archivo `theme.ts` queda como referencia de la paleta).
+
+**Consecuencias.** Los inputs de texto no tienen fondo propio (transparentes
+sobre la card). No se armó un sistema de theming completo (dark mode, tokens
+tipados en cada componente); si hace falta, `theme.ts` es el punto de partida.
+
+---
+
+## 33. Swipe para cambiar de vista en el progreso del tracker *(elección del usuario)*
+
+**Contexto.** Se pidió poder cambiar entre Semana / Mes / Año swipeando el
+calendario, además del control segmentado.
+
+**Decisión.**
+[`useHorizontalSwipe`](../src/presentation/calendar/useHorizontalSwipe.ts) arma
+un `PanResponder` que solo reclama el gesto si es **claramente horizontal** (así
+no rompe el scroll vertical ni los taps de los días). Envuelve el calendario en
+`TrackerProgressScreen`. Swipe **izquierda → `zoomOutView`** (week→month→year),
+**derecha → `zoomInView`** (year→month→week), en el mismo sentido que el control
+de arriba `[Semana | Mes | Año]`. `useCalendarPeriod` expone `zoomInView` /
+`zoomOutView` (con clamp en los extremos).
+
+**Alternativas descartadas.**
+
+- **`react-native-gesture-handler`.** Es lo canónico para gestos, pero suma un
+  dep nativo y su `GestureHandlerRootView` para un swipe simple. `PanResponder`
+  (en el core de RN) alcanza.
+- **Swipe para cambiar el período (semana anterior/siguiente).** Eso ya lo hacen
+  las flechas; el pedido era cambiar de *vista*.
+
+**Consecuencias.** Por ahora solo está en el progreso de trackers (no en el
+mood); el hook es reutilizable si se quiere agregar allá.
+
+---
+
+## 34. Nombre del usuario: onboarding en el primer arranque *(elección del usuario)*
+
+**Contexto.** Se pidió que la primera vez que se abre la app se elija el nombre,
+y que después se pueda cambiar en Ajustes. Antes el nombre estaba hardcodeado
+(`InMemoryUserLocalDataSource` devolvía "Facu").
+
+**Decisión.**
+
+- **Dominio.** `domain/user/`: `UserProfile` (solo `name`), `UserRepository`
+  (`getProfile(): Promise<UserProfile | null>` — null = todavía no eligió,
+  `saveProfile`), y los casos de uso `GetUserProfile`, `SaveUserName`
+  (valida con `createUserProfile`) y `GetWelcomeMessage`.
+- **Datos.** `AsyncStorageUserLocalDataSource` sobre la clave
+  `@app-celu/user-profile/v1` (incluida en `ALL_STORAGE_KEYS`, así el nombre
+  entra en el backup).
+- **Gate de arranque.** `AppNavigator` llama a `getUserProfile` una vez; mientras
+  carga muestra un spinner; según el resultado el `initialRouteName` es
+  `Onboarding` o `Trackers`.
+- **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda y
+  hace `navigation.reset` a Trackers (no queda en el back-stack).
+- **Editar.** `UserNameCard` en Ajustes; `useTrackersViewModel` recarga el
+  saludo con `useFocusEffect`, así que al volver de Ajustes se ve el nombre
+  nuevo.
+
+**Alternativas descartadas.**
+
+- **Modal sobre Trackers en vez de pantalla aparte.** Una pantalla dedicada es
+  más clara para un paso único de bienvenida.
+- **Contexto global de usuario.** Para un solo dato que se lee en dos lugares,
+  el caso de uso + recarga en foco alcanza.
+
+**Consecuencias.** Si un backup viejo (sin la clave `user-profile`) se importa,
+el nombre se borra y en el próximo arranque vuelve a aparecer el onboarding.
+
+---
+
+## 35. Listas *(elección del usuario)*
+
+**Contexto.** La pestaña "Listas" pasó de placeholder a una feature: listas con
+un nombre, cuyas entradas tienen nombre, fecha y comentario opcional.
+
+**Decisión.** Misma estructura que los trackers (`domain/list`, `data/list`,
+`presentation/list`):
+
+- **Modelo.** `List` = solo `{ id, name, createdAt }`. `ListEntry` =
+  `{ id, listId, name, date, comment?, rating? }` (el rating es un número ≥ 0).
+  Validación en `createList` / `createListEntry`.
+- **Orden.** `GetListEntries(listId, sort)` devuelve las entradas ya ordenadas
+  con `compareListEntries(a, b, sort)` (regla de dominio). El usuario elige el
+  criterio (`ListSort`) con `ListSortSelector`:
+  - `date` (default): fecha desc, desempata alfabético.
+  - `alpha`: alfabético (`localeCompare` 'es'), desempata fecha desc.
+  - `rating`: rating desc (las sin rating al final), desempata alfabético.
+  El criterio vive en el estado del `useListDetail` (no se persiste); cambiarlo
+  re-dispara el `useFocusEffect` de recarga.
+- **Persistencia.** Dos claves nuevas (`@app-celu/lists/v1`,
+  `@app-celu/list-entries/v1`, anidada por `listId`). Al estar en
+  `ALL_STORAGE_KEYS`, entran en el **mismo archivo de backup** que todo lo demás
+  (lo que pidió el usuario).
+- **UI.** `ListsScreen` (hub) con una `ListCard` por lista: nombre + conteo.
+  Tocar la card entra a `ListDetailScreen`; el **＋** de la card (que captura su
+  propio toque) abre `ListEntryModal` para carga rápida. En el detalle, las
+  entradas van **pegadas a todo el
+  ancho** (sin card por fila, separadas por `hairlineWidth`), con su **número de
+  posición** a la izquierda y el **★ rating** a la derecha. Se tocan para abrir
+  el mismo `ListEntryModal` en modo edición (con **Borrar**). **Borrar la
+  lista** está al fondo del detalle, con confirmación.
+- **Crear lista.** Un `CreateListModal` (solo un nombre), no una pantalla
+  aparte: una lista no tiene nada más que configurar (a diferencia de un
+  tracker de opciones).
+- **Fecha.** `@react-native-community/datetimepicker` (incluido en Expo Go) para
+  el date picker nativo, envuelto en `DateField`.
+
+**Alternativas descartadas.**
+
+- **Pantalla de "crear lista" completa.** Innecesaria para un solo campo.
+- **Date picker propio (steppers / texto).** Una entrada puede tener cualquier
+  fecha (pasada o futura); el picker nativo es mucho mejor y es una sola
+  dependencia, ya soportada por Expo.
+
+**Consecuencias.** El `ListEntryModal` se reusa para "agregar desde la card del
+hub" y para "editar desde el detalle"; distingue los dos casos por el prop
+`initial` (null = nueva).
+
+---
+
+## 36. Teclado que no tapa los campos
+
+**Contexto.** Al escribir en los modales de trackers/listas (hojas ancladas
+abajo) y en el formulario de tracker, el teclado tapaba el campo. Android no
+reajusta el contenido de un `Modal` solo.
+
+**Decisión.** Un wrapper
+[`KeyboardAvoider`](../src/presentation/components/KeyboardAvoider.tsx)
+(`KeyboardAvoidingView` a pantalla completa, `behavior` `padding` en iOS /
+`height` en Android) envuelve el backdrop de los modales con inputs
+(`ListEntryModal`, `CreateListModal`, `MoodDayModal`) y el `ScrollView` del
+`TrackerForm`. `TrackerDayModal` no lo necesita (no tiene inputs de texto: chips
+y `Counter`).
+
+**Alternativas descartadas.**
+
+- **`react-native-keyboard-controller`.** Mejor resultado, pero dep nativo con
+  setup; el `KeyboardAvoidingView` del core alcanza para estos casos.
 
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
@@ -707,8 +897,11 @@ por sus `useFocusEffect`.
 - **La vista Año no deja editar un día directamente:** hay que entrar al mes.
 - **La nota (mood) y el número (tracker) no se ven en la vista Año** (celdas
   muy chicas); solo el color.
-- **Estructura duplicada entre `mood/` y `tracker/`** (viewmodels de progreso,
-  celdas de día): tolerable por ahora, revisar si aparece un tercer tipo.
+- **Estructura repetida entre `mood/`, `tracker/` y `list/`** (viewmodels que
+  cargan en foco, modales de edición con el mismo patrón): tolerable; si crece,
+  extraer un hook `useCrudResource` o similar.
+- **`useLists` hace N+1 lecturas** (una por lista) solo para el conteo de
+  entradas: bien a escala personal.
 - **Los trackers de número no validan rango ni unidad:** aceptan cualquier
   número finito.
 - **El backup es manual:** hay que acordarse de exportarlo; no hay backup

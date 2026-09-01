@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { capitalize, formatLongDate, IsoDate } from '../../../core/utils/date';
 import { MoodColor } from '../../../domain/mood/entities/MoodColor';
 import { MoodEntry } from '../../../domain/mood/entities/MoodEntry';
+import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 import { formatNote } from '../parseNoteInput';
 import { MoodEditor } from './MoodEditor';
 
@@ -42,26 +43,28 @@ export function MoodDayModal({ date, entry, onClose, onSave, onDelete }: Props) 
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>{date ? capitalize(formatLongDate(date)) : ''}</Text>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <MoodEditor
-              colors={colors}
-              onColorsChange={setColors}
-              description={description}
-              onDescriptionChange={setDescription}
-              note={note}
-              onNoteChange={setNote}
-              onSave={handleSave}
-              saving={saving}
-              saveLabel={entry ? 'Actualizar' : 'Guardar'}
-              onDelete={entry ? onDelete : undefined}
-            />
-          </ScrollView>
+      <KeyboardAvoider>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.handle} />
+            <Text style={styles.title}>{date ? capitalize(formatLongDate(date)) : ''}</Text>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <MoodEditor
+                colors={colors}
+                onColorsChange={setColors}
+                description={description}
+                onDescriptionChange={setDescription}
+                note={note}
+                onNoteChange={setNote}
+                onSave={handleSave}
+                saving={saving}
+                saveLabel={entry ? 'Actualizar' : 'Guardar'}
+                onDelete={entry ? onDelete : undefined}
+              />
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoider>
     </Modal>
   );
 }
@@ -73,7 +76,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,

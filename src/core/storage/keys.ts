@@ -4,9 +4,12 @@
  * persista datos nuevos tiene que registrarlos acá.
  */
 export const STORAGE_KEYS = {
+  userProfile: '@app-celu/user-profile/v1',
   moodEntries: '@app-celu/mood-entries/v1',
   trackers: '@app-celu/trackers/v1',
   trackerEntries: '@app-celu/tracker-entries/v1',
+  lists: '@app-celu/lists/v1',
+  listEntries: '@app-celu/list-entries/v1',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

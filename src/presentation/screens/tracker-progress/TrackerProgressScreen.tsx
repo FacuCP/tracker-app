@@ -16,6 +16,7 @@ import { CalendarMonth } from '../../calendar/CalendarMonth';
 import { CalendarViewSwitch } from '../../calendar/CalendarViewSwitch';
 import { CalendarWeek } from '../../calendar/CalendarWeek';
 import { CalendarYear } from '../../calendar/CalendarYear';
+import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
 import { TrackerDayCell } from '../../tracker/components/TrackerDayCell';
 import { TrackerDayModal } from '../../tracker/components/TrackerDayModal';
 import { TrackerStats } from '../../tracker/components/TrackerStats';
@@ -29,6 +30,13 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
   const { trackerId } = route.params;
   const vm = useTrackerProgress(trackerId);
   const tracker = vm.tracker;
+
+  // Swipe horizontal para cambiar de vista (además del control de arriba):
+  // izquierda → alejar (semana → mes → año), derecha → acercar.
+  const swipe = useHorizontalSwipe({
+    onSwipeLeft: vm.zoomOutView,
+    onSwipeRight: vm.zoomInView,
+  });
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -110,21 +118,23 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
           <ActivityIndicator style={styles.loader} size="large" />
         ) : (
           <>
-            {vm.view === 'week' ? (
-              <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
-            ) : vm.view === 'month' ? (
-              <CalendarMonth
-                year={vm.anchor.getFullYear()}
-                month={vm.anchor.getMonth()}
-                renderDay={renderDay}
-              />
-            ) : (
-              <CalendarYear
-                year={vm.anchor.getFullYear()}
-                dayColor={dayFill}
-                onSelectMonth={vm.showMonth}
-              />
-            )}
+            <View {...swipe}>
+              {vm.view === 'week' ? (
+                <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
+              ) : vm.view === 'month' ? (
+                <CalendarMonth
+                  year={vm.anchor.getFullYear()}
+                  month={vm.anchor.getMonth()}
+                  renderDay={renderDay}
+                />
+              ) : (
+                <CalendarYear
+                  year={vm.anchor.getFullYear()}
+                  dayColor={dayFill}
+                  onSelectMonth={vm.showMonth}
+                />
+              )}
+            </View>
 
             <Text style={styles.sectionTitle}>Resumen</Text>
             <TrackerStats
@@ -153,7 +163,7 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f4f5f7',
+    backgroundColor: '#e9ebf2',
   },
   content: {
     padding: 16,

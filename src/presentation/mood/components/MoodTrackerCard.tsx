@@ -59,7 +59,7 @@ export function MoodTrackerCard({ onSeeProgress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
     borderRadius: 16,
     padding: 18,
     gap: 16,

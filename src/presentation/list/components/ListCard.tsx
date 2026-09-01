@@ -1,0 +1,75 @@
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+import { theme } from '../../../core/theme';
+import { List } from '../../../domain/list/entities/List';
+
+interface Props {
+  list: List;
+  entryCount: number;
+  onAddEntry: () => void;
+  onOpen: () => void;
+}
+
+/**
+ * Card de una lista. Tocar cualquier parte entra a la lista; el botón ＋ (que
+ * captura su propio toque) agrega una entrada rápida.
+ */
+export function ListCard({ list, entryCount, onAddEntry, onOpen }: Props) {
+  return (
+    <TouchableOpacity style={styles.card} onPress={onOpen} activeOpacity={0.7}>
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>
+          {list.name}
+        </Text>
+        <Text style={styles.count}>
+          {entryCount === 0
+            ? 'Sin entradas'
+            : `${entryCount} ${entryCount === 1 ? 'entrada' : 'entradas'}`}
+        </Text>
+      </View>
+
+      <TouchableOpacity style={styles.addButton} onPress={onAddEntry} activeOpacity={0.7}>
+        <Text style={styles.addSign}>＋</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  info: {
+    flex: 1,
+    gap: 2,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  count: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addSign: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.accent,
+  },
+});

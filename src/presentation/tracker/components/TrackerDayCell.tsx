@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   empty: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f1f2f7',
   },
   today: {
     borderWidth: 2,

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { useBackup } from '../../backup/useBackup';
+import { UserNameCard } from '../../user/components/UserNameCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -14,13 +15,13 @@ export function SettingsScreen({ navigation }: Props) {
   function confirmImport() {
     Alert.alert(
       'Importar backup',
-      'Esto reemplaza TODOS los datos actuales (mood tracker y trackers) por los del archivo. ¿Seguir?',
+      'Esto reemplaza TODOS los datos actuales (nombre, mood tracker, trackers y listas) por los del archivo. ¿Seguir?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Importar',
           style: 'destructive',
-          onPress: () => importData(() => navigation.navigate('Home')),
+          onPress: () => importData(() => navigation.navigate('Trackers')),
         },
       ],
     );
@@ -29,6 +30,8 @@ export function SettingsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
+        <UserNameCard />
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Backup de tus datos</Text>
           <Text style={styles.paragraph}>
@@ -78,14 +81,14 @@ export function SettingsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f4f5f7',
+    backgroundColor: '#e9ebf2',
   },
   content: {
     padding: 16,
     gap: 12,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
     borderRadius: 16,
     padding: 18,
     gap: 14,

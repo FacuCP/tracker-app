@@ -1,8 +1,15 @@
 # app-celu
 
-Tracker de hábitos hecho con **Expo + React Native + TypeScript**, organizado
-con **Clean Architecture**. El **mood tracker** es el tracker especial y fijo;
-además el usuario puede **crear sus propios trackers** (de opciones o de número).
+App personal hecha con **Expo + React Native + TypeScript**, organizada con
+**Clean Architecture**. Tiene tres áreas, elegibles desde el menú del header:
+
+- **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
+  crea el usuario (de opciones o de número).
+- **Listas** — listas del usuario con entradas (nombre, fecha, comentario).
+- **Finanzas** — *función futura*.
+
+Todo se guarda local en el teléfono y se puede exportar/importar como un único
+archivo de backup.
 
 > Las decisiones de diseño (por qué está hecho así, qué se descartó y qué
 > queda pendiente) están en [`docs/DECISIONS.md`](docs/DECISIONS.md).
@@ -63,8 +70,10 @@ a la derecha en el Home):
 ```
 src/
 ├── domain/                      # Reglas de negocio puras. No importa React ni Expo.
-│   ├── entities/User.ts
-│   ├── usecases/GetWelcomeMessage.ts
+│   ├── user/
+│   │   ├── entities/            # UserProfile (solo el nombre)
+│   │   ├── repositories/        # UserRepository (puerto)
+│   │   └── usecases/            # GetUserProfile, SaveUserName, GetWelcomeMessage
 │   ├── mood/
 │   │   ├── entities/            # MoodColor, MoodEntry (colores, descripción, nota 1-10)
 │   │   ├── repositories/        # MoodRepository (puerto)
@@ -74,32 +83,53 @@ src/
 │   │   ├── repositories/        # TrackerRepository, TrackerEntryRepository (puertos)
 │   │   └── usecases/            # Create/Update/Delete/GetTracker(s), Save/Delete/GetTrackerEntry,
 │   │                            # GetTrackerRange (registros + estadísticas del rango)
+│   ├── list/
+│   │   ├── entities/            # List, ListEntry (nombre, fecha, comentario, rating) +
+│   │   │                        # compareListEntries (3 criterios de orden)
+│   │   ├── repositories/        # ListRepository, ListEntryRepository (puertos)
+│   │   └── usecases/            # Create/Delete/GetList(s), GetListEntries (ordenadas),
+│   │                            # Save/DeleteListEntry
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
-│   ├── repositories/            # UserRepositoryImpl
+│   ├── user/                    # dto + AsyncStorage datasource + repo impl
 │   ├── mood/                    # dto + AsyncStorage datasource + repo impl
 │   ├── tracker/                 # dto + AsyncStorage datasources + repo impls
+│   ├── list/                    # dto + AsyncStorage datasources + repo impls
 │   └── backup/                  # BackupRepositoryImpl (multiGet/multiSet sobre AsyncStorage)
 │
 ├── core/
 │   ├── di/container.ts          # Composition root: arma todas las dependencias
-│   ├── navigation/              # Stack tipado (Home, Settings, MoodProgress, CreateTracker,
-│   │                            # EditTracker, TrackerProgress)
+│   ├── navigation/              # Stack tipado (Onboarding, Trackers, Lists, ListDetail,
+│   │                            # Finances, Settings, MoodProgress, CreateTracker,
+│   │                            # EditTracker, TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
+│   ├── theme.ts                 # Paleta: fondos claros (no blancos) + acento
 │   └── utils/                   # date.ts (fechas ISO locales + formateo es), id.ts
 │
 └── presentation/                # UI (patrón ViewModel con hooks)
     ├── calendar/                # Calendario GENÉRICO reutilizable:
     │                            # CalendarWeek/Month/Year (render-prop por día),
     │                            # CalendarViewSwitch, useCalendarPeriod
+    ├── navigation/HubMenuButton # Menú del header (Trackers / Listas / Finanzas)
+    ├── components/ComingSoon    # Placeholder para features futuras
     ├── backup/                  # useBackup (exportar/importar el .json)
+    ├── user/components/         # UserNameCard (editar el nombre en Ajustes)
     ├── screens/
-    │   ├── home/                # HomeScreen + useHomeViewModel
-    │   ├── settings/            # SettingsScreen (Ajustes y backup)
+    │   ├── onboarding/          # OnboardingScreen (elegir el nombre la 1ª vez)
+    │   ├── trackers/            # TrackersScreen + useTrackersViewModel (pantalla principal)
+    │   ├── lists/               # ListsScreen (todas las listas)
+    │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
+    │   ├── finances/            # FinancesScreen (función futura)
+    │   ├── settings/            # SettingsScreen (nombre + backup)
     │   ├── mood-progress/       # MoodProgressScreen
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
     │   └── tracker-progress/    # TrackerProgressScreen
+    ├── list/
+    │   ├── components/          # ListCard, CreateListButton, CreateListModal,
+    │   │                        # ListEntryRow, ListEntryModal, ListSortSelector, DateField
+    │   ├── viewmodels/          # useLists, useListDetail
+    │   └── parseRating.ts       # Parseo/validación del campo Rating
     ├── mood/
     │   ├── components/          # DiagonalSplitSquare, MoodColorPicker, MoodEditor,
     │   │                        # MoodEntrySummary, MoodTrackerCard, DayCell,
@@ -122,6 +152,35 @@ presentation ─► domain ◄─ data
 
 `domain` no conoce a nadie. `data` y `presentation` dependen de `domain` a
 través de interfaces. `core/di` es el único lugar que instancia clases concretas.
+
+## Primer arranque
+
+La primera vez que se abre la app, `AppNavigator` mira si hay un nombre
+guardado. Si no, arranca en **`OnboardingScreen`**: pide el nombre, lo guarda y
+resetea la navegación a Trackers. El nombre se puede cambiar después en
+**Ajustes** (`UserNameCard`), y el saludo del home se actualiza al volver.
+
+## Navegación
+
+El título del header de las tres pantallas principales muestra el **nombre de la
+pestaña actual** con una flechita ▾
+([`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)); al tocarlo se
+despliega un menú para moverse entre:
+
+- **Trackers** — la pantalla principal: mood tracker + todos los trackers del
+  usuario (lo que había antes en "Inicio").
+- **Listas** — las listas del usuario (ver más abajo).
+- **Finanzas** — *función futura* (placeholder).
+
+Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
+muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
+es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. El resto
+de pantallas (progreso, formularios, ajustes) sí son push con su flecha.
+
+### Colores
+
+Los fondos son **claros pero no blancos** (`core/theme.ts`): pantalla y header
+en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 
 ## Mood tracker
 
@@ -148,8 +207,9 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 
 ### Pantallas
 
-- **Home**: saludo "Bienvenido Facu", la card del mood tracker, después una card
-  por cada tracker del usuario y, al final, el botón **＋ Crear tracker nuevo**.
+- **Trackers** (pantalla principal): saludo "Bienvenido {nombre}", la card del
+  mood tracker, después una card por cada tracker del usuario y, al final, el
+  botón **＋ Crear tracker nuevo**.
   - Mood card: si hoy no tiene registro → editor (colores + nota + descripción).
     Una vez guardado → modo lectura; se edita desde "Ver progreso".
 - **Progreso de ánimo**: calendario propio (empieza en lunes) con **Semana /
@@ -176,7 +236,9 @@ Versión más simple del mood tracker. Cada tracker tiene un **nombre** y un
   nombre, tipo y —si es de opciones— la lista de opciones editable. Editar
   además permite **borrar** el tracker (y todos sus registros).
 - **Progreso del tracker** ([`tracker-progress/`](src/presentation/screens/tracker-progress/)):
-  el mismo calendario Semana/Mes/Año.
+  el mismo calendario Semana/Mes/Año. Además del control de arriba, se puede
+  **swipear el calendario** a los lados para cambiar de vista (izquierda =
+  alejar hacia Año, derecha = acercar hacia Semana).
   - Opciones → el día se pinta del color de la opción; abajo, una card por
     opción con su conteo del período.
   - Número → el contador se muestra sobre el día; abajo, **registros / promedio /
@@ -191,17 +253,49 @@ Versión más simple del mood tracker. Cada tracker tiene un **nombre** y un
 - **Número**: es un **contador** con botones − / +. Cada toque persiste al
   instante, así se puede seguir ajustando durante el día; "Borrar" lo saca.
 
+## Listas
+
+Cada **lista** tiene solo un nombre. Sus **entradas** tienen **nombre**,
+**fecha**, **comentario** (opcional) y **rating** (opcional, un número).
+
+### Pantallas
+
+- **Listas** (hub): una card por lista con su nombre y su conteo de entradas.
+  Tocar la card entra a la lista; el **＋** de la card agrega una entrada rápido
+  (abre el modal). Abajo, **＋ Crear lista nueva**.
+- **Detalle de la lista** ([`list-detail/`](src/presentation/screens/list-detail/)):
+  título = nombre de la lista. Arriba, un selector **Ordenar por: Fecha / A-Z /
+  Rating**. Las entradas van **pegadas una tras otra, a todo el ancho**,
+  separadas por una línea fina: **nº · nombre + fecha · ★ rating** (💬 si tienen
+  comentario). Se tocan para abrir el modal y ver el comentario / editar los
+  campos (o borrar la entrada). Arriba a la derecha, **＋ Entrada**. Al fondo,
+  **Borrar esta lista** (borra la lista y sus entradas, con confirmación).
+
+Orden de las entradas (`compareListEntries` en el dominio):
+
+| Criterio | Orden | Desempate |
+|----------|-------|-----------|
+| Fecha | más reciente primero | alfabético |
+| A-Z | alfabético por nombre | fecha desc |
+| Rating | mayor primero (sin rating al final) | alfabético |
+
+La fecha se elige con el date picker nativo
+(`@react-native-community/datetimepicker`).
+
 ## Persistencia
 
 Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 
 | Clave (`core/storage/keys.ts`) | Contenido |
 |-------|-----------|
+| `@app-celu/user-profile/v1` | `{ name }` (el nombre elegido en el onboarding) |
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |
+| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre de cada lista) |
+| `@app-celu/list-entries/v1` | `{ [listId]: { [entryId]: ListEntryDto } }` |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué
-exportar/importar. Para cambiar a SQLite o a una API basta con escribir otra
+exportar/importar (todo en un solo archivo). Para cambiar a SQLite o a una API basta con escribir otra
 implementación de los datasources / repositorios y cambiarla en
 `core/di/container.ts`.

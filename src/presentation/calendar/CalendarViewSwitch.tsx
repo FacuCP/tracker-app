@@ -37,7 +37,7 @@ export function CalendarViewSwitch({ value, onChange }: Props) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#eef0f2',
+    backgroundColor: '#dfe2ec',
     borderRadius: 10,
     padding: 3,
   },
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentActive: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fc',
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 4,

@@ -105,7 +105,7 @@ export function MoodProgressScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f4f5f7',
+    backgroundColor: '#e9ebf2',
   },
   content: {
     padding: 16,
