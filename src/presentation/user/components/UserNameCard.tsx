@@ -27,7 +27,7 @@ export function UserNameCard() {
     setSaving(true);
     setMessage(null);
     try {
-      const profile = await container.saveUserName.execute(name);
+      const profile = await container.updateUserProfile.execute({ name });
       setName(profile.name);
       setSaved(profile.name);
       setMessage({ ok: true, text: 'Nombre guardado' });

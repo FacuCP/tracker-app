@@ -11,6 +11,7 @@ import { parseRating } from '../parseRating';
  * entradas), crear una lista, y agregarle una entrada rápida desde la card.
  */
 export function useLists() {
+  const [greeting, setGreeting] = useState('');
   const [lists, setLists] = useState<List[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -18,7 +19,10 @@ export function useLists() {
   const [entryTarget, setEntryTarget] = useState<List | null>(null);
 
   const reload = useCallback(async () => {
-    const all = await container.getLists.execute();
+    const [message, all] = await Promise.all([
+      container.getWelcomeMessage.execute(),
+      container.getLists.execute(),
+    ]);
     const entryCounts: Record<string, number> = {};
     await Promise.all(
       all.map(async (list) => {
@@ -26,6 +30,7 @@ export function useLists() {
         entryCounts[list.id] = entries.length;
       }),
     );
+    setGreeting(message);
     setLists(all);
     setCounts(entryCounts);
     setLoading(false);
@@ -69,6 +74,7 @@ export function useLists() {
   );
 
   return {
+    greeting,
     lists,
     counts,
     loading,

@@ -369,7 +369,7 @@ gesto/animación nativos de cada plataforma.
 
 ## 16. El saludo pasa por un caso de uso
 
-**Contexto.** La pantalla principal muestra "Bienvenido {nombre}".
+**Contexto.** La pantalla principal (y la de Listas) muestran "Hola {nombre}!".
 
 **Decisión.** No está hardcodeado en la vista: `TrackersScreen` pide
 `container.getWelcomeMessage.execute()`, que arma el string a partir del
@@ -783,39 +783,44 @@ mood); el hook es reutilizable si se quiere agregar allá.
 
 ---
 
-## 34. Nombre del usuario: onboarding en el primer arranque *(elección del usuario)*
+## 34. Perfil del usuario: onboarding + preferencias *(elección del usuario)*
 
-**Contexto.** Se pidió que la primera vez que se abre la app se elija el nombre,
-y que después se pueda cambiar en Ajustes. Antes el nombre estaba hardcodeado
-(`InMemoryUserLocalDataSource` devolvía "Facu").
+**Contexto.** Se pidió (1) elegir el nombre la primera vez que se abre la app y
+poder cambiarlo en Ajustes, y (2) elegir en Ajustes qué **pestaña** se muestra
+al arrancar (por defecto Trackers). Antes el nombre estaba hardcodeado.
 
 **Decisión.**
 
-- **Dominio.** `domain/user/`: `UserProfile` (solo `name`), `UserRepository`
-  (`getProfile(): Promise<UserProfile | null>` — null = todavía no eligió,
-  `saveProfile`), y los casos de uso `GetUserProfile`, `SaveUserName`
-  (valida con `createUserProfile`) y `GetWelcomeMessage`.
-- **Datos.** `AsyncStorageUserLocalDataSource` sobre la clave
-  `@app-celu/user-profile/v1` (incluida en `ALL_STORAGE_KEYS`, así el nombre
-  entra en el backup).
+- **Dominio.** `domain/user/`: `UserProfile` = `{ name, defaultTab }`
+  (`defaultTab: HubTab = 'Trackers' | 'Lists' | 'Finances'`, default `'Trackers'`).
+  `UserRepository` (`getProfile(): Promise<UserProfile | null>` — null = primer
+  arranque, `saveProfile`). Casos de uso: `GetUserProfile`, `GetWelcomeMessage`
+  y **`UpdateUserProfile`** (recibe un patch `{ name?, defaultTab? }`, hace
+  **merge** con lo guardado y valida con `createUserProfile`). Un solo use case
+  de escritura evita tener que pisar un campo al tocar el otro.
+- **Datos.** `AsyncStorageUserLocalDataSource` sobre `@app-celu/user-profile/v1`
+  (en `ALL_STORAGE_KEYS`, así el perfil entra en el backup).
 - **Gate de arranque.** `AppNavigator` llama a `getUserProfile` una vez; mientras
   carga muestra un spinner; según el resultado el `initialRouteName` es
-  `Onboarding` o `Trackers`.
-- **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda y
-  hace `navigation.reset` a Trackers (no queda en el back-stack).
-- **Editar.** `UserNameCard` en Ajustes; `useTrackersViewModel` recarga el
-  saludo con `useFocusEffect`, así que al volver de Ajustes se ve el nombre
-  nuevo.
+  `Onboarding` (sin perfil) o **la `defaultTab` del perfil**.
+- **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda con
+  `updateUserProfile({ name })` y hace `navigation.reset` a Trackers.
+- **Editar.** `UserNameCard` y `DefaultTabCard` en Ajustes. `useTrackersViewModel`
+  recarga el saludo con `useFocusEffect`, así que al volver se ve el nombre nuevo.
 
 **Alternativas descartadas.**
 
-- **Modal sobre Trackers en vez de pantalla aparte.** Una pantalla dedicada es
-  más clara para un paso único de bienvenida.
-- **Contexto global de usuario.** Para un solo dato que se lee en dos lugares,
-  el caso de uso + recarga en foco alcanza.
+- **Modal sobre Trackers en vez de pantalla de onboarding aparte.**
+- **Concepto de "preferencias" separado del perfil.** Para dos campos, meterlos
+  en `UserProfile` es más simple.
+- **`initialRouteName` fijo + `navigate` a la pestaña tras montar.** Haría un
+  flash de Trackers antes de saltar; `native-stack` acepta un `initialRouteName`
+  que no sea la primera pantalla declarada.
 
-**Consecuencias.** Si un backup viejo (sin la clave `user-profile`) se importa,
-el nombre se borra y en el próximo arranque vuelve a aparecer el onboarding.
+**Consecuencias.** Si la `defaultTab` no es `Trackers`, al cambiar de pestaña
+por el menú se puede pushear alguna pantalla hub encima de otra (el stack se
+"autocorrige" al volver a la de más abajo). Si se importa un backup viejo sin la
+clave `user-profile`, el perfil se borra y vuelve a aparecer el onboarding.
 
 ---
 
@@ -846,10 +851,11 @@ un nombre, cuyas entradas tienen nombre, fecha y comentario opcional.
   Tocar la card entra a `ListDetailScreen`; el **＋** de la card (que captura su
   propio toque) abre `ListEntryModal` para carga rápida. En el detalle, las
   entradas van **pegadas a todo el
-  ancho** (sin card por fila, separadas por `hairlineWidth`), con su **número de
-  posición** a la izquierda y el **★ rating** a la derecha. Se tocan para abrir
-  el mismo `ListEntryModal` en modo edición (con **Borrar**). **Borrar la
-  lista** está al fondo del detalle, con confirmación.
+  ancho** (sin card por fila, separadas por `hairlineWidth`): **nº** a la
+  izquierda; **nombre + fecha (DD/MM/AAAA)** arriba; **comentario recortado con
+  “…”** abajo; **★ rating** a la derecha. Se tocan para abrir el mismo
+  `ListEntryModal` en modo edición (con **Borrar**). **Borrar la lista** está al
+  fondo del detalle, con confirmación.
 - **Crear lista.** Un `CreateListModal` (solo un nombre), no una pantalla
   aparte: una lista no tiene nada más que configurar (a diferencia de un
   tracker de opciones).

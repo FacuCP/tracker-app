@@ -18,6 +18,9 @@ export function ListsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.greeting}>{vm.greeting}</Text>
+        <Text style={styles.subtitle}>Estas son tus listas</Text>
+
         {vm.loading ? (
           <ActivityIndicator style={styles.loader} size="large" />
         ) : (
@@ -62,8 +65,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 16,
     gap: 12,
+  },
+  greeting: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    marginTop: -6,
+    marginBottom: 6,
   },
   loader: {
     marginTop: 48,

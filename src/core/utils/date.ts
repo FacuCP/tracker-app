@@ -103,6 +103,12 @@ export function formatWeekRange(start: Date, end: Date): string {
   return `${formatDayShortMonth(start)} – ${formatDayShortMonth(end)} ${end.getFullYear()}`;
 }
 
+/** "01/09/2026" a partir de una fecha ISO "2026-09-01". */
+export function formatDdMmYyyy(iso: IsoDate): string {
+  const [year, month, day] = iso.split('-');
+  return `${day}/${month}/${year}`;
+}
+
 export function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
 }

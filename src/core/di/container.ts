@@ -9,7 +9,7 @@ import { TrackerRepositoryImpl } from '../../data/tracker/repositories/TrackerRe
 import { TrackerEntryRepositoryImpl } from '../../data/tracker/repositories/TrackerEntryRepositoryImpl';
 import { GetUserProfile } from '../../domain/user/usecases/GetUserProfile';
 import { GetWelcomeMessage } from '../../domain/user/usecases/GetWelcomeMessage';
-import { SaveUserName } from '../../domain/user/usecases/SaveUserName';
+import { UpdateUserProfile } from '../../domain/user/usecases/UpdateUserProfile';
 import { DeleteMoodEntry } from '../../domain/mood/usecases/DeleteMoodEntry';
 import { GetMoodEntry } from '../../domain/mood/usecases/GetMoodEntry';
 import { GetMoodRange } from '../../domain/mood/usecases/GetMoodRange';
@@ -66,7 +66,7 @@ const backupRepository = new BackupRepositoryImpl();
 
 export const container = {
   getUserProfile: new GetUserProfile(userRepository),
-  saveUserName: new SaveUserName(userRepository),
+  updateUserProfile: new UpdateUserProfile(userRepository),
   getWelcomeMessage: new GetWelcomeMessage(userRepository),
 
   getMoodEntry: new GetMoodEntry(moodRepository),

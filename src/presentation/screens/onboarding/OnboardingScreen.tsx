@@ -30,7 +30,7 @@ export function OnboardingScreen({ navigation }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await container.saveUserName.execute(name);
+      await container.updateUserProfile.execute({ name });
       navigation.reset({ index: 0, routes: [{ name: 'Trackers' }] });
     } catch (e) {
       setSaving(false);

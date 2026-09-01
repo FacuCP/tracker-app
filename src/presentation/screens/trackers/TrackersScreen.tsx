@@ -1,12 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useLayoutEffect } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
-import { HubMenuButton } from '../../navigation/HubMenuButton';
 import { CreateTrackerButton } from '../../tracker/components/CreateTrackerButton';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
 import { useTrackersViewModel } from './useTrackersViewModel';
@@ -15,17 +13,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Trackers'>;
 
 export function TrackersScreen({ navigation }: Props) {
   const { greeting, trackers } = useTrackersViewModel();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: () => <HubMenuButton current="Trackers" />,
-      headerRight: () => (
-        <Text style={styles.headerLink} onPress={() => navigation.navigate('Settings')}>
-          Ajustes
-        </Text>
-      ),
-    });
-  }, [navigation]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -55,13 +42,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 16,
     gap: 12,
-  },
-  headerLink: {
-    color: theme.colors.accent,
-    fontWeight: '700',
-    fontSize: 15,
   },
   greeting: {
     fontSize: 24,
@@ -71,6 +55,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: theme.colors.textMuted,
-    marginBottom: 8,
+    marginTop: -6,
+    marginBottom: 6,
   },
 });

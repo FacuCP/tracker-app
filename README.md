@@ -57,7 +57,7 @@ Todo lo que cargás se guarda **solo en el teléfono** (AsyncStorage).
   desinstalar primero).
 
 Como red de seguridad, la app tiene **Ajustes y backup** (botón "Ajustes" arriba
-a la derecha en el Home):
+a la derecha, en cualquiera de las tres pestañas):
 
 - **Exportar datos**: genera un archivo `.json` con todo y abre el menú de
   compartir (mandátelo a Google Drive / mail / WhatsApp).
@@ -71,9 +71,9 @@ a la derecha en el Home):
 src/
 ├── domain/                      # Reglas de negocio puras. No importa React ni Expo.
 │   ├── user/
-│   │   ├── entities/            # UserProfile (solo el nombre)
+│   │   ├── entities/            # UserProfile (nombre + pestaña de inicio)
 │   │   ├── repositories/        # UserRepository (puerto)
-│   │   └── usecases/            # GetUserProfile, SaveUserName, GetWelcomeMessage
+│   │   └── usecases/            # GetUserProfile, UpdateUserProfile, GetWelcomeMessage
 │   ├── mood/
 │   │   ├── entities/            # MoodColor, MoodEntry (colores, descripción, nota 1-10)
 │   │   ├── repositories/        # MoodRepository (puerto)
@@ -111,10 +111,10 @@ src/
     ├── calendar/                # Calendario GENÉRICO reutilizable:
     │                            # CalendarWeek/Month/Year (render-prop por día),
     │                            # CalendarViewSwitch, useCalendarPeriod
-    ├── navigation/HubMenuButton # Menú del header (Trackers / Listas / Finanzas)
+    ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
     ├── components/ComingSoon    # Placeholder para features futuras
     ├── backup/                  # useBackup (exportar/importar el .json)
-    ├── user/components/         # UserNameCard (editar el nombre en Ajustes)
+    ├── user/components/         # UserNameCard, DefaultTabCard (Ajustes)
     ├── screens/
     │   ├── onboarding/          # OnboardingScreen (elegir el nombre la 1ª vez)
     │   ├── trackers/            # TrackersScreen + useTrackersViewModel (pantalla principal)
@@ -155,10 +155,14 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 
 ## Primer arranque
 
-La primera vez que se abre la app, `AppNavigator` mira si hay un nombre
-guardado. Si no, arranca en **`OnboardingScreen`**: pide el nombre, lo guarda y
-resetea la navegación a Trackers. El nombre se puede cambiar después en
-**Ajustes** (`UserNameCard`), y el saludo del home se actualiza al volver.
+La primera vez que se abre la app, `AppNavigator` mira si hay un **perfil**
+guardado (`UserProfile` = `{ name, defaultTab }`). Si no, arranca en
+**`OnboardingScreen`**: pide el nombre, lo guarda y resetea la navegación.
+
+Si ya hay perfil, la app arranca en la **pestaña por defecto** del perfil
+(`Trackers` de fábrica). Tanto el nombre como la pestaña de inicio se cambian en
+**Ajustes** (`UserNameCard` / `DefaultTabCard`); el saludo del home se actualiza
+al volver.
 
 ## Navegación
 
@@ -174,8 +178,10 @@ despliega un menú para moverse entre:
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
-es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. El resto
-de pantallas (progreso, formularios, ajustes) sí son push con su flecha.
+es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las tres
+tienen el botón **"Ajustes"** arriba a la derecha
+(`SettingsHeaderButton`, en `hubOptions`). El resto de pantallas (progreso,
+formularios, ajustes) sí son push con su flecha.
 
 ### Colores
 
@@ -207,7 +213,7 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 
 ### Pantallas
 
-- **Trackers** (pantalla principal): saludo "Bienvenido {nombre}", la card del
+- **Trackers** (pantalla principal): saludo "Hola {nombre}!", la card del
   mood tracker, después una card por cada tracker del usuario y, al final, el
   botón **＋ Crear tracker nuevo**.
   - Mood card: si hoy no tiene registro → editor (colores + nota + descripción).
@@ -260,16 +266,19 @@ Cada **lista** tiene solo un nombre. Sus **entradas** tienen **nombre**,
 
 ### Pantallas
 
-- **Listas** (hub): una card por lista con su nombre y su conteo de entradas.
-  Tocar la card entra a la lista; el **＋** de la card agrega una entrada rápido
-  (abre el modal). Abajo, **＋ Crear lista nueva**.
+- **Listas** (hub): saludo "Hola {nombre}!" + "Estas son tus listas", y
+  una card por lista con su nombre y su conteo de entradas. Tocar la card entra
+  a la lista; el **＋** de la card agrega una entrada rápido (abre el modal).
+  Abajo, **＋ Crear lista nueva**.
 - **Detalle de la lista** ([`list-detail/`](src/presentation/screens/list-detail/)):
   título = nombre de la lista. Arriba, un selector **Ordenar por: Fecha / A-Z /
   Rating**. Las entradas van **pegadas una tras otra, a todo el ancho**,
-  separadas por una línea fina: **nº · nombre + fecha · ★ rating** (💬 si tienen
-  comentario). Se tocan para abrir el modal y ver el comentario / editar los
-  campos (o borrar la entrada). Arriba a la derecha, **＋ Entrada**. Al fondo,
-  **Borrar esta lista** (borra la lista y sus entradas, con confirmación).
+  separadas por una línea fina. Cada fila: **nº** a la izquierda; arriba
+  **nombre + fecha (DD/MM/AAAA)**; abajo el **comentario recortado con “…”** si
+  tiene; **★ rating** a la derecha. Se tocan para abrir el modal y ver el
+  comentario completo / editar los campos (o borrar la entrada). Arriba a la
+  derecha, **＋ Entrada**. Al fondo, **Borrar esta lista** (borra la lista y sus
+  entradas, con confirmación).
 
 Orden de las entradas (`compareListEntries` en el dominio):
 
@@ -288,7 +297,7 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 
 | Clave (`core/storage/keys.ts`) | Contenido |
 |-------|-----------|
-| `@app-celu/user-profile/v1` | `{ name }` (el nombre elegido en el onboarding) |
+| `@app-celu/user-profile/v1` | `{ name, defaultTab }` (nombre + pestaña de inicio) |
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |

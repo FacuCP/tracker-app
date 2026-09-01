@@ -9,6 +9,6 @@ export class GetWelcomeMessage {
 
   async execute(): Promise<string> {
     const profile = await this.userRepository.getProfile();
-    return profile ? `Bienvenido ${profile.name}` : 'Bienvenido';
+    return profile ? `Hola ${profile.name}!` : '¡Hola!';
   }
 }
