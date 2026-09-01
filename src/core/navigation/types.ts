@@ -3,6 +3,10 @@
  * y chequeo a navigation.navigate(...) en todas las pantallas.
  */
 export type RootStackParamList = {
-  Welcome: undefined;
-  NotImplemented: undefined;
+  Home: undefined;
+  Settings: undefined;
+  MoodProgress: undefined;
+  CreateTracker: undefined;
+  EditTracker: { trackerId: string };
+  TrackerProgress: { trackerId: string };
 };
