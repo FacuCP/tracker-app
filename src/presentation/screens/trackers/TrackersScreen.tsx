@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,8 +12,15 @@ import { useTrackersViewModel } from './useTrackersViewModel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Trackers'>;
 
-export function TrackersScreen({ navigation }: Props) {
+export function TrackersScreen({ navigation, route }: Props) {
   const { greeting, trackers } = useTrackersViewModel();
+
+  useEffect(() => {
+    if (route.params?.create) {
+      navigation.setParams({ create: undefined });
+      navigation.navigate('CreateTracker');
+    }
+  }, [route.params?.create, navigation]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>

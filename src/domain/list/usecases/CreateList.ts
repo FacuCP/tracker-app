@@ -9,8 +9,14 @@ export class CreateList {
     private readonly generateId: () => string,
   ) {}
 
-  async execute(name: string, isTodo = false): Promise<List> {
-    const list = createList({ id: this.generateId(), name, createdAt: todayIso(), isTodo });
+  async execute(name: string, isTodo = false, favorite = false): Promise<List> {
+    const list = createList({
+      id: this.generateId(),
+      name,
+      createdAt: todayIso(),
+      isTodo,
+      favorite,
+    });
     await this.repository.save(list);
     return list;
   }

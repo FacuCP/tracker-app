@@ -80,6 +80,12 @@ export function useTrackerCard(trackerId: string) {
     await reload();
   }, [trackerId, date, reload]);
 
+  const toggleFavorite = useCallback(async () => {
+    if (!tracker) return;
+    await container.setTrackerFavorite.execute(trackerId, !tracker.favorite);
+    await reload();
+  }, [tracker, trackerId, reload]);
+
   return {
     tracker,
     entry,
@@ -92,5 +98,7 @@ export function useTrackerCard(trackerId: string) {
     count: entry?.value ?? 0,
     setCount,
     clearEntry,
+    favorite: tracker?.favorite ?? false,
+    toggleFavorite,
   };
 }

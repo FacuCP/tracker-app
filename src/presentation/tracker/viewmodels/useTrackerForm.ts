@@ -31,6 +31,7 @@ function defaultRows(): OptionRow[] {
 export function useTrackerForm(initial?: Tracker | null) {
   const [name, setName] = useState(initial?.name ?? '');
   const [kind, setKind] = useState<TrackerKind>(initial?.kind ?? 'options');
+  const [favorite, setFavorite] = useState(initial?.favorite ?? false);
   const [options, setOptions] = useState<OptionRow[]>(
     initial && initial.kind === 'options'
       ? initial.options.map((o) => ({ key: o.id, id: o.id, label: o.label, color: o.color }))
@@ -73,6 +74,7 @@ export function useTrackerForm(initial?: Tracker | null) {
     return {
       name,
       kind,
+      favorite,
       options:
         kind === 'options'
           ? options.map((o) => ({ id: o.id, label: o.label, color: o.color }))
@@ -85,6 +87,8 @@ export function useTrackerForm(initial?: Tracker | null) {
     setName,
     kind,
     setKind,
+    favorite,
+    setFavorite,
     options,
     addOption,
     removeOption,

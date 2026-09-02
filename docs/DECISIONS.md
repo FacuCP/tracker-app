@@ -783,47 +783,38 @@ mood); el hook es reutilizable si se quiere agregar allá.
 
 ---
 
-## 34. Perfil del usuario: onboarding + preferencias *(elección del usuario)*
+## 34. Perfil del usuario: onboarding para elegir el nombre *(elección del usuario)*
 
-**Contexto.** Se pidió (1) elegir el nombre la primera vez que se abre la app y
-poder cambiarlo en Ajustes, y (2) elegir en Ajustes qué **pestaña** se muestra
-al arrancar (por defecto Trackers). Antes el nombre estaba hardcodeado.
+**Contexto.** Se pidió elegir el nombre la primera vez que se abre la app y
+poder cambiarlo en Ajustes. Antes estaba hardcodeado. (Hubo brevemente una
+preferencia de "pestaña de inicio"; se sacó al aparecer la pestaña Favoritos,
+que es siempre la principal — ver #38.)
 
 **Decisión.**
 
-- **Dominio.** `domain/user/`: `UserProfile` = `{ name, defaultTab }`
-  (`defaultTab: HubTab = 'Trackers' | 'Lists' | 'Finances'`, default `'Trackers'`).
-  `UserRepository` (`getProfile(): Promise<UserProfile | null>` — null = primer
-  arranque, `saveProfile`). Casos de uso: `GetUserProfile`, `GetWelcomeMessage`
-  y **`UpdateUserProfile`** (recibe un patch `{ name?, defaultTab? }`, hace
-  **merge** con lo guardado y valida con `createUserProfile`). Un solo use case
-  de escritura evita tener que pisar un campo al tocar el otro.
+- **Dominio.** `domain/user/`: `UserProfile` = `{ name, moodFavorite }`
+  (`moodFavorite` arranca en `true`; ver #38). `UserRepository`
+  (`getProfile(): Promise<UserProfile | null>` — null = primer arranque,
+  `saveProfile`). Casos de uso: `GetUserProfile`, `GetWelcomeMessage` y
+  **`UpdateUserProfile`** (patch `{ name?, moodFavorite? }`, merge con lo
+  guardado, valida con `createUserProfile`).
 - **Datos.** `AsyncStorageUserLocalDataSource` sobre `@app-celu/user-profile/v1`
   (en `ALL_STORAGE_KEYS`, así el perfil entra en el backup).
 - **Gate de arranque.** `AppNavigator` llama a `getUserProfile` una vez; mientras
   carga muestra un spinner; según el resultado el `initialRouteName` es
-  `Onboarding` (sin perfil) o **la `defaultTab` del perfil**.
-- **Onboarding.** `OnboardingScreen` (sin header) pide el **nombre** y la
-  **pestaña de inicio** (Trackers / Listas / Finanzas, con Trackers
-  preseleccionada), avisa que ambos se cambian en Ajustes, guarda todo con
-  `updateUserProfile({ name, defaultTab })` y hace `navigation.reset` **a la
-  pestaña elegida**.
-- **Editar.** `UserNameCard` y `DefaultTabCard` en Ajustes. `useTrackersViewModel`
-  recarga el saludo con `useFocusEffect`, así que al volver se ve el nombre nuevo.
+  `Onboarding` (sin perfil) o `Favorites`.
+- **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda con
+  `updateUserProfile({ name })` y hace `navigation.reset` a Favoritos.
+- **Editar.** `UserNameCard` en Ajustes. `useFavorites` / `useTrackersViewModel`
+  recargan el saludo con `useFocusEffect`, así que al volver se ve el nombre nuevo.
 
 **Alternativas descartadas.**
 
-- **Modal sobre Trackers en vez de pantalla de onboarding aparte.**
-- **Concepto de "preferencias" separado del perfil.** Para dos campos, meterlos
-  en `UserProfile` es más simple.
-- **`initialRouteName` fijo + `navigate` a la pestaña tras montar.** Haría un
-  flash de Trackers antes de saltar; `native-stack` acepta un `initialRouteName`
-  que no sea la primera pantalla declarada.
+- **Modal sobre la pantalla principal en vez de pantalla de onboarding aparte.**
+- **Concepto de "preferencias" separado del perfil.**
 
-**Consecuencias.** Si la `defaultTab` no es `Trackers`, al cambiar de pestaña
-por el menú se puede pushear alguna pantalla hub encima de otra (el stack se
-"autocorrige" al volver a la de más abajo). Si se importa un backup viejo sin la
-clave `user-profile`, el perfil se borra y vuelve a aparecer el onboarding.
+**Consecuencias.** Si se importa un backup viejo sin la clave `user-profile`, el
+perfil se borra y vuelve a aparecer el onboarding.
 
 ---
 
@@ -936,6 +927,58 @@ aparte:
   migrar DTO, backup y el comparador de orden sin ganar nada.
 - **Reordenar las tareas hechas al fondo automáticamente.** No se pidió; el orden
   lo sigue eligiendo el usuario (`ListSort`).
+
+---
+
+## 38. Pestaña Favoritos como pantalla principal *(elección del usuario)*
+
+**Contexto.** Se pidió una cuarta pestaña **Favoritos**, que sea siempre la
+principal, y que junte los trackers y listas que el usuario marque con una
+estrella. Junto con esto se eliminó la preferencia de "pestaña de inicio" (#34).
+
+**Decisión.**
+
+- **Flag `favorite` en las entidades.** `Tracker` y `List` suman
+  `favorite: boolean` (default `false`, campo opcional en el DTO). Marcar/desmarcar
+  es un caso de uso chico por entidad (`SetTrackerFavorite`, `SetListFavorite`):
+  lee, re-guarda con el nuevo flag. No hay entidad "favorito" ni lista separada:
+  Favoritos es una **vista filtrada** (`useFavorites` trae todo y filtra por
+  `.favorite`).
+- **El mood tracker arranca como favorito y se puede desmarcar.** No tiene
+  entidad de config propia, así que su flag vive en `UserProfile.moodFavorite`
+  (default `true`). La `MoodTrackerCard` muestra la misma estrella y togglea con
+  `updateUserProfile({ moodFavorite })`.
+- **Botón de estrella** (`FavoriteStar`, componente nuevo): esquina superior
+  derecha de la `TrackerCard`, a la izquierda del nombre en la `ListCard` (donde
+  lo pidió el usuario).
+- **Navegación.** `Favorites` es una pantalla hub más (`hubOptions`), primera en
+  el menú del header y `initialRouteName` siempre (salvo onboarding). Las cuatro
+  pestañas quedan: Favoritos / Trackers / Listas / Finanzas.
+- **Crear desde Favoritos.** Un botón "＋ Crear" abre el `CreateChooserModal`
+  (Tracker / Lista como dos botones centrados, Cancelar abajo a la derecha) y
+  navega a **esa pestaña** con un param `{ create: true }`; la pantalla hub lo
+  consume una vez (`navigation.setParams({ create: undefined })`) y abre su flujo
+  de creación (pantalla `CreateTracker` o el `CreateListModal`).
+- **Marcar al crear.** El `TrackerForm` y el `CreateListModal` tienen un checkbox
+  "Agregar a Favoritos" (`TrackerDraft.favorite`, tercer parámetro de
+  `CreateList.execute`).
+- **Refresco.** `ListCard` recibe `onToggleFavorite` del padre (ya era "tonta").
+  `TrackerCard` y `MoodTrackerCard` son autónomas, así que suman un callback
+  opcional `onFavoriteToggled` para que `FavoritesScreen` recargue y saque la
+  card al instante.
+
+**Alternativas descartadas.**
+
+- **Una colección/entidad "Favoritos" aparte.** Un flag booleano en cada entidad
+  es más simple y no puede quedar desincronizado con el tracker/lista real.
+- **`Alert` nativo para elegir tracker/lista.** Se veía pobre; el usuario pidió
+  botones en un modal.
+- **Que "Crear → Tracker" abra directo `CreateTracker`.** El usuario pidió que
+  "te lleve a su pestaña"; pasar por el hub deja la pestaña en el back stack.
+
+**Consecuencias.** `useFavorites` repite el patrón de `useLists` para el conteo
+de entradas y el alta rápida (N+1 lecturas incluido). El mood tracker aparece en
+Favoritos por defecto (hasta que se desmarque).
 
 ---
 

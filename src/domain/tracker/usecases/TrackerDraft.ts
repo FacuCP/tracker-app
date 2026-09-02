@@ -12,6 +12,7 @@ export interface TrackerDraft {
   name: string;
   kind: TrackerKind;
   options: TrackerOptionDraft[];
+  favorite: boolean;
 }
 
 export function draftOptionsToEntities(

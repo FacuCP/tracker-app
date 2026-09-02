@@ -18,19 +18,21 @@ import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onCreate: (name: string, isTodo: boolean) => Promise<void> | void;
+  onCreate: (name: string, isTodo: boolean, favorite: boolean) => Promise<void> | void;
 }
 
-/** Modal para crear una lista nueva (nombre y si es una to-do list). */
+/** Modal para crear una lista nueva (nombre, si es to-do list y si es favorita). */
 export function CreateListModal({ visible, onClose, onCreate }: Props) {
   const [name, setName] = useState('');
   const [isTodo, setIsTodo] = useState(false);
+  const [favorite, setFavorite] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setName('');
       setIsTodo(false);
+      setFavorite(false);
       setSaving(false);
     }
   }, [visible]);
@@ -39,7 +41,7 @@ export function CreateListModal({ visible, onClose, onCreate }: Props) {
     if (name.trim().length === 0) return;
     setSaving(true);
     try {
-      await onCreate(name, isTodo);
+      await onCreate(name, isTodo, favorite);
     } finally {
       setSaving(false);
     }
@@ -71,6 +73,17 @@ export function CreateListModal({ visible, onClose, onCreate }: Props) {
             <View style={styles.todoTexts}>
               <Text style={styles.todoLabel}>Hacerla una to-do list</Text>
               <Text style={styles.todoHint}>Las entradas se marcan como completadas</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.todoRow}
+            onPress={() => setFavorite((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Checkbox checked={favorite} onToggle={() => setFavorite((v) => !v)} />
+            <View style={styles.todoTexts}>
+              <Text style={styles.todoLabel}>Agregar a Favoritos</Text>
+              <Text style={styles.todoHint}>Aparece en la pestaña Favoritos</Text>
             </View>
           </TouchableOpacity>
           <View style={styles.actions}>

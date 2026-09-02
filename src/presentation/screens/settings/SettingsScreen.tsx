@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { useBackup } from '../../backup/useBackup';
-import { DefaultTabCard } from '../../user/components/DefaultTabCard';
 import { UserNameCard } from '../../user/components/UserNameCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -22,7 +21,7 @@ export function SettingsScreen({ navigation }: Props) {
         {
           text: 'Importar',
           style: 'destructive',
-          onPress: () => importData(() => navigation.navigate('Trackers')),
+          onPress: () => importData(() => navigation.navigate('Favorites')),
         },
       ],
     );
@@ -32,8 +31,6 @@ export function SettingsScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <UserNameCard />
-
-        <DefaultTabCard />
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Backup de tus datos</Text>

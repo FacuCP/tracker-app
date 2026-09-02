@@ -2,6 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { theme } from '../../../core/theme';
 import { List } from '../../../domain/list/entities/List';
+import { FavoriteStar } from '../../components/FavoriteStar';
 import { ListCounts } from '../viewmodels/useLists';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
   counts: ListCounts;
   onAddEntry: () => void;
   onOpen: () => void;
+  onToggleFavorite: () => void;
 }
 
 function subtitle(list: List, counts: ListCounts): string {
@@ -26,9 +28,11 @@ function subtitle(list: List, counts: ListCounts): string {
  * Card de una lista. Tocar cualquier parte entra a la lista; el botón ＋ (que
  * captura su propio toque) agrega una entrada rápida.
  */
-export function ListCard({ list, counts, onAddEntry, onOpen }: Props) {
+export function ListCard({ list, counts, onAddEntry, onOpen, onToggleFavorite }: Props) {
   return (
     <TouchableOpacity style={styles.card} onPress={onOpen} activeOpacity={0.7}>
+      <FavoriteStar favorite={list.favorite} onToggle={onToggleFavorite} />
+
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>
           {list.name}

@@ -57,9 +57,17 @@ export function useLists() {
   );
 
   const createList = useCallback(
-    async (name: string, isTodo: boolean) => {
-      await container.createList.execute(name, isTodo);
+    async (name: string, isTodo: boolean, favorite: boolean) => {
+      await container.createList.execute(name, isTodo, favorite);
       setCreateOpen(false);
+      await reload();
+    },
+    [reload],
+  );
+
+  const toggleFavorite = useCallback(
+    async (list: List) => {
+      await container.setListFavorite.execute(list.id, !list.favorite);
       await reload();
     },
     [reload],
@@ -90,6 +98,7 @@ export function useLists() {
     openCreate: () => setCreateOpen(true),
     closeCreate: () => setCreateOpen(false),
     createList,
+    toggleFavorite,
     entryTarget,
     openAddEntry: setEntryTarget,
     closeEntryModal: () => setEntryTarget(null),

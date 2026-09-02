@@ -6,6 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { container } from '../di/container';
 import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
 import { SettingsHeaderButton } from '../../presentation/navigation/SettingsHeaderButton';
+import { FavoritesScreen } from '../../presentation/screens/favorites/FavoritesScreen';
 import { FinancesScreen } from '../../presentation/screens/finances/FinancesScreen';
 import { ListDetailScreen } from '../../presentation/screens/list-detail/ListDetailScreen';
 import { ListsScreen } from '../../presentation/screens/lists/ListsScreen';
@@ -16,7 +17,6 @@ import { CreateTrackerScreen } from '../../presentation/screens/tracker-form/Cre
 import { EditTrackerScreen } from '../../presentation/screens/tracker-form/EditTrackerScreen';
 import { TrackerProgressScreen } from '../../presentation/screens/tracker-progress/TrackerProgressScreen';
 import { TrackersScreen } from '../../presentation/screens/trackers/TrackersScreen';
-import { DEFAULT_HUB_TAB, HubTab } from '../../domain/user/entities/UserProfile';
 import { theme } from '../theme';
 import { RootStackParamList } from './types';
 
@@ -39,7 +39,7 @@ const navTheme: Theme = {
  * menú al tocarlo), sin flecha de volver, y el cambio entre pestañas es un
  * fundido suave en vez del deslizamiento del stack.
  */
-const hubOptions = (current: 'Trackers' | 'Lists' | 'Finances') => ({
+const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances') => ({
   headerTitle: () => <HubMenuButton current={current} />,
   headerRight: () => <SettingsHeaderButton />,
   headerTitleAlign: 'left' as const,
@@ -51,19 +51,11 @@ type Boot = 'loading' | 'onboarding' | 'ready';
 
 export function AppNavigator() {
   const [boot, setBoot] = useState<Boot>('loading');
-  const [startTab, setStartTab] = useState<HubTab>(DEFAULT_HUB_TAB);
 
   useEffect(() => {
     container.getUserProfile
       .execute()
-      .then((profile) => {
-        if (profile) {
-          setStartTab(profile.defaultTab);
-          setBoot('ready');
-        } else {
-          setBoot('onboarding');
-        }
-      })
+      .then((profile) => setBoot(profile ? 'ready' : 'onboarding'))
       .catch(() => setBoot('onboarding'));
   }, []);
 
@@ -78,7 +70,7 @@ export function AppNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
-        initialRouteName={boot === 'onboarding' ? 'Onboarding' : startTab}
+        initialRouteName={boot === 'onboarding' ? 'Onboarding' : 'Favorites'}
         screenOptions={{
           headerStyle: { backgroundColor: theme.colors.header },
           headerShadowVisible: false,
@@ -89,6 +81,11 @@ export function AppNavigator() {
           name="Onboarding"
           component={OnboardingScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Favorites"
+          component={FavoritesScreen}
+          options={hubOptions('Favorites')}
         />
         <Stack.Screen name="Trackers" component={TrackersScreen} options={hubOptions('Trackers')} />
         <Stack.Screen name="Lists" component={ListsScreen} options={hubOptions('Lists')} />

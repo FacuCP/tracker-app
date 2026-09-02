@@ -27,6 +27,7 @@ export class UpdateTracker {
           ? draftOptionsToEntities(draft.options, this.generateId)
           : [],
       createdAt: existing.createdAt,
+      favorite: draft.favorite,
     });
     await this.repository.save(tracker);
     return tracker;

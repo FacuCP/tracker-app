@@ -10,6 +10,8 @@ export interface List {
   readonly name: string;
   readonly createdAt: IsoDate;
   readonly isTodo: boolean;
+  /** Si está marcada como favorita (aparece en la pestaña Favoritos). */
+  readonly favorite: boolean;
 }
 
 export const MAX_LIST_NAME = 40;
@@ -19,6 +21,7 @@ export function createList(params: {
   name: string;
   createdAt: IsoDate;
   isTodo?: boolean;
+  favorite?: boolean;
 }): List {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -27,5 +30,11 @@ export function createList(params: {
   if (name.length > MAX_LIST_NAME) {
     throw new Error(`El nombre no puede superar los ${MAX_LIST_NAME} caracteres`);
   }
-  return { id: params.id, name, createdAt: params.createdAt, isTodo: params.isTodo ?? false };
+  return {
+    id: params.id,
+    name,
+    createdAt: params.createdAt,
+    isTodo: params.isTodo ?? false,
+    favorite: params.favorite ?? false,
+  };
 }

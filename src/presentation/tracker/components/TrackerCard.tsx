@@ -2,18 +2,26 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 
 import { capitalize, formatLongDate, todayIso } from '../../../core/utils/date';
 import { getTrackerOption } from '../../../domain/tracker/entities/Tracker';
+import { FavoriteStar } from '../../components/FavoriteStar';
 import { useTrackerCard } from '../viewmodels/useTrackerCard';
 import { Counter } from './Counter';
 
 interface Props {
   trackerId: string;
   onSeeProgress: () => void;
+  /** Se llama después de marcar/desmarcar el favorito (para refrescar la lista de arriba). */
+  onFavoriteToggled?: () => void;
 }
 
 /** Card de un tracker del usuario en el home. */
-export function TrackerCard({ trackerId, onSeeProgress }: Props) {
+export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Props) {
   const vm = useTrackerCard(trackerId);
   const tracker = vm.tracker;
+
+  async function toggleFavorite() {
+    await vm.toggleFavorite();
+    onFavoriteToggled?.();
+  }
 
   return (
     <View style={styles.card}>
@@ -22,7 +30,10 @@ export function TrackerCard({ trackerId, onSeeProgress }: Props) {
           <Text style={styles.name}>{tracker?.name ?? '…'}</Text>
           <Text style={styles.date}>{capitalize(formatLongDate(todayIso()))}</Text>
         </View>
-        {vm.justSaved ? <Text style={styles.saved}>Guardado ✓</Text> : null}
+        <View style={styles.headerRight}>
+          <FavoriteStar favorite={vm.favorite} onToggle={toggleFavorite} />
+          {vm.justSaved ? <Text style={styles.saved}>Guardado ✓</Text> : null}
+        </View>
       </View>
 
       {vm.loading || !tracker ? (
@@ -122,7 +133,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   headerTexts: {
+    flex: 1,
     gap: 2,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 4,
   },
   name: {
     fontSize: 17,

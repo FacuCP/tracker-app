@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { MAX_TRACKER_NAME } from '../../../domain/tracker/entities/Tracker';
+import { Checkbox } from '../../components/Checkbox';
 import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 import { useTrackerForm } from '../viewmodels/useTrackerForm';
 import { OptionColorPicker } from './OptionColorPicker';
@@ -95,6 +96,15 @@ export function TrackerForm({ form, submitLabel, saving, onSubmit, onDelete }: P
           {form.optionsError ? <Text style={styles.error}>{form.optionsError}</Text> : null}
         </View>
       ) : null}
+
+      <TouchableOpacity
+        style={styles.favoriteRow}
+        onPress={() => form.setFavorite(!form.favorite)}
+        activeOpacity={0.7}
+      >
+        <Checkbox checked={form.favorite} onToggle={() => form.setFavorite(!form.favorite)} />
+        <Text style={styles.favoriteLabel}>Agregar a Favoritos</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.submit, (!form.canSave || saving) && styles.submitDisabled]}
@@ -227,6 +237,16 @@ const styles = StyleSheet.create({
   addText: {
     color: '#2563eb',
     fontWeight: '700',
+  },
+  favoriteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  favoriteLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
   },
   submit: {
     backgroundColor: '#2563eb',

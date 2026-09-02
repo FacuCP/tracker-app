@@ -25,13 +25,18 @@ export function useMoodTrackerCard() {
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
   const [justSaved, setJustSaved] = useState(false);
+  const [favorite, setFavorite] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      container.getMoodEntry.execute(date).then((entry) => {
+      Promise.all([
+        container.getMoodEntry.execute(date),
+        container.getUserProfile.execute(),
+      ]).then(([entry, profile]) => {
         if (active) {
           setSavedEntry(entry);
+          setFavorite(profile?.moodFavorite ?? true);
           setLoading(false);
         }
       });
@@ -40,6 +45,12 @@ export function useMoodTrackerCard() {
       };
     }, [date]),
   );
+
+  const toggleFavorite = useCallback(async () => {
+    const next = !favorite;
+    setFavorite(next);
+    await container.updateUserProfile.execute({ moodFavorite: next });
+  }, [favorite]);
 
   const save = useCallback(async () => {
     if (colors.length === 0) {
@@ -77,5 +88,7 @@ export function useMoodTrackerCard() {
     setNote,
     justSaved,
     save,
+    favorite,
+    toggleFavorite,
   };
 }

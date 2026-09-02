@@ -25,6 +25,7 @@ import { GetTrackerEntry } from '../../domain/tracker/usecases/GetTrackerEntry';
 import { GetTrackerRange } from '../../domain/tracker/usecases/GetTrackerRange';
 import { GetTrackers } from '../../domain/tracker/usecases/GetTrackers';
 import { SaveTrackerEntry } from '../../domain/tracker/usecases/SaveTrackerEntry';
+import { SetTrackerFavorite } from '../../domain/tracker/usecases/SetTrackerFavorite';
 import { UpdateTracker } from '../../domain/tracker/usecases/UpdateTracker';
 import { AsyncStorageListLocalDataSource } from '../../data/list/datasources/ListLocalDataSource';
 import { AsyncStorageListEntryLocalDataSource } from '../../data/list/datasources/ListEntryLocalDataSource';
@@ -38,6 +39,7 @@ import { GetListEntries } from '../../domain/list/usecases/GetListEntries';
 import { GetLists } from '../../domain/list/usecases/GetLists';
 import { SaveListEntry } from '../../domain/list/usecases/SaveListEntry';
 import { SetListEntryDone } from '../../domain/list/usecases/SetListEntryDone';
+import { SetListFavorite } from '../../domain/list/usecases/SetListFavorite';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -79,6 +81,7 @@ export const container = {
   getTracker: new GetTracker(trackerRepository),
   createTracker: new CreateTracker(trackerRepository, generateId),
   updateTracker: new UpdateTracker(trackerRepository, generateId),
+  setTrackerFavorite: new SetTrackerFavorite(trackerRepository),
   deleteTracker: new DeleteTracker(trackerRepository, trackerEntryRepository),
   getTrackerEntry: new GetTrackerEntry(trackerEntryRepository),
   saveTrackerEntry: new SaveTrackerEntry(trackerRepository, trackerEntryRepository),
@@ -88,6 +91,7 @@ export const container = {
   getLists: new GetLists(listRepository),
   getList: new GetList(listRepository),
   createList: new CreateList(listRepository, generateId),
+  setListFavorite: new SetListFavorite(listRepository),
   deleteList: new DeleteList(listRepository, listEntryRepository),
   getListEntries: new GetListEntries(listEntryRepository),
   saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),

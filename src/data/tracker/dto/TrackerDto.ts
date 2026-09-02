@@ -13,6 +13,7 @@ export interface TrackerDto {
   kind: string;
   options: TrackerOptionDto[];
   createdAt: string;
+  favorite?: boolean;
 }
 
 export function trackerToDto(tracker: Tracker): TrackerDto {
@@ -22,6 +23,7 @@ export function trackerToDto(tracker: Tracker): TrackerDto {
     kind: tracker.kind,
     options: tracker.options.map((o) => ({ id: o.id, label: o.label, color: o.color })),
     createdAt: tracker.createdAt,
+    favorite: tracker.favorite || undefined,
   };
 }
 
@@ -33,5 +35,6 @@ export function trackerFromDto(dto: TrackerDto): Tracker {
     kind,
     options: kind === 'options' ? (dto.options ?? []) : [],
     createdAt: (dto.createdAt ?? '1970-01-01') as IsoDate,
+    favorite: dto.favorite ?? false,
   });
 }

@@ -1,12 +1,15 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { capitalize } from '../../../core/utils/date';
+import { FavoriteStar } from '../../components/FavoriteStar';
 import { useMoodTrackerCard } from '../viewmodels/useMoodTrackerCard';
 import { MoodEditor } from './MoodEditor';
 import { MoodEntrySummary } from './MoodEntrySummary';
 
 interface Props {
   onSeeProgress: () => void;
+  /** Se llama después de marcar/desmarcar el favorito (para refrescar la lista de arriba). */
+  onFavoriteToggled?: () => void;
 }
 
 /**
@@ -14,17 +17,25 @@ interface Props {
  * cargarlo (uno o dos colores + descripción). Una vez guardado se muestra en
  * modo lectura y se edita desde "Ver progreso".
  */
-export function MoodTrackerCard({ onSeeProgress }: Props) {
+export function MoodTrackerCard({ onSeeProgress, onFavoriteToggled }: Props) {
   const vm = useMoodTrackerCard();
+
+  async function toggleFavorite() {
+    await vm.toggleFavorite();
+    onFavoriteToggled?.();
+  }
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerTexts}>
           <Text style={styles.kicker}>MOOD TRACKER</Text>
           <Text style={styles.date}>{capitalize(vm.dateLabel)}</Text>
         </View>
-        {vm.justSaved ? <Text style={styles.saved}>Guardado ✓</Text> : null}
+        <View style={styles.headerRight}>
+          <FavoriteStar favorite={vm.favorite} onToggle={toggleFavorite} />
+          {vm.justSaved ? <Text style={styles.saved}>Guardado ✓</Text> : null}
+        </View>
       </View>
 
       {vm.loading ? (
@@ -75,6 +86,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  headerTexts: {
+    flex: 1,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 4,
   },
   kicker: {
     fontSize: 11,

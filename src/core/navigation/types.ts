@@ -2,13 +2,15 @@
  * Mapa de rutas de la app y sus parámetros. Tiparlo acá le da autocompletado
  * y chequeo a navigation.navigate(...) en todas las pantallas.
  *
- * Trackers / Lists / Finances son las tres pantallas "hub" a las que se llega
- * desde el menú del header. La principal (initialRoute) es Trackers.
+ * Favoritos / Trackers / Lists / Finances son las cuatro pantallas "hub" a las
+ * que se llega desde el menú del header. La principal (initialRoute) es
+ * Favoritos.
  */
 export type RootStackParamList = {
   Onboarding: undefined;
-  Trackers: undefined;
-  Lists: undefined;
+  Favorites: undefined;
+  Trackers: { create?: boolean } | undefined;
+  Lists: { create?: boolean } | undefined;
   ListDetail: { listId: string };
   Finances: undefined;
   Settings: undefined;

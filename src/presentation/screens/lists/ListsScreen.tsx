@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useEffect } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,8 +13,16 @@ import { useLists } from '../../list/viewmodels/useLists';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Lists'>;
 
-export function ListsScreen({ navigation }: Props) {
+export function ListsScreen({ navigation, route }: Props) {
   const vm = useLists();
+
+  const { openCreate } = vm;
+  useEffect(() => {
+    if (route.params?.create) {
+      navigation.setParams({ create: undefined });
+      openCreate();
+    }
+  }, [route.params?.create, navigation, openCreate]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -37,6 +46,7 @@ export function ListsScreen({ navigation }: Props) {
                   counts={vm.counts[list.id] ?? { total: 0, done: 0 }}
                   onAddEntry={() => vm.openAddEntry(list)}
                   onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
+                  onToggleFavorite={() => vm.toggleFavorite(list)}
                 />
               ))
             )}

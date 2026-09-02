@@ -1,8 +1,10 @@
 # app-celu
 
 App personal hecha con **Expo + React Native + TypeScript**, organizada con
-**Clean Architecture**. Tiene tres áreas, elegibles desde el menú del header:
+**Clean Architecture**. Tiene cuatro áreas, elegibles desde el menú del header:
 
+- **Favoritos** — pantalla principal. Junta los trackers y listas marcados con la
+  estrella; tiene un botón "＋ Crear" (tracker o lista).
 - **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
@@ -101,8 +103,8 @@ src/
 │
 ├── core/
 │   ├── di/container.ts          # Composition root: arma todas las dependencias
-│   ├── navigation/              # Stack tipado (Onboarding, Trackers, Lists, ListDetail,
-│   │                            # Finances, Settings, MoodProgress, CreateTracker,
+│   ├── navigation/              # Stack tipado (Onboarding, Favorites, Trackers, Lists,
+│   │                            # ListDetail, Finances, Settings, MoodProgress, CreateTracker,
 │   │                            # EditTracker, TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
 │   ├── theme.ts                 # Paleta: fondos claros (no blancos) + acento
@@ -113,12 +115,13 @@ src/
     │                            # CalendarWeek/Month/Year (render-prop por día),
     │                            # CalendarViewSwitch, useCalendarPeriod
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
-    ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox
+    ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox, FavoriteStar
     ├── backup/                  # useBackup (exportar/importar el .json)
-    ├── user/components/         # UserNameCard, DefaultTabCard (Ajustes)
+    ├── user/components/         # UserNameCard (Ajustes)
     ├── screens/
-    │   ├── onboarding/          # OnboardingScreen (nombre + pestaña de inicio, la 1ª vez)
-    │   ├── trackers/            # TrackersScreen + useTrackersViewModel (pantalla principal)
+    │   ├── onboarding/          # OnboardingScreen (elegir el nombre, la 1ª vez)
+    │   ├── favorites/           # FavoritesScreen + useFavorites + CreateChooserModal (principal)
+    │   ├── trackers/            # TrackersScreen + useTrackersViewModel
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
     │   ├── finances/            # FinancesScreen (función futura)
@@ -127,7 +130,7 @@ src/
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
     │   └── tracker-progress/    # TrackerProgressScreen
     ├── list/
-    │   ├── components/          # ListCard, CreateListButton, CreateListModal,
+    │   ├── components/          # ListCard (con estrella), CreateListButton, CreateListModal,
     │   │                        # ListEntryRow, ListEntryModal, ListSortSelector, DateField
     │   ├── viewmodels/          # useLists, useListDetail
     │   └── parseRating.ts       # Parseo/validación del campo Rating / Prioridad
@@ -157,31 +160,29 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 ## Primer arranque
 
 La primera vez que se abre la app, `AppNavigator` mira si hay un **perfil**
-guardado (`UserProfile` = `{ name, defaultTab }`). Si no, arranca en
-**`OnboardingScreen`**: pide el **nombre** y la **pestaña de inicio** (Trackers /
-Listas / Finanzas), avisa que se cambian en Ajustes, guarda todo y resetea la
-navegación a la pestaña elegida.
+guardado (`UserProfile` = `{ name, moodFavorite }`). Si no, arranca en
+**`OnboardingScreen`**: pide el **nombre**, avisa que se cambia en Ajustes, lo
+guarda y resetea la navegación a Favoritos.
 
-Si ya hay perfil, la app arranca en la **pestaña por defecto** del perfil
-(`Trackers` de fábrica). Tanto el nombre como la pestaña de inicio se cambian en
-**Ajustes** (`UserNameCard` / `DefaultTabCard`); el saludo del home se actualiza
-al volver.
+Si ya hay perfil, la app arranca siempre en **Favoritos**. El nombre se cambia en
+**Ajustes** (`UserNameCard`); el saludo se actualiza al volver.
 
 ## Navegación
 
-El título del header de las tres pantallas principales muestra el **nombre de la
-pestaña actual** con una flechita ▾
+El título del header de las cuatro pantallas principales muestra el **nombre de
+la pestaña actual** con una flechita ▾
 ([`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)); al tocarlo se
 despliega un menú para moverse entre:
 
-- **Trackers** — la pantalla principal: mood tracker + todos los trackers del
-  usuario (lo que había antes en "Inicio").
+- **Favoritos** — la pantalla principal: los trackers y listas marcados con la
+  estrella, y el botón "＋ Crear".
+- **Trackers** — mood tracker + todos los trackers del usuario.
 - **Listas** — las listas del usuario (ver más abajo).
 - **Finanzas** — *función futura* (placeholder).
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
-es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las tres
+es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las cuatro
 tienen el botón **"Ajustes"** arriba a la derecha
 (`SettingsHeaderButton`, en `hubOptions`). El resto de pantallas (progreso,
 formularios, ajustes) sí son push con su flecha.
@@ -216,17 +217,34 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 
 ### Pantallas
 
-- **Trackers** (pantalla principal): saludo "Hola {nombre}!", la card del
-  mood tracker, después una card por cada tracker del usuario y, al final, el
-  botón **＋ Crear tracker nuevo**.
+- **Trackers**: saludo "Hola {nombre}!", la card del mood tracker, después una
+  card por cada tracker del usuario y, al final, el botón **＋ Crear tracker
+  nuevo**.
   - Mood card: si hoy no tiene registro → editor (colores + nota + descripción).
-    Una vez guardado → modo lectura; se edita desde "Ver progreso".
+    Una vez guardado → modo lectura; se edita desde "Ver progreso". Tiene una
+    **estrella** arriba a la derecha (favorito; arranca marcada).
 - **Progreso de ánimo**: calendario propio (empieza en lunes) con **Semana /
   Mes / Año**, navegación entre períodos y edición/borrado de cualquier día. En
   **Año**, tocar un mes lo abre. Cada día con nota la muestra sobre los colores;
   arriba se ve el **promedio** de las notas del período. Debajo, las
   **Referencias**: una card por color (emoción + contador del período). Orden
   fijo: naranja solo, después rojo/violeta, rosa/gris, verde/azul, amarillo/marrón.
+
+## Favoritos
+
+La **pantalla principal**. Junta los trackers y las listas que el usuario marcó
+con la **estrella** (flag `favorite` en cada entidad; se togglea con
+`SetTrackerFavorite` / `SetListFavorite`). `useFavorites` trae todo y filtra por
+`.favorite` — no hay una colección de "favoritos" aparte. El **mood tracker**
+está incluido por defecto (su flag vive en `UserProfile.moodFavorite`, arranca
+en `true`) y se puede sacar con su propia estrella.
+
+- Cada favorito se muestra con su card normal (`TrackerCard` / `ListCard`), con
+  la misma estrella para sacarlo.
+- Botón **"＋ Crear"**: abre el `CreateChooserModal` (**Tracker** / **Lista** como
+  botones centrados, **Cancelar** abajo) y navega a esa
+  pestaña (con un param `{ create: true }` que la pantalla consume una vez para
+  abrir su flujo de creación).
 
 ## Trackers del usuario
 
@@ -261,6 +279,9 @@ Versión más simple del mood tracker. Cada tracker tiene un **nombre** y un
   que el mood tracker).
 - **Número**: es un **contador** con botones − / +. Cada toque persiste al
   instante, así se puede seguir ajustando durante el día; "Borrar" lo saca.
+- **Estrella** en la esquina superior derecha: marca/desmarca el tracker como
+  favorito. También hay un checkbox "Agregar a Favoritos" en el formulario de
+  crear/editar.
 
 ## Listas
 
@@ -272,6 +293,10 @@ Una **to-do list** funciona igual que una lista normal, con dos diferencias:
 sus entradas se pueden **tildar como completadas**, y el "rating" se muestra
 como **"Prioridad"** (⚑ en vez de ★). Se elige con un **checkbox** al crear la
 lista (por defecto, no).
+
+Cada lista tiene también un flag **`favorite`**: una **estrella** a la izquierda
+del nombre en la card, más un checkbox "Agregar a Favoritos" en el modal de
+crear. Las favoritas aparecen en la pestaña **Favoritos**.
 
 ### Pantallas
 
@@ -310,11 +335,11 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 
 | Clave (`core/storage/keys.ts`) | Contenido |
 |-------|-----------|
-| `@app-celu/user-profile/v1` | `{ name, defaultTab }` (nombre + pestaña de inicio) |
+| `@app-celu/user-profile/v1` | `{ name, moodFavorite }` (nombre + si el mood tracker es favorito) |
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
-| `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config de los trackers) |
+| `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config + `favorite` de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |
-| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre + `isTodo` de cada lista) |
+| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre + `isTodo` + `favorite` de cada lista) |
 | `@app-celu/list-entries/v1` | `{ [listId]: { [entryId]: ListEntryDto } }` |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué

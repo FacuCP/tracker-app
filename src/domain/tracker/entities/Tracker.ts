@@ -20,6 +20,8 @@ export interface Tracker {
   /** Opciones del tracker (solo para kind 'options'; vacío para 'number'). */
   readonly options: readonly TrackerOption[];
   readonly createdAt: IsoDate;
+  /** Si está marcado como favorito (aparece en la pestaña Favoritos). */
+  readonly favorite: boolean;
 }
 
 export const MIN_OPTIONS = 1;
@@ -42,6 +44,7 @@ export function createTracker(params: {
   kind: TrackerKind;
   options?: readonly TrackerOption[];
   createdAt: IsoDate;
+  favorite?: boolean;
 }): Tracker {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -50,9 +53,10 @@ export function createTracker(params: {
   if (name.length > MAX_TRACKER_NAME) {
     throw new Error(`El nombre no puede superar los ${MAX_TRACKER_NAME} caracteres`);
   }
+  const favorite = params.favorite ?? false;
 
   if (params.kind === 'number') {
-    return { id: params.id, name, kind: 'number', options: [], createdAt: params.createdAt };
+    return { id: params.id, name, kind: 'number', options: [], createdAt: params.createdAt, favorite };
   }
 
   const options = params.options ?? [];
@@ -77,6 +81,7 @@ export function createTracker(params: {
     kind: 'options',
     options: options.map((o) => ({ id: o.id, label: o.label.trim(), color: o.color })),
     createdAt: params.createdAt,
+    favorite,
   };
 }
 
