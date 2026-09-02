@@ -803,8 +803,11 @@ al arrancar (por defecto Trackers). Antes el nombre estaba hardcodeado.
 - **Gate de arranque.** `AppNavigator` llama a `getUserProfile` una vez; mientras
   carga muestra un spinner; según el resultado el `initialRouteName` es
   `Onboarding` (sin perfil) o **la `defaultTab` del perfil**.
-- **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda con
-  `updateUserProfile({ name })` y hace `navigation.reset` a Trackers.
+- **Onboarding.** `OnboardingScreen` (sin header) pide el **nombre** y la
+  **pestaña de inicio** (Trackers / Listas / Finanzas, con Trackers
+  preseleccionada), avisa que ambos se cambian en Ajustes, guarda todo con
+  `updateUserProfile({ name, defaultTab })` y hace `navigation.reset` **a la
+  pestaña elegida**.
 - **Editar.** `UserNameCard` y `DefaultTabCard` en Ajustes. `useTrackersViewModel`
   recarga el saludo con `useFocusEffect`, así que al volver se ve el nombre nuevo.
 
@@ -893,6 +896,48 @@ y `Counter`).
 
 - **`react-native-keyboard-controller`.** Mejor resultado, pero dep nativo con
   setup; el `KeyboardAvoidingView` del core alcanza para estos casos.
+
+---
+
+## 37. To-do lists: una lista es una to-do list o no *(elección del usuario)*
+
+**Contexto.** Se quiso poder marcar tareas como completadas en algunas listas,
+sin cambiar cómo funcionan las listas normales.
+
+**Decisión.** Un flag `isTodo` en la entidad `List` (se elige con un checkbox al
+crearla en `CreateListModal`; por defecto `false`), en vez de un tipo de lista
+aparte:
+
+- **Modelo.** `List` suma `isTodo: boolean`. `ListEntry` suma `done: boolean`
+  (solo relevante si la lista es to-do). El campo `rating` no cambia de nombre en
+  el dominio: es "un número"; la UI lo muestra como **"Prioridad"** (con ⚑) en
+  las to-do lists y como **"Rating"** (con ★) en las normales.
+- **Orden en el hub.** `GetLists` ordena las to-do lists primero, y dentro de
+  cada grupo por `createdAt` (como antes).
+- **Orden por defecto en el detalle.** `useListDetail` no persiste el criterio;
+  arranca en `null` y usa el default según el tipo de lista (**`rating`
+  (prioridad)** en una to-do list, **`date`** en una normal). Cuando el usuario
+  toca el `ListSortSelector` se guarda su elección y pisa el default.
+- **Conteo en la card.** `useLists` pasa a devolver `{ total, done }` por lista;
+  la `ListCard` de una to-do list muestra `done/total hechas` en vez de
+  `N entradas`.
+- **Marcar completada.** Un caso de uso chico `SetListEntryDone(listId, entryId,
+  done)` (lee la entrada, la re-guarda con el nuevo `done`), para no tener que
+  abrir el `ListEntryModal`. En el detalle, la fila muestra un `Checkbox`
+  (componente nuevo, genérico) en lugar del número de posición, y tacha el
+  nombre cuando está hecha.
+- **Persistencia / backup.** Campos opcionales en los DTO (`isTodo?`, `done?`):
+  los backups y datos viejos siguen cargando (lista sin flag = normal).
+
+**Alternativas descartadas.**
+
+- **Un campo `priority` separado del `rating`.** Es el mismo dato (un número por
+  entrada); solo cambia la etiqueta según el tipo de lista. Duplicarlo obligaba a
+  migrar DTO, backup y el comparador de orden sin ganar nada.
+- **Reordenar las tareas hechas al fondo automáticamente.** No se pidió; el orden
+  lo sigue eligiendo el usuario (`ListSort`).
+
+---
 
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.

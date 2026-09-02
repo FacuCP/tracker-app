@@ -5,7 +5,8 @@ App personal hecha con **Expo + React Native + TypeScript**, organizada con
 
 - **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
   crea el usuario (de opciones o de número).
-- **Listas** — listas del usuario con entradas (nombre, fecha, comentario).
+- **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
+  rating); una lista puede ser una **to-do list** (entradas que se tildan).
 - **Finanzas** — *función futura*.
 
 Todo se guarda local en el teléfono y se puede exportar/importar como un único
@@ -84,11 +85,11 @@ src/
 │   │   └── usecases/            # Create/Update/Delete/GetTracker(s), Save/Delete/GetTrackerEntry,
 │   │                            # GetTrackerRange (registros + estadísticas del rango)
 │   ├── list/
-│   │   ├── entities/            # List, ListEntry (nombre, fecha, comentario, rating) +
-│   │   │                        # compareListEntries (3 criterios de orden)
+│   │   ├── entities/            # List (nombre, isTodo), ListEntry (nombre, fecha, comentario,
+│   │   │                        # rating, done) + compareListEntries (3 criterios de orden)
 │   │   ├── repositories/        # ListRepository, ListEntryRepository (puertos)
 │   │   └── usecases/            # Create/Delete/GetList(s), GetListEntries (ordenadas),
-│   │                            # Save/DeleteListEntry
+│   │                            # Save/DeleteListEntry, SetListEntryDone
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
@@ -112,11 +113,11 @@ src/
     │                            # CalendarWeek/Month/Year (render-prop por día),
     │                            # CalendarViewSwitch, useCalendarPeriod
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
-    ├── components/ComingSoon    # Placeholder para features futuras
+    ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox
     ├── backup/                  # useBackup (exportar/importar el .json)
     ├── user/components/         # UserNameCard, DefaultTabCard (Ajustes)
     ├── screens/
-    │   ├── onboarding/          # OnboardingScreen (elegir el nombre la 1ª vez)
+    │   ├── onboarding/          # OnboardingScreen (nombre + pestaña de inicio, la 1ª vez)
     │   ├── trackers/            # TrackersScreen + useTrackersViewModel (pantalla principal)
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
@@ -129,7 +130,7 @@ src/
     │   ├── components/          # ListCard, CreateListButton, CreateListModal,
     │   │                        # ListEntryRow, ListEntryModal, ListSortSelector, DateField
     │   ├── viewmodels/          # useLists, useListDetail
-    │   └── parseRating.ts       # Parseo/validación del campo Rating
+    │   └── parseRating.ts       # Parseo/validación del campo Rating / Prioridad
     ├── mood/
     │   ├── components/          # DiagonalSplitSquare, MoodColorPicker, MoodEditor,
     │   │                        # MoodEntrySummary, MoodTrackerCard, DayCell,
@@ -157,7 +158,9 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 
 La primera vez que se abre la app, `AppNavigator` mira si hay un **perfil**
 guardado (`UserProfile` = `{ name, defaultTab }`). Si no, arranca en
-**`OnboardingScreen`**: pide el nombre, lo guarda y resetea la navegación.
+**`OnboardingScreen`**: pide el **nombre** y la **pestaña de inicio** (Trackers /
+Listas / Finanzas), avisa que se cambian en Ajustes, guarda todo y resetea la
+navegación a la pestaña elegida.
 
 Si ya hay perfil, la app arranca en la **pestaña por defecto** del perfil
 (`Trackers` de fábrica). Tanto el nombre como la pestaña de inicio se cambian en
@@ -261,24 +264,34 @@ Versión más simple del mood tracker. Cada tracker tiene un **nombre** y un
 
 ## Listas
 
-Cada **lista** tiene solo un nombre. Sus **entradas** tienen **nombre**,
-**fecha**, **comentario** (opcional) y **rating** (opcional, un número).
+Cada **lista** tiene un nombre y un flag **`isTodo`**. Sus **entradas** tienen
+**nombre**, **fecha**, **comentario** (opcional), **rating** (opcional, un
+número) y **`done`** (completada, solo se usa en to-do lists).
+
+Una **to-do list** funciona igual que una lista normal, con dos diferencias:
+sus entradas se pueden **tildar como completadas**, y el "rating" se muestra
+como **"Prioridad"** (⚑ en vez de ★). Se elige con un **checkbox** al crear la
+lista (por defecto, no).
 
 ### Pantallas
 
 - **Listas** (hub): saludo "Hola {nombre}!" + "Estas son tus listas", y
-  una card por lista con su nombre y su conteo de entradas. Tocar la card entra
-  a la lista; el **＋** de la card agrega una entrada rápido (abre el modal).
-  Abajo, **＋ Crear lista nueva**.
+  una card por lista con su nombre y su conteo. Las **to-do lists se listan
+  primero** y muestran **`hechas/total`** en vez de "N entradas". Tocar la card
+  entra a la lista; el **＋** de la card agrega una entrada rápido (abre el
+  modal). Abajo, **＋ Crear lista nueva** (el modal tiene el checkbox "Hacerla
+  una to-do list").
 - **Detalle de la lista** ([`list-detail/`](src/presentation/screens/list-detail/)):
   título = nombre de la lista. Arriba, un selector **Ordenar por: Fecha / A-Z /
-  Rating**. Las entradas van **pegadas una tras otra, a todo el ancho**,
-  separadas por una línea fina. Cada fila: **nº** a la izquierda; arriba
-  **nombre + fecha (DD/MM/AAAA)**; abajo el **comentario recortado con “…”** si
-  tiene; **★ rating** a la derecha. Se tocan para abrir el modal y ver el
-  comentario completo / editar los campos (o borrar la entrada). Arriba a la
-  derecha, **＋ Entrada**. Al fondo, **Borrar esta lista** (borra la lista y sus
-  entradas, con confirmación).
+  Rating** (dice **Prioridad** en una to-do list). El orden por defecto es
+  **Fecha**, salvo en las to-do lists que arrancan por **Prioridad**. Las entradas van **pegadas
+  una tras otra, a todo el ancho**, separadas por una línea fina. Cada fila:
+  a la izquierda el **nº** (o un **checkbox** en una to-do list, que tacha el
+  nombre al tildarlo); arriba **nombre + fecha (DD/MM/AAAA)**; abajo el
+  **comentario recortado con “…”** si tiene; **★/⚑ rating** a la derecha. Se
+  tocan para abrir el modal y ver el comentario completo / editar los campos (o
+  borrar la entrada). Arriba a la derecha, **＋ Entrada**. Al fondo, **Borrar
+  esta lista** (borra la lista y sus entradas, con confirmación).
 
 Orden de las entradas (`compareListEntries` en el dominio):
 
@@ -301,7 +314,7 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |
-| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre de cada lista) |
+| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre + `isTodo` de cada lista) |
 | `@app-celu/list-entries/v1` | `{ [listId]: { [entryId]: ListEntryDto } }` |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué

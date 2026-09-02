@@ -2,30 +2,38 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { theme } from '../../../core/theme';
 import { List } from '../../../domain/list/entities/List';
+import { ListCounts } from '../viewmodels/useLists';
 
 interface Props {
   list: List;
-  entryCount: number;
+  counts: ListCounts;
   onAddEntry: () => void;
   onOpen: () => void;
+}
+
+function subtitle(list: List, counts: ListCounts): string {
+  if (list.isTodo) {
+    return counts.total === 0
+      ? 'To-do list · sin tareas'
+      : `To-do list · ${counts.done}/${counts.total} hechas`;
+  }
+  return counts.total === 0
+    ? 'Sin entradas'
+    : `${counts.total} ${counts.total === 1 ? 'entrada' : 'entradas'}`;
 }
 
 /**
  * Card de una lista. Tocar cualquier parte entra a la lista; el botón ＋ (que
  * captura su propio toque) agrega una entrada rápida.
  */
-export function ListCard({ list, entryCount, onAddEntry, onOpen }: Props) {
+export function ListCard({ list, counts, onAddEntry, onOpen }: Props) {
   return (
     <TouchableOpacity style={styles.card} onPress={onOpen} activeOpacity={0.7}>
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>
           {list.name}
         </Text>
-        <Text style={styles.count}>
-          {entryCount === 0
-            ? 'Sin entradas'
-            : `${entryCount} ${entryCount === 1 ? 'entrada' : 'entradas'}`}
-        </Text>
+        <Text style={styles.count}>{subtitle(list, counts)}</Text>
       </View>
 
       <TouchableOpacity style={styles.addButton} onPress={onAddEntry} activeOpacity={0.7}>

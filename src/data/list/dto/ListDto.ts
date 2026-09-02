@@ -5,10 +5,11 @@ export interface ListDto {
   id: string;
   name: string;
   createdAt: string;
+  isTodo?: boolean;
 }
 
 export function listToDto(list: List): ListDto {
-  return { id: list.id, name: list.name, createdAt: list.createdAt };
+  return { id: list.id, name: list.name, createdAt: list.createdAt, isTodo: list.isTodo };
 }
 
 export function listFromDto(dto: ListDto): List {
@@ -16,5 +17,6 @@ export function listFromDto(dto: ListDto): List {
     id: dto.id,
     name: dto.name,
     createdAt: (dto.createdAt ?? '1970-01-01') as IsoDate,
+    isTodo: dto.isTodo ?? false,
   });
 }

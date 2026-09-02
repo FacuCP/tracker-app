@@ -37,6 +37,7 @@ import { GetList } from '../../domain/list/usecases/GetList';
 import { GetListEntries } from '../../domain/list/usecases/GetListEntries';
 import { GetLists } from '../../domain/list/usecases/GetLists';
 import { SaveListEntry } from '../../domain/list/usecases/SaveListEntry';
+import { SetListEntryDone } from '../../domain/list/usecases/SetListEntryDone';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -90,6 +91,7 @@ export const container = {
   deleteList: new DeleteList(listRepository, listEntryRepository),
   getListEntries: new GetListEntries(listEntryRepository),
   saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),
+  setListEntryDone: new SetListEntryDone(listEntryRepository),
   deleteListEntry: new DeleteListEntry(listEntryRepository),
 
   exportBackup: new ExportBackup(backupRepository),

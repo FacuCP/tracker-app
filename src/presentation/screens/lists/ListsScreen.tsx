@@ -34,7 +34,7 @@ export function ListsScreen({ navigation }: Props) {
                 <ListCard
                   key={list.id}
                   list={list}
-                  entryCount={vm.counts[list.id] ?? 0}
+                  counts={vm.counts[list.id] ?? { total: 0, done: 0 }}
                   onAddEntry={() => vm.openAddEntry(list)}
                   onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
                 />
@@ -51,6 +51,7 @@ export function ListsScreen({ navigation }: Props) {
       <ListEntryModal
         visible={vm.entryTarget != null}
         listName={vm.entryTarget?.name ?? ''}
+        isTodo={vm.entryTarget?.isTodo ?? false}
         initial={null}
         onClose={vm.closeEntryModal}
         onSave={vm.saveEntry}

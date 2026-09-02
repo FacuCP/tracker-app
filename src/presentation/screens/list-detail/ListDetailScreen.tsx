@@ -70,7 +70,7 @@ export function ListDetailScreen({ route, navigation }: Props) {
           <>
             <View style={styles.sortBar}>
               <Text style={styles.sortLabel}>Ordenar por</Text>
-              <ListSortSelector value={vm.sort} onChange={vm.setSort} />
+              <ListSortSelector value={vm.sort} onChange={vm.setSort} isTodo={list.isTodo} />
             </View>
 
             {vm.entries.length === 0 ? (
@@ -87,7 +87,9 @@ export function ListDetailScreen({ route, navigation }: Props) {
                     entry={entry}
                     position={index + 1}
                     first={index === 0}
+                    isTodo={list.isTodo}
                     onPress={() => vm.openEntry(entry)}
+                    onToggleDone={() => vm.toggleDone(entry)}
                   />
                 ))}
               </View>
@@ -103,6 +105,7 @@ export function ListDetailScreen({ route, navigation }: Props) {
       <ListEntryModal
         visible={vm.addOpen || vm.selected != null}
         listName={list?.name ?? ''}
+        isTodo={list?.isTodo ?? false}
         initial={
           vm.selected
             ? {

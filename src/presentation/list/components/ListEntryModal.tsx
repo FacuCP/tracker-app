@@ -29,6 +29,8 @@ interface Props {
   visible: boolean;
   /** Nombre de la lista, para el título. */
   listName: string;
+  /** En una to-do list, el campo "Rating" se llama "Prioridad". */
+  isTodo?: boolean;
   /** Valores iniciales (para editar). Si es null, es una entrada nueva. */
   initial: ListEntryDraft | null;
   onClose: () => void;
@@ -37,7 +39,15 @@ interface Props {
 }
 
 /** Modal para crear o editar una entrada de una lista. */
-export function ListEntryModal({ visible, listName, initial, onClose, onSave, onDelete }: Props) {
+export function ListEntryModal({
+  visible,
+  listName,
+  isTodo = false,
+  initial,
+  onClose,
+  onSave,
+  onDelete,
+}: Props) {
   const [name, setName] = useState('');
   const [date, setDate] = useState<IsoDate>(todayIso());
   const [comment, setComment] = useState('');
@@ -93,7 +103,7 @@ export function ListEntryModal({ visible, listName, initial, onClose, onSave, on
               <DateField value={date} onChange={setDate} />
 
               <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>★ Rating</Text>
+                <Text style={styles.ratingLabel}>{isTodo ? '⚑ Prioridad' : '★ Rating'}</Text>
                 <TextInput
                   style={[styles.ratingInput, ratingError && styles.inputError]}
                   placeholder="—"

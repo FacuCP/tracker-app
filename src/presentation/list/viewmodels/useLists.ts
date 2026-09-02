@@ -10,10 +10,15 @@ import { parseRating } from '../parseRating';
  * ViewModel de la pantalla de Listas: la lista de listas (con su conteo de
  * entradas), crear una lista, y agregarle una entrada rápida desde la card.
  */
+export interface ListCounts {
+  total: number;
+  done: number;
+}
+
 export function useLists() {
   const [greeting, setGreeting] = useState('');
   const [lists, setLists] = useState<List[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [counts, setCounts] = useState<Record<string, ListCounts>>({});
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [entryTarget, setEntryTarget] = useState<List | null>(null);
@@ -23,11 +28,14 @@ export function useLists() {
       container.getWelcomeMessage.execute(),
       container.getLists.execute(),
     ]);
-    const entryCounts: Record<string, number> = {};
+    const entryCounts: Record<string, ListCounts> = {};
     await Promise.all(
       all.map(async (list) => {
         const entries = await container.getListEntries.execute(list.id);
-        entryCounts[list.id] = entries.length;
+        entryCounts[list.id] = {
+          total: entries.length,
+          done: entries.filter((e) => e.done).length,
+        };
       }),
     );
     setGreeting(message);
@@ -49,8 +57,8 @@ export function useLists() {
   );
 
   const createList = useCallback(
-    async (name: string) => {
-      await container.createList.execute(name);
+    async (name: string, isTodo: boolean) => {
+      await container.createList.execute(name, isTodo);
       setCreateOpen(false);
       await reload();
     },

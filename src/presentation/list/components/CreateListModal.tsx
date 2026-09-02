@@ -12,22 +12,25 @@ import {
 
 import { theme } from '../../../core/theme';
 import { MAX_LIST_NAME } from '../../../domain/list/entities/List';
+import { Checkbox } from '../../components/Checkbox';
 import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onCreate: (name: string) => Promise<void> | void;
+  onCreate: (name: string, isTodo: boolean) => Promise<void> | void;
 }
 
-/** Modal para crear una lista nueva (solo el nombre). */
+/** Modal para crear una lista nueva (nombre y si es una to-do list). */
 export function CreateListModal({ visible, onClose, onCreate }: Props) {
   const [name, setName] = useState('');
+  const [isTodo, setIsTodo] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setName('');
+      setIsTodo(false);
       setSaving(false);
     }
   }, [visible]);
@@ -36,7 +39,7 @@ export function CreateListModal({ visible, onClose, onCreate }: Props) {
     if (name.trim().length === 0) return;
     setSaving(true);
     try {
-      await onCreate(name);
+      await onCreate(name, isTodo);
     } finally {
       setSaving(false);
     }
@@ -59,6 +62,17 @@ export function CreateListModal({ visible, onClose, onCreate }: Props) {
             returnKeyType="done"
             onSubmitEditing={submit}
           />
+          <TouchableOpacity
+            style={styles.todoRow}
+            onPress={() => setIsTodo((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Checkbox checked={isTodo} onToggle={() => setIsTodo((v) => !v)} />
+            <View style={styles.todoTexts}>
+              <Text style={styles.todoLabel}>Hacerla una to-do list</Text>
+              <Text style={styles.todoHint}>Las entradas se marcan como completadas</Text>
+            </View>
+          </TouchableOpacity>
           <View style={styles.actions}>
             <TouchableOpacity style={styles.buttonGhost} onPress={onClose}>
               <Text style={styles.ghostText}>Cancelar</Text>
@@ -103,6 +117,24 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 15,
     color: theme.colors.text,
+  },
+  todoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  todoTexts: {
+    flex: 1,
+    gap: 1,
+  },
+  todoLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  todoHint: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
   },
   actions: {
     flexDirection: 'row',

@@ -3,35 +3,47 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { formatDdMmYyyy } from '../../../core/utils/date';
 import { theme } from '../../../core/theme';
 import { ListEntry } from '../../../domain/list/entities/ListEntry';
+import { Checkbox } from '../../components/Checkbox';
 import { formatRating } from '../parseRating';
 
 interface Props {
   entry: ListEntry;
-  /** Posición en la lista (1, 2, 3...). */
+  /** Posición en la lista (1, 2, 3...). Se muestra en listas normales. */
   position: number;
   /** Si es la primera fila (no dibuja el borde de arriba). */
   first: boolean;
+  /** Si la lista es una to-do list (checkbox en vez de número, "prioridad"). */
+  isTodo?: boolean;
   onPress: () => void;
+  /** Solo en to-do lists: marca/desmarca la tarea sin abrir el modal. */
+  onToggleDone?: () => void;
 }
 
 /**
  * Fila de una entrada en el detalle:
- *   nº | (nombre  ·  DD/MM/AAAA) / comentario recortado | ★ rating
+ *   nº / checkbox | (nombre  ·  DD/MM/AAAA) / comentario recortado | ★/⚑ número
  * Las filas van pegadas una tras otra, a todo el ancho, separadas por una
  * línea fina.
  */
-export function ListEntryRow({ entry, position, first, onPress }: Props) {
+export function ListEntryRow({ entry, position, first, isTodo = false, onPress, onToggleDone }: Props) {
   return (
     <TouchableOpacity
       style={[styles.row, !first && styles.border]}
       onPress={onPress}
       activeOpacity={0.6}
     >
-      <Text style={styles.position}>{position}</Text>
+      {isTodo ? (
+        <Checkbox checked={entry.done} onToggle={() => onToggleDone?.()} />
+      ) : (
+        <Text style={styles.position}>{position}</Text>
+      )}
 
       <View style={styles.texts}>
         <View style={styles.topLine}>
-          <Text style={styles.name} numberOfLines={1}>
+          <Text
+            style={[styles.name, isTodo && entry.done && styles.nameDone]}
+            numberOfLines={1}
+          >
             {entry.name}
           </Text>
           <Text style={styles.date}>{formatDdMmYyyy(entry.date)}</Text>
@@ -44,7 +56,9 @@ export function ListEntryRow({ entry, position, first, onPress }: Props) {
       </View>
 
       {entry.rating != null ? (
-        <Text style={styles.rating}>★ {formatRating(entry.rating)}</Text>
+        <Text style={styles.rating}>
+          {isTodo ? '⚑' : '★'} {formatRating(entry.rating)}
+        </Text>
       ) : null}
     </TouchableOpacity>
   );
@@ -84,6 +98,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: theme.colors.text,
+  },
+  nameDone: {
+    textDecorationLine: 'line-through',
+    color: theme.colors.textMuted,
   },
   date: {
     fontSize: 12,

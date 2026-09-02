@@ -10,7 +10,10 @@ export interface ListEntry {
   readonly name: string;
   readonly date: IsoDate;
   readonly comment?: string;
+  /** Número libre. En listas normales es el "rating"; en to-do lists, la "prioridad". */
   readonly rating?: number;
+  /** Solo relevante en to-do lists: si la tarea está completada. */
+  readonly done: boolean;
 }
 
 export const MAX_ENTRY_NAME = 80;
@@ -24,6 +27,7 @@ export function createListEntry(params: {
   date: IsoDate;
   comment?: string;
   rating?: number;
+  done?: boolean;
 }): ListEntry {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -53,6 +57,7 @@ export function createListEntry(params: {
     date: params.date,
     comment: comment && comment.length > 0 ? comment : undefined,
     rating,
+    done: params.done ?? false,
   };
 }
 

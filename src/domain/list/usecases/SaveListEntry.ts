@@ -11,6 +11,7 @@ export interface SaveListEntryInput {
   date: IsoDate;
   comment?: string;
   rating?: number;
+  done?: boolean;
 }
 
 /** Crea o actualiza una entrada de una lista. */
@@ -34,6 +35,7 @@ export class SaveListEntry {
       date: input.date,
       comment: input.comment,
       rating: input.rating,
+      done: input.done,
     });
     await this.entries.saveEntry(entry);
     return entry;

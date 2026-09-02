@@ -8,6 +8,7 @@ export interface ListEntryDto {
   date: string;
   comment?: string;
   rating?: number;
+  done?: boolean;
 }
 
 export function listEntryToDto(entry: ListEntry): ListEntryDto {
@@ -18,6 +19,7 @@ export function listEntryToDto(entry: ListEntry): ListEntryDto {
     date: entry.date,
     comment: entry.comment,
     rating: entry.rating,
+    done: entry.done || undefined,
   };
 }
 
@@ -29,5 +31,6 @@ export function listEntryFromDto(dto: ListEntryDto): ListEntry {
     date: dto.date as IsoDate,
     comment: dto.comment,
     rating: dto.rating,
+    done: dto.done ?? false,
   });
 }

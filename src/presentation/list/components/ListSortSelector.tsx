@@ -6,19 +6,21 @@ import { ListSort } from '../../../domain/list/entities/ListEntry';
 interface Props {
   value: ListSort;
   onChange: (sort: ListSort) => void;
+  /** En una to-do list, el "rating" se llama "prioridad". */
+  isTodo?: boolean;
 }
 
-const OPTIONS: { key: ListSort; label: string }[] = [
-  { key: 'date', label: 'Fecha' },
-  { key: 'alpha', label: 'A-Z' },
-  { key: 'rating', label: 'Rating' },
-];
-
 /** Control segmentado para elegir cómo se ordenan las entradas. */
-export function ListSortSelector({ value, onChange }: Props) {
+export function ListSortSelector({ value, onChange, isTodo = false }: Props) {
+  const options: { key: ListSort; label: string }[] = [
+    { key: 'date', label: 'Fecha' },
+    { key: 'alpha', label: 'A-Z' },
+    { key: 'rating', label: isTodo ? 'Prioridad' : 'Rating' },
+  ];
+
   return (
     <View style={styles.container}>
-      {OPTIONS.map((option) => {
+      {options.map((option) => {
         const active = option.key === value;
         return (
           <TouchableOpacity

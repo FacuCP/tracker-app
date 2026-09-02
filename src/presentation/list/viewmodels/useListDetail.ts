@@ -15,10 +15,14 @@ import { parseRating } from '../parseRating';
 export function useListDetail(listId: string) {
   const [list, setList] = useState<List | null>(null);
   const [entries, setEntries] = useState<ListEntry[]>([]);
-  const [sort, setSort] = useState<ListSort>('date');
+  // `null` = todavía sin elección del usuario: se usa el orden por defecto
+  // (prioridad en las to-do lists, fecha en las normales).
+  const [sortOverride, setSortOverride] = useState<ListSort | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<ListEntry | null>(null);
+
+  const sort: ListSort = sortOverride ?? (list?.isTodo ? 'rating' : 'date');
 
   const reload = useCallback(async () => {
     const [l, e] = await Promise.all([
@@ -51,12 +55,21 @@ export function useListDetail(listId: string) {
         date: draft.date,
         comment: draft.comment,
         rating: parseRating(draft.rating).rating,
+        done: selected?.done ?? false,
       });
       setAddOpen(false);
       setSelected(null);
       await reload();
     },
     [selected, listId, reload],
+  );
+
+  const toggleDone = useCallback(
+    async (entry: ListEntry) => {
+      await container.setListEntryDone.execute(listId, entry.id, !entry.done);
+      await reload();
+    },
+    [listId, reload],
   );
 
   const deleteEntry = useCallback(async () => {
@@ -74,7 +87,7 @@ export function useListDetail(listId: string) {
     list,
     entries,
     sort,
-    setSort,
+    setSort: setSortOverride,
     loading,
     addOpen,
     openAdd: () => setAddOpen(true),
@@ -83,6 +96,7 @@ export function useListDetail(listId: string) {
     openEntry: setSelected,
     closeEntry: () => setSelected(null),
     saveEntry,
+    toggleDone,
     deleteEntry,
     deleteList,
   };
