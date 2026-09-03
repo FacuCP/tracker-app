@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native'
 
 import { container } from '../../../core/di/container';
 import {
+  notificationsAvailable,
   requestNotificationPermission,
   syncNotifications,
 } from '../../../core/notifications/notifications';
@@ -49,7 +50,11 @@ export function NotificationsCard() {
     <View style={styles.card}>
       <Text style={styles.title}>Notificaciones</Text>
 
-      {loaded ? (
+      {!notificationsAvailable ? (
+        <Text style={styles.note}>
+          Las notificaciones solo funcionan en la app instalada (build de EAS), no en Expo Go.
+        </Text>
+      ) : loaded ? (
         <>
           <Row
             label="Recordar cargar trackers"

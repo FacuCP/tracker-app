@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { container } from '../di/container';
@@ -8,12 +8,37 @@ import { addDays, fromIsoDate, toIsoDate, todayIso } from '../utils/date';
  * Notificaciones locales de la app. Todo son notificaciones **programadas**: se
  * le dice al SO cuándo mostrarlas y se disparan aunque la app esté cerrada.
  *
+ * En Expo Go (SDK 53+) el solo hecho de importar `expo-notifications` tira un
+ * error, así que se carga de forma **perezosa** y únicamente en un build real
+ * (`expo-dev-client` / EAS). En Expo Go nada de esto hace efecto.
+ *
  * Como una notificación programada no puede "chequear" nada al dispararse, la
  * lógica condicional (¿hay trackers sin cargar? ¿la tarea sigue pendiente?) se
- * recalcula cada vez que la app pasa a primer o segundo plano (`syncNotifications`
- * en `AppNavigator`), cancelando y re-agendando. Los días futuros se agendan
- * igual como red de seguridad y se re-evalúan cuando llega ese día.
+ * recalcula cada vez que la app pasa a primer o segundo plano
+ * (`syncNotifications` en `AppNavigator`), cancelando y re-agendando. Los días
+ * futuros se agendan igual como red de seguridad y se re-evalúan al llegar.
  */
+export const notificationsAvailable =
+  Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+
+type NotificationsModule = typeof import('expo-notifications');
+let cached: NotificationsModule | null = null;
+let triedLoad = false;
+
+function getNotifications(): NotificationsModule | null {
+  if (!notificationsAvailable) return null;
+  if (!triedLoad) {
+    triedLoad = true;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      cached = require('expo-notifications') as NotificationsModule;
+    } catch {
+      cached = null;
+    }
+  }
+  return cached;
+}
+
 const TRACKER_PREFIX = 'tracker-reminder:';
 const DUE_PREFIX = 'due-reminder:';
 const DAYS_AHEAD = 14;
@@ -22,11 +47,11 @@ const DUE_HOUR = 9;
 
 let configured = false;
 
-export async function configureNotifications(): Promise<void> {
+async function configure(N: NotificationsModule): Promise<void> {
   if (configured) return;
   configured = true;
 
-  Notifications.setNotificationHandler({
+  N.setNotificationHandler({
     handleNotification: async () => ({
       shouldPlaySound: true,
       shouldSetBadge: false,
@@ -36,35 +61,39 @@ export async function configureNotifications(): Promise<void> {
   });
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
+    await N.setNotificationChannelAsync('default', {
       name: 'Recordatorios',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: N.AndroidImportance.DEFAULT,
     });
   }
 }
 
 export async function hasNotificationPermission(): Promise<boolean> {
-  const { status } = await Notifications.getPermissionsAsync();
+  const N = getNotifications();
+  if (!N) return false;
+  const { status } = await N.getPermissionsAsync();
   return status === 'granted';
 }
 
 /** Pide permiso si hace falta; devuelve si quedó concedido. */
 export async function requestNotificationPermission(): Promise<boolean> {
-  await configureNotifications();
-  const existing = await Notifications.getPermissionsAsync();
+  const N = getNotifications();
+  if (!N) return false;
+  await configure(N);
+  const existing = await N.getPermissionsAsync();
   if (existing.status === 'granted') return true;
-  const requested = await Notifications.requestPermissionsAsync({
+  const requested = await N.requestPermissionsAsync({
     ios: { allowAlert: true, allowBadge: false, allowSound: true },
   });
   return requested.status === 'granted';
 }
 
-async function cancelWithPrefix(prefix: string): Promise<void> {
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+async function cancelWithPrefix(N: NotificationsModule, prefix: string): Promise<void> {
+  const scheduled = await N.getAllScheduledNotificationsAsync();
   await Promise.all(
     scheduled
-      .filter((n) => n.identifier.startsWith(prefix))
-      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+      .filter((item) => item.identifier.startsWith(prefix))
+      .map((item) => N.cancelScheduledNotificationAsync(item.identifier)),
   );
 }
 
@@ -73,20 +102,21 @@ function atHour(day: Date, hour: number): Date {
 }
 
 async function scheduleAt(
+  N: NotificationsModule,
   identifier: string,
   date: Date,
   title: string,
   body: string,
 ): Promise<void> {
-  await Notifications.scheduleNotificationAsync({
+  await N.scheduleNotificationAsync({
     identifier,
     content: { title, body },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+    trigger: { type: N.SchedulableTriggerInputTypes.DATE, date },
   });
 }
 
-async function syncTrackerReminder(enabled: boolean): Promise<void> {
-  await cancelWithPrefix(TRACKER_PREFIX);
+async function syncTrackerReminder(N: NotificationsModule, enabled: boolean): Promise<void> {
+  await cancelWithPrefix(N, TRACKER_PREFIX);
   if (!enabled) return;
 
   const today = todayIso();
@@ -106,6 +136,7 @@ async function syncTrackerReminder(enabled: boolean): Promise<void> {
     if (fireAt.getTime() <= now.getTime()) continue;
     if (d === 0 && allLoggedToday) continue;
     await scheduleAt(
+      N,
       `${TRACKER_PREFIX}${toIsoDate(day)}`,
       fireAt,
       'Trackers de hoy',
@@ -114,8 +145,8 @@ async function syncTrackerReminder(enabled: boolean): Promise<void> {
   }
 }
 
-async function syncDueReminders(enabled: boolean): Promise<void> {
-  await cancelWithPrefix(DUE_PREFIX);
+async function syncDueReminders(N: NotificationsModule, enabled: boolean): Promise<void> {
+  await cancelWithPrefix(N, DUE_PREFIX);
   if (!enabled) return;
 
   const lists = await container.getLists.execute();
@@ -129,6 +160,7 @@ async function syncDueReminders(enabled: boolean): Promise<void> {
       const fireAt = atHour(addDays(fromIsoDate(entry.date), -1), DUE_HOUR);
       if (fireAt.getTime() <= now.getTime()) continue;
       await scheduleAt(
+        N,
         `${DUE_PREFIX}${entry.id}`,
         fireAt,
         'Tarea por vencer',
@@ -140,23 +172,25 @@ async function syncDueReminders(enabled: boolean): Promise<void> {
 
 /** Re-agenda todas las notificaciones locales según el perfil y los datos actuales. */
 export async function syncNotifications(): Promise<void> {
+  const N = getNotifications();
+  if (!N) return;
   try {
-    await configureNotifications();
+    await configure(N);
     const profile = await container.getUserProfile.execute();
     const wantsTrackers = profile?.notifyTrackers ?? false;
     const wantsDue = profile?.notifyDueTasks ?? false;
 
     if (!wantsTrackers && !wantsDue) {
-      await cancelWithPrefix(TRACKER_PREFIX);
-      await cancelWithPrefix(DUE_PREFIX);
+      await cancelWithPrefix(N, TRACKER_PREFIX);
+      await cancelWithPrefix(N, DUE_PREFIX);
       return;
     }
 
-    const granted = await hasNotificationPermission();
-    await syncTrackerReminder(granted && wantsTrackers);
-    await syncDueReminders(granted && wantsDue);
+    const { status } = await N.getPermissionsAsync();
+    const granted = status === 'granted';
+    await syncTrackerReminder(N, granted && wantsTrackers);
+    await syncDueReminders(N, granted && wantsDue);
   } catch {
-    // Si el módulo de notificaciones no está disponible (p. ej. Expo Go), se
-    // reintenta en el próximo sync.
+    // Se reintenta en el próximo sync.
   }
 }

@@ -1129,8 +1129,12 @@ to-do list. Ambos deben llegar con la app cerrada y ser desactivables.
 - **Ajustes.** `NotificationsCard` con dos `Switch`. Los flags viven en
   `UserProfile` (`notifyTrackers` / `notifyDueTasks`, arrancan en `false`).
   Prender uno pide permiso; si se niega, el switch no queda prendido.
-- **Permiso denegado / módulo ausente** (Expo Go): `syncNotifications` está en un
-  `try/catch` y no agenda nada.
+- **Carga perezosa.** En Expo Go (SDK 53+) el solo `import` de
+  `expo-notifications` tira un error. Por eso `core/notifications/notifications.ts`
+  **no lo importa arriba**: detecta Expo Go con `Constants.executionEnvironment`
+  (`expo-constants`, que sí es seguro) y hace `require('expo-notifications')`
+  perezoso solo en un build real (`getNotifications()` devuelve `null` si no).
+  La `NotificationsCard` muestra un aviso en Expo Go en vez de los switches.
 
 **Alternativas descartadas.**
 
@@ -1145,8 +1149,9 @@ to-do list. Ambos deben llegar con la app cerrada y ser desactivables.
 
 **Consecuencias.** Si cargás todo y **te quedás en la app** en primer plano
 pasadas las 23:00 sin nunca mandarla a segundo plano, puede llegar el
-recordatorio igual. Agregar un módulo nativo obliga a un build nuevo por EAS
-(no OTA).
+recordatorio igual. Las notificaciones **no funcionan en Expo Go**: hay que
+probar en un build de EAS (development o preview), que además hace falta rehacer
+por el módulo nativo nuevo (no es OTA).
 
 ---
 

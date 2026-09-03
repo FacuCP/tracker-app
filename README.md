@@ -426,8 +426,9 @@ vez que la app pasa a primer o segundo plano (`syncNotifications` en
 futuros se agendan como red de seguridad y se re-evalúan al llegar. Detalle:
 `core/notifications/notifications.ts`.
 
-> Necesita un build nativo nuevo por EAS (se agregó un módulo nativo + el plugin
-> `expo-notifications` en `app.json`).
+> **No funcionan en Expo Go** (SDK 53+): `expo-notifications` se carga de forma
+> perezosa y solo en un build real. Hay que probar en un build de EAS
+> (development/preview), que además hay que rehacer por el módulo nativo nuevo.
 
 ## Persistencia
 
