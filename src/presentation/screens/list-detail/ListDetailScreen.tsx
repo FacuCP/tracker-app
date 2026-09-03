@@ -110,7 +110,7 @@ export function ListDetailScreen({ route, navigation }: Props) {
           vm.selected
             ? {
                 name: vm.selected.name,
-                date: vm.selected.date,
+                date: vm.selected.date ?? null,
                 comment: vm.selected.comment ?? '',
                 rating: vm.selected.rating != null ? formatRating(vm.selected.rating) : '',
               }

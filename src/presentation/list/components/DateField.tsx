@@ -8,16 +8,17 @@ import { theme } from '../../../core/theme';
 interface Props {
   value: IsoDate;
   onChange: (date: IsoDate) => void;
+  label?: string;
 }
 
 /** Campo de fecha: muestra la fecha y abre el date picker nativo al tocarlo. */
-export function DateField({ value, onChange }: Props) {
+export function DateField({ value, onChange, label = 'Fecha' }: Props) {
   const [show, setShow] = useState(false);
 
   return (
     <>
       <TouchableOpacity style={styles.field} onPress={() => setShow(true)} activeOpacity={0.7}>
-        <Text style={styles.label}>Fecha</Text>
+        <Text style={styles.label}>{label}</Text>
         <Text style={styles.value}>{capitalize(formatLongDate(value))}</Text>
       </TouchableOpacity>
 

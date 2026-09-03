@@ -1,14 +1,18 @@
 /**
  * Perfil del usuario: el nombre (se elige la primera vez), qué "cards
- * especiales" aparecen en Favoritos (el mood tracker y el resumen de finanzas,
- * los dos arrancan en true) y el tamaño de la letra de toda la app.
+ * especiales" aparecen en Favoritos, el tamaño de la letra (sin usar por ahora)
+ * y qué notificaciones están activadas.
  */
 export interface UserProfile {
   readonly name: string;
   readonly moodFavorite: boolean;
   readonly financeFavorite: boolean;
-  /** Escala de la tipografía: 1 (100%) a 1.5 (150%), en pasos de 0.1. */
+  /** Escala de la tipografía: 1 (100%) a 1.5 (150%), en pasos de 0.1. Sin usar por ahora. */
   readonly fontScale: number;
+  /** Recordatorio diario 23:00 si quedan trackers sin cargar. */
+  readonly notifyTrackers: boolean;
+  /** Aviso el día antes de que venza una tarea de una to-do list. */
+  readonly notifyDueTasks: boolean;
 }
 
 export const MAX_USER_NAME = 30;
@@ -28,6 +32,8 @@ export function createUserProfile(params: {
   moodFavorite?: boolean;
   financeFavorite?: boolean;
   fontScale?: number;
+  notifyTrackers?: boolean;
+  notifyDueTasks?: boolean;
 }): UserProfile {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -41,5 +47,7 @@ export function createUserProfile(params: {
     moodFavorite: params.moodFavorite ?? true,
     financeFavorite: params.financeFavorite ?? true,
     fontScale: clampFontScale(params.fontScale ?? FONT_SCALE_MIN),
+    notifyTrackers: params.notifyTrackers ?? false,
+    notifyDueTasks: params.notifyDueTasks ?? false,
   };
 }

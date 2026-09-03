@@ -8,7 +8,7 @@ export interface SaveListEntryInput {
   id?: string;
   listId: string;
   name: string;
-  date: IsoDate;
+  date?: IsoDate | null;
   comment?: string;
   rating?: number;
   done?: boolean;

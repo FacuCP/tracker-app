@@ -905,6 +905,12 @@ aparte:
   (solo relevante si la lista es to-do). El campo `rating` no cambia de nombre en
   el dominio: es "un número"; la UI lo muestra como **"Prioridad"** (con ⚑) en
   las to-do lists y como **"Rating"** (con ★) en las normales.
+- **Fecha opcional.** `ListEntry.date` pasó a ser opcional (para las to-do lists:
+  es la **fecha de vencimiento** y se puede no poner). El modal de una lista
+  normal sigue arrancando con hoy y no deja quitarla; el de una to-do arranca
+  sin fecha y tiene "＋ Agregar fecha" / "Quitar fecha". La fila muestra
+  `vence: DD/MM/AAAA` y `vencida` en rojo (`isEntryOverdue`: fecha pasada y no
+  completada). `compareListEntries` manda las entradas sin fecha al final.
 - **Orden en el hub.** `GetLists` ordena las to-do lists primero, y dentro de
   cada grupo por `createdAt` (como antes).
 - **Orden por defecto en el detalle.** `useListDetail` no persiste el criterio;
@@ -1096,6 +1102,51 @@ arrancar en `AppNavigator` y hacer que `SettingsScreen` se suscriba con
   confiable; probablemente el camino correcto si el swap del módulo no alcanza.
 - **Remontar el árbol (`key` en `NavigationContainer`) al cambiar la escala.**
   Tiraría al usuario a la ruta inicial; descartado.
+
+---
+
+## 41. Notificaciones locales: re-agendar en cada cambio de foreground *(elección del usuario)*
+
+**Contexto.** Se pidieron dos recordatorios: (1) diario a las 23:00 si quedan
+trackers sin cargar, (2) el día antes de que venza una tarea pendiente de una
+to-do list. Ambos deben llegar con la app cerrada y ser desactivables.
+
+**Decisión.** `expo-notifications`, solo **notificaciones locales programadas**
+(sin backend). El problema de fondo: una notificación programada no puede
+"chequear" nada al dispararse. Solución:
+
+- **Se recalcula todo en cada transición de `AppState`** (`active` / `background`),
+  desde `syncNotifications()` en `AppNavigator`: cancela las propias (por prefijo
+  de `identifier`: `tracker-reminder:` / `due-reminder:`) y re-agenda según el
+  perfil y los datos actuales. Así, si cargás todos los trackers y salís de la
+  app, el recordatorio de hoy se cancela.
+- **Notif. 1:** para *hoy* se agenda solo si faltan trackers (mood incluido) y
+  todavía no son las 23:00. Los próximos 14 días se agendan igual como red de
+  seguridad (por si no abrís la app), y se re-evalúan cuando llega ese día.
+- **Notif. 2:** una por tarea pendiente con fecha, a las 09:00 del día anterior.
+  El `identifier` es `due-reminder:<entryId>`, así completar/editar/borrar la
+  tarea la limpia en el próximo sync.
+- **Ajustes.** `NotificationsCard` con dos `Switch`. Los flags viven en
+  `UserProfile` (`notifyTrackers` / `notifyDueTasks`, arrancan en `false`).
+  Prender uno pide permiso; si se niega, el switch no queda prendido.
+- **Permiso denegado / módulo ausente** (Expo Go): `syncNotifications` está en un
+  `try/catch` y no agenda nada.
+
+**Alternativas descartadas.**
+
+- **Notificación diaria repetida (`DAILY` trigger).** No se puede saltear la
+  ocurrencia de un día puntual, así que llegaría también los días que cargaste
+  todo.
+- **Background task (`expo-task-manager`) que evalúa al dispararse.** Setup
+  nativo y poco confiable en Android; el re-sync en foreground alcanza.
+- **Llamar `syncNotifications()` después de cada guardado** (mood, tracker,
+  entrada): muchos call-sites y corre en cada `+`/`−` del contador. El listener
+  de `AppState` cubre los casos reales.
+
+**Consecuencias.** Si cargás todo y **te quedás en la app** en primer plano
+pasadas las 23:00 sin nunca mandarla a segundo plano, puede llegar el
+recordatorio igual. Agregar un módulo nativo obliga a un build nuevo por EAS
+(no OTA).
 
 ---
 

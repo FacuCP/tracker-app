@@ -19,7 +19,8 @@ import { DateField } from './DateField';
 
 export interface ListEntryDraft {
   name: string;
-  date: IsoDate;
+  /** null = sin fecha (solo posible en to-do lists). */
+  date: IsoDate | null;
   comment: string;
   /** Texto del campo Rating (se parsea al guardar). */
   rating: string;
@@ -49,7 +50,7 @@ export function ListEntryModal({
   onDelete,
 }: Props) {
   const [name, setName] = useState('');
-  const [date, setDate] = useState<IsoDate>(todayIso());
+  const [date, setDate] = useState<IsoDate | null>(todayIso());
   const [comment, setComment] = useState('');
   const [rating, setRating] = useState('');
   const [saving, setSaving] = useState(false);
@@ -60,13 +61,13 @@ export function ListEntryModal({
     // (el prop `initial` es un objeto nuevo cada vez).
     if (visible && !wasVisible.current) {
       setName(initial?.name ?? '');
-      setDate(initial?.date ?? todayIso());
+      setDate(initial ? initial.date : isTodo ? null : todayIso());
       setComment(initial?.comment ?? '');
       setRating(initial?.rating ?? '');
       setSaving(false);
     }
     wasVisible.current = visible;
-  }, [visible, initial]);
+  }, [visible, initial, isTodo]);
 
   const ratingError = parseRating(rating).error;
   const canSave = name.trim().length > 0 && !ratingError && !saving;
@@ -100,7 +101,32 @@ export function ListEntryModal({
                 maxLength={MAX_ENTRY_NAME}
               />
 
-              <DateField value={date} onChange={setDate} />
+              {isTodo ? (
+                <View style={styles.dueBlock}>
+                  {date != null ? (
+                    <>
+                      <DateField
+                        value={date}
+                        onChange={setDate}
+                        label="Fecha de vencimiento (opcional)"
+                      />
+                      <TouchableOpacity onPress={() => setDate(null)} hitSlop={6}>
+                        <Text style={styles.dueClear}>Quitar fecha</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.dueAdd}
+                      onPress={() => setDate(todayIso())}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dueAddText}>＋ Agregar fecha de vencimiento</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <DateField value={date ?? todayIso()} onChange={setDate} />
+              )}
 
               <View style={styles.ratingRow}>
                 <Text style={styles.ratingLabel}>{isTodo ? '⚑ Prioridad' : '★ Rating'}</Text>
@@ -196,6 +222,28 @@ const styles = StyleSheet.create({
   comment: {
     minHeight: 70,
     textAlignVertical: 'top',
+  },
+  dueBlock: {
+    gap: 6,
+  },
+  dueClear: {
+    color: theme.colors.textMuted,
+    fontWeight: '700',
+    fontSize: 12,
+    alignSelf: 'flex-start',
+  },
+  dueAdd: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  dueAddText: {
+    color: theme.colors.accent,
+    fontWeight: '700',
+    fontSize: 14,
   },
   ratingRow: {
     flexDirection: 'row',

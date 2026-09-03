@@ -88,8 +88,9 @@ src/
 │   │   └── usecases/            # Create/Update/Delete/GetTracker(s), Save/Delete/GetTrackerEntry,
 │   │                            # GetTrackerRange (registros + estadísticas del rango)
 │   ├── list/
-│   │   ├── entities/            # List (nombre, isTodo), ListEntry (nombre, fecha, comentario,
-│   │   │                        # rating, done) + compareListEntries (3 criterios de orden)
+│   │   ├── entities/            # List (nombre, isTodo), ListEntry (nombre, fecha opcional / de
+│   │   │                        # vencimiento, comentario, rating, done) + compareListEntries,
+│   │   │                        # isEntryOverdue
 │   │   ├── repositories/        # ListRepository, ListEntryRepository (puertos)
 │   │   └── usecases/            # Create/Delete/GetList(s), GetListEntries (ordenadas),
 │   │                            # Save/DeleteListEntry, SetListEntryDone
@@ -117,6 +118,7 @@ src/
 │   │                            # ListDetail, Finances, Settings, MoodProgress, CreateTracker,
 │   │                            # EditTracker, TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
+│   ├── notifications/           # notifications.ts (agenda/cancela las locales según perfil + datos)
 │   ├── text/textScale.ts        # Escala global de la tipografía (a medio hacer, sin montar)
 │   ├── theme.ts                 # Paleta: fondos claros (no blancos) + acento
 │   └── utils/                   # date.ts (fechas ISO locales + formateo es), id.ts
@@ -128,7 +130,7 @@ src/
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
     ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox, FavoriteStar
     ├── backup/                  # useBackup (exportar/importar el .json)
-    ├── user/components/         # UserNameCard (Ajustes); FontSizeCard existe pero no se monta
+    ├── user/components/         # UserNameCard, NotificationsCard (Ajustes); FontSizeCard sin montar
     ├── screens/
     │   ├── onboarding/          # OnboardingScreen (elegir el nombre, la 1ª vez)
     │   ├── favorites/           # FavoritesScreen + useFavorites + CreateChooserModal +
@@ -315,13 +317,16 @@ Versión más simple del mood tracker. Cada tracker tiene un **nombre** y un
 ## Listas
 
 Cada **lista** tiene un nombre y un flag **`isTodo`**. Sus **entradas** tienen
-**nombre**, **fecha**, **comentario** (opcional), **rating** (opcional, un
-número) y **`done`** (completada, solo se usa en to-do lists).
+**nombre**, **fecha** (opcional), **comentario** (opcional), **rating**
+(opcional, un número) y **`done`** (completada, solo se usa en to-do lists).
 
-Una **to-do list** funciona igual que una lista normal, con dos diferencias:
-sus entradas se pueden **tildar como completadas**, y el "rating" se muestra
-como **"Prioridad"** (⚑ en vez de ★). Se elige con un **checkbox** al crear la
-lista (por defecto, no).
+Una **to-do list** funciona igual que una lista normal, con estas diferencias:
+sus entradas se pueden **tildar como completadas**, el "rating" se muestra como
+**"Prioridad"** (⚑ en vez de ★), y la fecha es la **fecha de vencimiento
+(opcional)** — se puede crear una tarea sin fecha. En la fila, al lado del
+nombre dice **`vence: DD/MM/AAAA`**; si ya pasó y la tarea no está completada,
+aparece **`vencida`** en rojo (`isEntryOverdue`). Se elige to-do con un
+**checkbox** al crear la lista (por defecto, no).
 
 Cada lista tiene también un flag **`favorite`**: una **estrella** a la izquierda
 del nombre en la card, más un checkbox "Agregar a Favoritos" en el modal de
@@ -400,13 +405,37 @@ contiene hoy): totales de ingresos y gastos, y dos vistas:
 
 Tocar cualquier movimiento abre el modal para editarlo o borrarlo.
 
+## Notificaciones
+
+Notificaciones **locales programadas** (`expo-notifications`): se le dice al SO
+cuándo mostrarlas y se disparan aunque la app esté cerrada. Hay dos, cada una
+con su switch en **Ajustes** (`NotificationsCard`, arrancan apagadas; prenderlas
+pide permiso):
+
+1. **Recordar cargar trackers** — todos los días a las **23:00**, solo si quedan
+   trackers (o el mood de hoy) sin cargar. Texto: *"Recordá cargar tus trackers
+   antes de que empiece el día!"*.
+2. **Avisar tareas por vencer** — el **día antes** (09:00) de que venza una tarea
+   de una to-do list que no esté completada. Texto: *"Recuerda que {tarea} se
+   vence mañana!"*.
+
+Como una notificación programada no puede evaluar nada al dispararse, la lógica
+condicional (¿faltan trackers? ¿la tarea sigue pendiente?) se **recalcula** cada
+vez que la app pasa a primer o segundo plano (`syncNotifications` en
+`AppNavigator` con un listener de `AppState`): cancela y re-agenda. Los días
+futuros se agendan como red de seguridad y se re-evalúan al llegar. Detalle:
+`core/notifications/notifications.ts`.
+
+> Necesita un build nativo nuevo por EAS (se agregó un módulo nativo + el plugin
+> `expo-notifications` en `app.json`).
+
 ## Persistencia
 
 Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 
 | Clave (`core/storage/keys.ts`) | Contenido |
 |-------|-----------|
-| `@app-celu/user-profile/v1` | `{ name, moodFavorite, financeFavorite, fontScale }` (nombre + cards de Favoritos + tamaño de letra) |
+| `@app-celu/user-profile/v1` | `{ name, moodFavorite, financeFavorite, fontScale, notifyTrackers, notifyDueTasks }` |
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config + `favorite` de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |

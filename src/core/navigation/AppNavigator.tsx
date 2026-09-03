@@ -1,9 +1,10 @@
 import { DefaultTheme, NavigationContainer, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, AppState, View } from 'react-native';
 
 import { container } from '../di/container';
+import { syncNotifications } from '../notifications/notifications';
 import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
 import { SettingsHeaderButton } from '../../presentation/navigation/SettingsHeaderButton';
 import { FavoritesScreen } from '../../presentation/screens/favorites/FavoritesScreen';
@@ -57,6 +58,17 @@ export function AppNavigator() {
       .execute()
       .then((profile) => setBoot(profile ? 'ready' : 'onboarding'))
       .catch(() => setBoot('onboarding'));
+  }, []);
+
+  useEffect(() => {
+    // Recalcula las notificaciones locales al arrancar y cada vez que la app
+    // entra o sale de primer plano (así se cancela el recordatorio de hoy si
+    // ya se cargó todo, etc.).
+    syncNotifications();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' || state === 'background') syncNotifications();
+    });
+    return () => sub.remove();
   }, []);
 
   if (boot === 'loading') {

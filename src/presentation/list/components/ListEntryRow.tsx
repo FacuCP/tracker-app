@@ -2,7 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { formatDdMmYyyy } from '../../../core/utils/date';
 import { theme } from '../../../core/theme';
-import { ListEntry } from '../../../domain/list/entities/ListEntry';
+import { ListEntry, isEntryOverdue } from '../../../domain/list/entities/ListEntry';
 import { Checkbox } from '../../components/Checkbox';
 import { formatRating } from '../parseRating';
 
@@ -46,7 +46,16 @@ export function ListEntryRow({ entry, position, first, isTodo = false, onPress, 
           >
             {entry.name}
           </Text>
-          <Text style={styles.date}>{formatDdMmYyyy(entry.date)}</Text>
+          {isTodo ? (
+            <>
+              {entry.date != null ? (
+                <Text style={styles.date}>vence: {formatDdMmYyyy(entry.date)}</Text>
+              ) : null}
+              {isEntryOverdue(entry) ? <Text style={styles.overdue}>vencida</Text> : null}
+            </>
+          ) : entry.date != null ? (
+            <Text style={styles.date}>{formatDdMmYyyy(entry.date)}</Text>
+          ) : null}
         </View>
         {entry.comment ? (
           <Text style={styles.comment} numberOfLines={1} ellipsizeMode="tail">
@@ -106,6 +115,11 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 12,
     color: theme.colors.textMuted,
+  },
+  overdue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#dc2626',
   },
   comment: {
     fontSize: 13,

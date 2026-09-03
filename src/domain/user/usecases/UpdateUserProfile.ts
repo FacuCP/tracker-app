@@ -6,6 +6,8 @@ export interface UserProfilePatch {
   moodFavorite?: boolean;
   financeFavorite?: boolean;
   fontScale?: number;
+  notifyTrackers?: boolean;
+  notifyDueTasks?: boolean;
 }
 
 /**
@@ -22,6 +24,8 @@ export class UpdateUserProfile {
       moodFavorite: patch.moodFavorite ?? current?.moodFavorite,
       financeFavorite: patch.financeFavorite ?? current?.financeFavorite,
       fontScale: patch.fontScale ?? current?.fontScale,
+      notifyTrackers: patch.notifyTrackers ?? current?.notifyTrackers,
+      notifyDueTasks: patch.notifyDueTasks ?? current?.notifyDueTasks,
     });
     await this.repository.saveProfile(profile);
     return profile;

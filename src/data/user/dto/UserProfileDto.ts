@@ -5,6 +5,8 @@ export interface UserProfileDto {
   moodFavorite?: boolean;
   financeFavorite?: boolean;
   fontScale?: number;
+  notifyTrackers?: boolean;
+  notifyDueTasks?: boolean;
 }
 
 export function userProfileToDto(profile: UserProfile): UserProfileDto {
@@ -13,6 +15,8 @@ export function userProfileToDto(profile: UserProfile): UserProfileDto {
     moodFavorite: profile.moodFavorite,
     financeFavorite: profile.financeFavorite,
     fontScale: profile.fontScale,
+    notifyTrackers: profile.notifyTrackers,
+    notifyDueTasks: profile.notifyDueTasks,
   };
 }
 
@@ -22,5 +26,7 @@ export function userProfileFromDto(dto: UserProfileDto): UserProfile {
     moodFavorite: dto.moodFavorite ?? true,
     financeFavorite: dto.financeFavorite ?? true,
     fontScale: dto.fontScale ?? 1,
+    notifyTrackers: dto.notifyTrackers ?? false,
+    notifyDueTasks: dto.notifyDueTasks ?? false,
   });
 }

@@ -5,7 +5,7 @@ export interface ListEntryDto {
   id: string;
   listId: string;
   name: string;
-  date: string;
+  date?: string;
   comment?: string;
   rating?: number;
   done?: boolean;
@@ -28,7 +28,7 @@ export function listEntryFromDto(dto: ListEntryDto): ListEntry {
     id: dto.id,
     listId: dto.listId,
     name: dto.name,
-    date: dto.date as IsoDate,
+    date: (dto.date as IsoDate | undefined) ?? null,
     comment: dto.comment,
     rating: dto.rating,
     done: dto.done ?? false,
