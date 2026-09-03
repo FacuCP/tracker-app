@@ -9,7 +9,8 @@ App personal hecha con **Expo + React Native + TypeScript**, organizada con
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
   rating); una lista puede ser una **to-do list** (entradas que se tildan).
-- **Finanzas** — *función futura*.
+- **Finanzas** — economía actual + ingresos/gastos (con repetición mensual y
+  categorías) y su desglose por semana/mes/año.
 
 Todo se guarda local en el teléfono y se puede exportar/importar como un único
 archivo de backup.
@@ -74,7 +75,7 @@ a la derecha, en cualquiera de las tres pestañas):
 src/
 ├── domain/                      # Reglas de negocio puras. No importa React ni Expo.
 │   ├── user/
-│   │   ├── entities/            # UserProfile (nombre + pestaña de inicio)
+│   │   ├── entities/            # UserProfile (nombre + moodFavorite + financeFavorite + fontScale)
 │   │   ├── repositories/        # UserRepository (puerto)
 │   │   └── usecases/            # GetUserProfile, UpdateUserProfile, GetWelcomeMessage
 │   ├── mood/
@@ -92,6 +93,12 @@ src/
 │   │   ├── repositories/        # ListRepository, ListEntryRepository (puertos)
 │   │   └── usecases/            # Create/Delete/GetList(s), GetListEntries (ordenadas),
 │   │                            # Save/DeleteListEntry, SetListEntryDone
+│   ├── finance/
+│   │   ├── entities/            # FinanceCategory (+ General), FinanceTransaction (kind, monto,
+│   │   │                        # repeat mensual), occurrences.ts (fechas de impacto), FinanceReport
+│   │   ├── repositories/        # FinanceCategoryRepository, FinanceTransactionRepository (puertos)
+│   │   └── usecases/            # Get/Save/Delete Categoría y Movimiento, GetCurrentBalance,
+│   │                            # GetFinanceReport (desglose del período)
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
@@ -99,6 +106,7 @@ src/
 │   ├── mood/                    # dto + AsyncStorage datasource + repo impl
 │   ├── tracker/                 # dto + AsyncStorage datasources + repo impls
 │   ├── list/                    # dto + AsyncStorage datasources + repo impls
+│   ├── finance/                 # dto + AsyncStorage datasources (siembra categorías) + repo impls
 │   └── backup/                  # BackupRepositoryImpl (multiGet/multiSet sobre AsyncStorage)
 │
 ├── core/
@@ -107,6 +115,7 @@ src/
 │   │                            # ListDetail, Finances, Settings, MoodProgress, CreateTracker,
 │   │                            # EditTracker, TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
+│   ├── text/textScale.ts        # Escala global de la tipografía (parcha Text.render)
 │   ├── theme.ts                 # Paleta: fondos claros (no blancos) + acento
 │   └── utils/                   # date.ts (fechas ISO locales + formateo es), id.ts
 │
@@ -117,15 +126,16 @@ src/
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
     ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox, FavoriteStar
     ├── backup/                  # useBackup (exportar/importar el .json)
-    ├── user/components/         # UserNameCard (Ajustes)
+    ├── user/components/         # UserNameCard, FontSizeCard (Ajustes)
     ├── screens/
     │   ├── onboarding/          # OnboardingScreen (elegir el nombre, la 1ª vez)
-    │   ├── favorites/           # FavoritesScreen + useFavorites + CreateChooserModal (principal)
+    │   ├── favorites/           # FavoritesScreen + useFavorites + CreateChooserModal +
+    │   │                        # FavoritesSortSelector (principal)
     │   ├── trackers/            # TrackersScreen + useTrackersViewModel
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
-    │   ├── finances/            # FinancesScreen (función futura)
-    │   ├── settings/            # SettingsScreen (nombre + backup)
+    │   ├── finances/            # FinancesScreen + useFinances
+    │   ├── settings/            # SettingsScreen (nombre + tamaño de letra + backup)
     │   ├── mood-progress/       # MoodProgressScreen
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
     │   └── tracker-progress/    # TrackerProgressScreen
@@ -140,11 +150,17 @@ src/
     │   │                        # MoodReferenceCards, MoodDayModal
     │   ├── viewmodels/          # useMoodTrackerCard, useMoodProgress
     │   └── parseNoteInput.ts
-    └── tracker/
-        ├── components/          # TrackerCard, TrackerForm, OptionColorPicker, Counter,
-        │                        # TrackerDayCell, TrackerDayModal, TrackerStats,
-        │                        # CreateTrackerButton
-        └── viewmodels/          # useTrackerCard, useTrackerForm, useTrackerProgress
+    ├── tracker/
+    │   ├── components/          # TrackerCard, TrackerForm, OptionColorPicker, Counter,
+    │   │                        # TrackerDayCell, TrackerDayModal, TrackerStats,
+    │   │                        # CreateTrackerButton
+    │   └── viewmodels/          # useTrackerCard, useTrackerForm, useTrackerProgress
+    └── finance/
+        ├── components/          # FinanceSummaryCard (recuadro favoriteable),
+        │                        # FinanceTransactionModal, FinanceCategoriesModal,
+        │                        # FinanceReportSection
+        ├── money.ts             # formatMoney / parseAmount / formatAmountInput
+        └── period.ts            # FinancePeriod + rango del período
 ```
 
 ### Regla de dependencias
@@ -160,12 +176,16 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 ## Primer arranque
 
 La primera vez que se abre la app, `AppNavigator` mira si hay un **perfil**
-guardado (`UserProfile` = `{ name, moodFavorite }`). Si no, arranca en
+guardado (`UserProfile` = `{ name, moodFavorite, financeFavorite, fontScale }`). Si no, arranca en
 **`OnboardingScreen`**: pide el **nombre**, avisa que se cambia en Ajustes, lo
 guarda y resetea la navegación a Favoritos.
 
-Si ya hay perfil, la app arranca siempre en **Favoritos**. El nombre se cambia en
-**Ajustes** (`UserNameCard`); el saludo se actualiza al volver.
+Si ya hay perfil, la app arranca siempre en **Favoritos**. En **Ajustes** se
+cambian el **nombre** (`UserNameCard`) y el **tamaño de la letra**
+(`FontSizeCard`: 100 % a 150 %, de a 10 %). El tamaño de letra se aplica global
+parcheando `Text.render` (`core/text/textScale.ts`): el número se guarda en el
+perfil, se lee al arrancar y, al cambiarlo, la pantalla actual se ajusta en el
+momento y el resto al recibir el foco.
 
 ## Navegación
 
@@ -178,7 +198,7 @@ despliega un menú para moverse entre:
   estrella, y el botón "＋ Crear".
 - **Trackers** — mood tracker + todos los trackers del usuario.
 - **Listas** — las listas del usuario (ver más abajo).
-- **Finanzas** — *función futura* (placeholder).
+- **Finanzas** — economía actual + ingresos/gastos (ver más abajo).
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
@@ -235,12 +255,17 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 La **pantalla principal**. Junta los trackers y las listas que el usuario marcó
 con la **estrella** (flag `favorite` en cada entidad; se togglea con
 `SetTrackerFavorite` / `SetListFavorite`). `useFavorites` trae todo y filtra por
-`.favorite` — no hay una colección de "favoritos" aparte. El **mood tracker**
-está incluido por defecto (su flag vive en `UserProfile.moodFavorite`, arranca
-en `true`) y se puede sacar con su propia estrella.
+`.favorite` — no hay una colección de "favoritos" aparte. El **mood tracker** y
+el **resumen de finanzas** (`FinanceSummaryCard`: economía actual + botones de
+añadir) están incluidos por defecto — sus flags viven en `UserProfile`
+(`moodFavorite` / `financeFavorite`, arrancan en `true`) y se sacan con su
+propia estrella.
 
-- Cada favorito se muestra con su card normal (`TrackerCard` / `ListCard`), con
-  la misma estrella para sacarlo.
+- Las cards especiales (finanzas, mood) van fijas arriba; abajo, los trackers y
+  listas favoritos con un selector para **ordenar la lista**: **Por tipo**
+  (trackers y después listas, por antigüedad), **A-Z** o **Recientes**.
+- Cada favorito se muestra con su card normal (`TrackerCard` / `ListCard` /
+  `FinanceSummaryCard`), con la misma estrella para sacarlo.
 - Botón **"＋ Crear"**: abre el `CreateChooserModal` (**Tracker** / **Lista** como
   botones centrados, **Cancelar** abajo) y navega a esa
   pestaña (con un param `{ create: true }` que la pantalla consume una vez para
@@ -329,18 +354,62 @@ Orden de las entradas (`compareListEntries` en el dominio):
 La fecha se elige con el date picker nativo
 (`@react-native-community/datetimepicker`).
 
+## Finanzas
+
+Arriba de todo, el **recuadro de resumen** (`FinanceSummaryCard`): la **economía
+actual** bien grande (roja si es negativa; el número **se achica solo para
+entrar en una línea**) — suma de **ingresos** menos **gastos**, contando cada
+repetición mensual que ya ocurrió hasta hoy — y dos botones chicos uno al lado
+del otro, **Añadir ingreso** (verde) y **Añadir gasto** (rojo). Tiene una
+**estrella**: marcado como favorito (por defecto sí) el recuadro aparece también
+en Favoritos, y desde ahí los botones llevan a Finanzas con el modal ya abierto.
+
+Un **movimiento** tiene nombre, fecha, **monto** (obligatorio, > 0), comentario
+opcional, una **categoría** y una **repetición** opcional. El campo de monto se
+formatea mientras se tipea (`$`, puntos de miles, coma decimal). Si se repite,
+impacta la economía el mismo día de cada mes (el último día si el mes es más
+corto), ya sea **indefinidamente** o **por N meses** (contando el primero). El
+dominio no guarda cada ocurrencia: las calcula al vuelo (`occurrences.ts`).
+
+Al **editar** un movimiento con repetición hay un botón **"Ajustar monto (desde
+hoy)"**: se ingresa un monto nuevo y, de esa fecha en adelante, las ocurrencias
+valen eso. Se puede usar varias veces (queda una lista de `adjustments` con su
+fecha); el monto vigente de cada ocurrencia lo resuelve `financeAmountOn`, y el
+desglose muestra "cuota 3/12".
+
+También al editar aparece un checkbox **"Finalizado"**: lo marca con la fecha de
+hoy (`finishedOn`) y las cuotas/repeticiones posteriores dejan de calcularse
+(las anteriores siguen contando).
+
+**Categorías** (`FinanceCategory`): tienen color, se crean/editan/borran desde el
+botón **Categorías**. La primera vez se siembran **Personales / Servicios /
+Compras**. Un movimiento sin categoría (o con una categoría borrada) cae en
+**General** (sintética, no se guarda).
+
+Abajo, el **desglose** del período elegido (**Semana / Mes / Año**, el que
+contiene hoy): totales de ingresos y gastos, y dos vistas:
+
+- **Por categoría**: una fila por categoría con sus totales `+ingresos` /
+  `-gastos`; al tocarla se despliegan sus movimientos con la fecha de cada
+  ocurrencia. General siempre al final.
+- **Ver todo**: la lista completa del período sin separar por categoría.
+
+Tocar cualquier movimiento abre el modal para editarlo o borrarlo.
+
 ## Persistencia
 
 Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 
 | Clave (`core/storage/keys.ts`) | Contenido |
 |-------|-----------|
-| `@app-celu/user-profile/v1` | `{ name, moodFavorite }` (nombre + si el mood tracker es favorito) |
+| `@app-celu/user-profile/v1` | `{ name, moodFavorite, financeFavorite, fontScale }` (nombre + cards de Favoritos + tamaño de letra) |
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config + `favorite` de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |
 | `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre + `isTodo` + `favorite` de cada lista) |
 | `@app-celu/list-entries/v1` | `{ [listId]: { [entryId]: ListEntryDto } }` |
+| `@app-celu/finance-categories/v1` | `{ [id]: FinanceCategoryDto }` (siembra defaults la 1ª vez) |
+| `@app-celu/finance-transactions/v1` | `{ [id]: FinanceTransactionDto }` (movimientos) |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué
 exportar/importar (todo en un solo archivo). Para cambiar a SQLite o a una API basta con escribir otra

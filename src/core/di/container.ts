@@ -40,6 +40,18 @@ import { GetLists } from '../../domain/list/usecases/GetLists';
 import { SaveListEntry } from '../../domain/list/usecases/SaveListEntry';
 import { SetListEntryDone } from '../../domain/list/usecases/SetListEntryDone';
 import { SetListFavorite } from '../../domain/list/usecases/SetListFavorite';
+import { AsyncStorageFinanceCategoryLocalDataSource } from '../../data/finance/datasources/FinanceCategoryLocalDataSource';
+import { AsyncStorageFinanceTransactionLocalDataSource } from '../../data/finance/datasources/FinanceTransactionLocalDataSource';
+import { FinanceCategoryRepositoryImpl } from '../../data/finance/repositories/FinanceCategoryRepositoryImpl';
+import { FinanceTransactionRepositoryImpl } from '../../data/finance/repositories/FinanceTransactionRepositoryImpl';
+import { DeleteFinanceCategory } from '../../domain/finance/usecases/DeleteFinanceCategory';
+import { DeleteFinanceTransaction } from '../../domain/finance/usecases/DeleteFinanceTransaction';
+import { GetCurrentBalance } from '../../domain/finance/usecases/GetCurrentBalance';
+import { GetFinanceCategories } from '../../domain/finance/usecases/GetFinanceCategories';
+import { GetFinanceReport } from '../../domain/finance/usecases/GetFinanceReport';
+import { GetFinanceTransactions } from '../../domain/finance/usecases/GetFinanceTransactions';
+import { SaveFinanceCategory } from '../../domain/finance/usecases/SaveFinanceCategory';
+import { SaveFinanceTransaction } from '../../domain/finance/usecases/SaveFinanceTransaction';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -63,6 +75,14 @@ const trackerEntryRepository = new TrackerEntryRepositoryImpl(
 // --- Listas del usuario ---
 const listRepository = new ListRepositoryImpl(new AsyncStorageListLocalDataSource());
 const listEntryRepository = new ListEntryRepositoryImpl(new AsyncStorageListEntryLocalDataSource());
+
+// --- Finanzas ---
+const financeCategoryRepository = new FinanceCategoryRepositoryImpl(
+  new AsyncStorageFinanceCategoryLocalDataSource(),
+);
+const financeTransactionRepository = new FinanceTransactionRepositoryImpl(
+  new AsyncStorageFinanceTransactionLocalDataSource(),
+);
 
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
@@ -97,6 +117,15 @@ export const container = {
   saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),
   setListEntryDone: new SetListEntryDone(listEntryRepository),
   deleteListEntry: new DeleteListEntry(listEntryRepository),
+
+  getFinanceCategories: new GetFinanceCategories(financeCategoryRepository),
+  saveFinanceCategory: new SaveFinanceCategory(financeCategoryRepository, generateId),
+  deleteFinanceCategory: new DeleteFinanceCategory(financeCategoryRepository),
+  getFinanceTransactions: new GetFinanceTransactions(financeTransactionRepository),
+  saveFinanceTransaction: new SaveFinanceTransaction(financeTransactionRepository, generateId),
+  deleteFinanceTransaction: new DeleteFinanceTransaction(financeTransactionRepository),
+  getCurrentBalance: new GetCurrentBalance(financeTransactionRepository),
+  getFinanceReport: new GetFinanceReport(financeTransactionRepository, financeCategoryRepository),
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),

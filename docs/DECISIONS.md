@@ -792,12 +792,13 @@ que es siempre la principal — ver #38.)
 
 **Decisión.**
 
-- **Dominio.** `domain/user/`: `UserProfile` = `{ name, moodFavorite }`
-  (`moodFavorite` arranca en `true`; ver #38). `UserRepository`
+- **Dominio.** `domain/user/`: `UserProfile` = `{ name, moodFavorite,
+  financeFavorite, fontScale }` (los flags arrancan en `true`, `fontScale` en
+  `1`; ver #38, #39 y #40). `UserRepository`
   (`getProfile(): Promise<UserProfile | null>` — null = primer arranque,
   `saveProfile`). Casos de uso: `GetUserProfile`, `GetWelcomeMessage` y
-  **`UpdateUserProfile`** (patch `{ name?, moodFavorite? }`, merge con lo
-  guardado, valida con `createUserProfile`).
+  **`UpdateUserProfile`** (patch parcial, merge con lo guardado, valida con
+  `createUserProfile`).
 - **Datos.** `AsyncStorageUserLocalDataSource` sobre `@app-celu/user-profile/v1`
   (en `ALL_STORAGE_KEYS`, así el perfil entra en el backup).
 - **Gate de arranque.** `AppNavigator` llama a `getUserProfile` una vez; mientras
@@ -805,8 +806,9 @@ que es siempre la principal — ver #38.)
   `Onboarding` (sin perfil) o `Favorites`.
 - **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda con
   `updateUserProfile({ name })` y hace `navigation.reset` a Favoritos.
-- **Editar.** `UserNameCard` en Ajustes. `useFavorites` / `useTrackersViewModel`
-  recargan el saludo con `useFocusEffect`, así que al volver se ve el nombre nuevo.
+- **Editar.** `UserNameCard` y `FontSizeCard` en Ajustes. `useFavorites` /
+  `useTrackersViewModel` recargan el saludo con `useFocusEffect`, así que al
+  volver se ve el nombre nuevo.
 
 **Alternativas descartadas.**
 
@@ -944,10 +946,12 @@ estrella. Junto con esto se eliminó la preferencia de "pestaña de inicio" (#34
   lee, re-guarda con el nuevo flag. No hay entidad "favorito" ni lista separada:
   Favoritos es una **vista filtrada** (`useFavorites` trae todo y filtra por
   `.favorite`).
-- **El mood tracker arranca como favorito y se puede desmarcar.** No tiene
-  entidad de config propia, así que su flag vive en `UserProfile.moodFavorite`
-  (default `true`). La `MoodTrackerCard` muestra la misma estrella y togglea con
-  `updateUserProfile({ moodFavorite })`.
+- **El mood tracker y el resumen de finanzas arrancan como favoritos y se
+  pueden desmarcar.** No tienen entidad de config propia, así que sus flags
+  viven en `UserProfile` (`moodFavorite` / `financeFavorite`, default `true`).
+  La `MoodTrackerCard` y la `FinanceSummaryCard` (recuadro compartido con la
+  pantalla Finanzas: economía actual + botones de añadir) muestran la misma
+  estrella y toglean con `updateUserProfile({ ... })`.
 - **Botón de estrella** (`FavoriteStar`, componente nuevo): esquina superior
   derecha de la `TrackerCard`, a la izquierda del nombre en la `ListCard` (donde
   lo pidió el usuario).
@@ -962,10 +966,17 @@ estrella. Junto con esto se eliminó la preferencia de "pestaña de inicio" (#34
 - **Marcar al crear.** El `TrackerForm` y el `CreateListModal` tienen un checkbox
   "Agregar a Favoritos" (`TrackerDraft.favorite`, tercer parámetro de
   `CreateList.execute`).
+- **Añadir desde Favoritos.** Los botones de la `FinanceSummaryCard` en Favoritos
+  navegan a `Finances` con un param `{ add: 'income' | 'expense' }` que la
+  pantalla consume una vez para abrir el modal.
 - **Refresco.** `ListCard` recibe `onToggleFavorite` del padre (ya era "tonta").
   `TrackerCard` y `MoodTrackerCard` son autónomas, así que suman un callback
   opcional `onFavoriteToggled` para que `FavoritesScreen` recargue y saque la
   card al instante.
+- **Orden de la lista.** Las cards especiales (finanzas, mood) van fijas arriba;
+  los trackers y listas favoritos se combinan en `useFavorites.items` y se
+  ordenan con un `FavoritesSortSelector`: **Por tipo** (default), **A-Z** o
+  **Recientes**. El criterio vive en el estado del hook (no se persiste).
 
 **Alternativas descartadas.**
 
@@ -979,6 +990,107 @@ estrella. Junto con esto se eliminó la preferencia de "pestaña de inicio" (#34
 **Consecuencias.** `useFavorites` repite el patrón de `useLists` para el conteo
 de entradas y el alta rápida (N+1 lecturas incluido). El mood tracker aparece en
 Favoritos por defecto (hasta que se desmarque).
+
+---
+
+## 39. Finanzas: ocurrencias calculadas, no materializadas *(elección del usuario)*
+
+**Contexto.** La pestaña Finanzas pasó de placeholder a una feature: economía
+actual, ingresos/gastos con repetición mensual y categorías, y un desglose por
+semana/mes/año.
+
+**Decisión.** Mismo esqueleto que las otras features (`domain/finance`,
+`data/finance`, `presentation/finance`):
+
+- **Modelo.** `FinanceTransaction` = `{ id, kind: 'income' | 'expense', name,
+  date, comment?, amount (> 0), categoryId?, repeat, adjustments, finishedOn? }`.
+  El **signo lo da `kind`** (el monto se guarda siempre positivo). `repeat` es
+  `null` (una vez) o `{ months: number | null }` (`null` = indefinida, `N` = N
+  ocurrencias en total contando la primera). `adjustments` (solo con `repeat`)
+  es una lista de `{ from, amount }` ordenada por fecha: a partir de `from`, cada
+  ocurrencia pasa a valer ese monto (el usuario aprieta "Ajustar monto (desde
+  hoy)" y lo puede hacer varias veces). `finishedOn` (fecha) aparece al marcar
+  como "finalizado" un movimiento con repetición: las ocurrencias posteriores
+  dejan de contar (las anteriores siguen). Es reversible.
+- **Las repeticiones NO se guardan.** Una función pura
+  `financeOccurrencesInRange(tx, start, end)` genera al vuelo cada ocurrencia
+  `{ date, amount, index }` (suma meses preservando el día, clampando al último
+  si el mes es más corto; el monto de cada una lo resuelve `financeAmountOn`
+  buscando el último `adjustment` cuyo `from` ya pasó; recorta en `finishedOn`).
+  La economía actual es `Σ signo·monto_de_la_ocurrencia` hasta hoy; el reporte
+  de un período usa el mismo helper acotado al rango. Evita tener que
+  crear/borrar filas al editar una recurrencia y que el almacenamiento crezca
+  solo. Coste: recalcular en cada `reload` (barato a escala personal; hay un
+  tope de 5000 ocurrencias por las dudas).
+- **Categorías.** `FinanceCategory` = `{ id, name, color }`, CRUD completo. Se
+  **siembran** Personales / Servicios / Compras la primera vez (clave de storage
+  ausente → se escriben los defaults; si el usuario las borra todas, la clave
+  queda `{}` y no se re-siembra). La categoría **General** es sintética
+  (`GENERAL_CATEGORY`, id `'general'`, no se persiste): es el fallback de un
+  movimiento sin `categoryId` o cuya categoría fue borrada. Borrar una categoría
+  no toca sus movimientos (caen en General por la lógica de agrupado).
+- **Reporte.** `GetFinanceReport(start, end)` arma `{ incomeTotal, expenseTotal,
+  net, categories[], all[] }` — depende de los dos repos (necesita resolver
+  `categoryId` → categoría). General siempre al final. El período es el que
+  **contiene hoy** (semana/mes/año), sin navegación entre períodos por ahora.
+- **UI.** `FinancesScreen` = `FinanceSummaryCard` (economía + botones, con
+  estrella de favorito — ver #38) + `FinanceReportSection`, más los modales
+  (`FinanceTransactionModal`, `FinanceCategoriesModal`). El tipo (ingreso/gasto)
+  lo fija el botón que abrió el modal y no se cambia al editar. El desglose
+  muestra el monto de cada ocurrencia y "cuota k/N".
+
+**Alternativas descartadas.**
+
+- **Materializar cada ocurrencia mensual como una fila.** Simplifica las queries
+  pero complica todo lo demás (editar una serie, repetición "indefinida",
+  crecimiento del storage). Con el helper de ocurrencias no hace falta.
+- **`Intl.NumberFormat` para la plata.** Soporte parcial en Hermes; un
+  `formatMoney` a mano (es-AR: `$ 1.234,50`) alcanza. El campo de monto también
+  se formatea en vivo (`formatAmountInput`): coma = decimal, punto = miles. El
+  número de la economía actual usa `adjustsFontSizeToFit` + `numberOfLines={1}`
+  para achicarse solo y entrar en una línea.
+- **Incremento por fórmula (% o monto fijo por mes).** Se probó, pero el usuario
+  quería controlar el monto exacto de cada tramo. Una lista de `adjustments`
+  con fecha es más flexible y no obliga a recalcular si cambia el patrón.
+- **Borrar las cuotas restantes al finalizar.** Se pierde el historial; guardar
+  `finishedOn` y recortar las ocurrencias es reversible y no toca los datos.
+- **Navegación entre períodos (semana anterior, etc.).** No se pidió; se puede
+  agregar después reusando el patrón del calendario.
+
+**Consecuencias.** `GetCurrentBalance` y `GetFinanceReport` recorren todos los
+movimientos en memoria en cada recarga. Borrar una categoría deja `categoryId`
+colgando en sus movimientos (se muestran como General, no se limpia el campo).
+
+---
+
+## 40. Tamaño de letra global: parche a `Text.render` *(elección del usuario)*
+
+**Contexto.** Se pidió poder agrandar la letra de toda la app (100 % a 150 %, de
+a 10 %) desde Ajustes. Los `fontSize` están hardcodeados en `StyleSheet.create`
+de decenas de componentes; no hay un `<AppText>` central.
+
+**Decisión.** `core/text/textScale.ts` **parchea `Text.render` una sola vez** (al
+importarse): envuelve el elemento devuelto y, si tiene un `fontSize` numérico
+explícito, lo multiplica por la escala actual (los textos anidados sin tamaño
+propio siguen heredando el del padre, ya escalado). La escala es un `let` de
+módulo con listeners; `AppNavigator` la fija al arrancar desde
+`profile.fontScale` y se suscribe con `useAppFontScale()` (re-render desde la
+raíz). La `FontSizeCard` de Ajustes togglea con `updateUserProfile({ fontScale })`
++ `setAppFontScale`.
+
+**Alternativas descartadas.**
+
+- **Context + `<AppText>` propio en toda la app.** Refactor gigante y frágil
+  (habría que acordarse de usarlo siempre).
+- **Remontar el árbol (`key` en `NavigationContainer`) al cambiar la escala.**
+  Tiraría al usuario a la ruta inicial en cada `+`/`−`. Se acepta que la pantalla
+  actual se ajusta en el momento (re-render propio) y el resto al recibir foco
+  (los viewmodels recargan en `useFocusEffect`).
+
+**Consecuencias.** El parche depende de que `Text` sea un `forwardRef` con
+`.render` (cierto en esta versión de RN); si cambiara, hay un guard que lo
+deja pasar sin romper (la feature simplemente no haría nada). `StyleSheet.flatten`
+corre en cada render de cada `Text` (costo despreciable a esta escala).
 
 ---
 

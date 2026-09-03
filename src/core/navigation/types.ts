@@ -12,7 +12,7 @@ export type RootStackParamList = {
   Trackers: { create?: boolean } | undefined;
   Lists: { create?: boolean } | undefined;
   ListDetail: { listId: string };
-  Finances: undefined;
+  Finances: { add?: 'income' | 'expense' } | undefined;
   Settings: undefined;
   MoodProgress: undefined;
   CreateTracker: undefined;

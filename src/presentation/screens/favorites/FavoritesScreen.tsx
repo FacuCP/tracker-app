@@ -5,11 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { FinanceSummaryCard } from '../../finance/components/FinanceSummaryCard';
 import { ListCard } from '../../list/components/ListCard';
 import { ListEntryModal } from '../../list/components/ListEntryModal';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
 import { CreateChooserModal } from './CreateChooserModal';
+import { FavoritesSortSelector } from './FavoritesSortSelector';
 import { useFavorites } from './useFavorites';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
@@ -42,32 +44,47 @@ export function FavoritesScreen({ navigation }: Props) {
               </View>
             ) : (
               <>
+                {vm.financeFavorite ? (
+                  <FinanceSummaryCard
+                    balance={vm.balance}
+                    favorite
+                    onToggleFavorite={vm.toggleFinanceFavorite}
+                    onAddIncome={() => navigation.navigate('Finances', { add: 'income' })}
+                    onAddExpense={() => navigation.navigate('Finances', { add: 'expense' })}
+                  />
+                ) : null}
                 {vm.moodFavorite ? (
                   <MoodTrackerCard
                     onSeeProgress={() => navigation.navigate('MoodProgress')}
                     onFavoriteToggled={vm.reload}
                   />
                 ) : null}
-                {vm.trackers.map((tracker) => (
-                  <TrackerCard
-                    key={tracker.id}
-                    trackerId={tracker.id}
-                    onSeeProgress={() =>
-                      navigation.navigate('TrackerProgress', { trackerId: tracker.id })
-                    }
-                    onFavoriteToggled={vm.reload}
-                  />
-                ))}
-                {vm.lists.map((list) => (
-                  <ListCard
-                    key={list.id}
-                    list={list}
-                    counts={vm.counts[list.id] ?? { total: 0, done: 0 }}
-                    onAddEntry={() => vm.openAddEntry(list)}
-                    onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
-                    onToggleFavorite={() => vm.toggleListFavorite(list)}
-                  />
-                ))}
+
+                {vm.items.length > 1 ? (
+                  <FavoritesSortSelector value={vm.sort} onChange={vm.setSort} />
+                ) : null}
+
+                {vm.items.map((item) =>
+                  item.type === 'tracker' ? (
+                    <TrackerCard
+                      key={item.id}
+                      trackerId={item.id}
+                      onSeeProgress={() =>
+                        navigation.navigate('TrackerProgress', { trackerId: item.id })
+                      }
+                      onFavoriteToggled={vm.reload}
+                    />
+                  ) : (
+                    <ListCard
+                      key={item.id}
+                      list={item.list}
+                      counts={vm.counts[item.id] ?? { total: 0, done: 0 }}
+                      onAddEntry={() => vm.openAddEntry(item.list)}
+                      onOpen={() => navigation.navigate('ListDetail', { listId: item.id })}
+                      onToggleFavorite={() => vm.toggleListFavorite(item.list)}
+                    />
+                  ),
+                )}
               </>
             )}
 

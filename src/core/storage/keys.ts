@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   trackerEntries: '@app-celu/tracker-entries/v1',
   lists: '@app-celu/lists/v1',
   listEntries: '@app-celu/list-entries/v1',
+  financeCategories: '@app-celu/finance-categories/v1',
+  financeTransactions: '@app-celu/finance-transactions/v1',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
