@@ -52,6 +52,9 @@ import { GetFinanceReport } from '../../domain/finance/usecases/GetFinanceReport
 import { GetFinanceTransactions } from '../../domain/finance/usecases/GetFinanceTransactions';
 import { SaveFinanceCategory } from '../../domain/finance/usecases/SaveFinanceCategory';
 import { SaveFinanceTransaction } from '../../domain/finance/usecases/SaveFinanceTransaction';
+import { FavoritesOrderRepositoryImpl } from '../../data/favorites/FavoritesOrderRepositoryImpl';
+import { GetFavoritesOrder } from '../../domain/favorites/usecases/GetFavoritesOrder';
+import { SaveFavoritesOrder } from '../../domain/favorites/usecases/SaveFavoritesOrder';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -83,6 +86,9 @@ const financeCategoryRepository = new FinanceCategoryRepositoryImpl(
 const financeTransactionRepository = new FinanceTransactionRepositoryImpl(
   new AsyncStorageFinanceTransactionLocalDataSource(),
 );
+
+// --- Favoritos (orden manual) ---
+const favoritesOrderRepository = new FavoritesOrderRepositoryImpl();
 
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
@@ -126,6 +132,9 @@ export const container = {
   deleteFinanceTransaction: new DeleteFinanceTransaction(financeTransactionRepository),
   getCurrentBalance: new GetCurrentBalance(financeTransactionRepository),
   getFinanceReport: new GetFinanceReport(financeTransactionRepository, financeCategoryRepository),
+
+  getFavoritesOrder: new GetFavoritesOrder(favoritesOrderRepository),
+  saveFavoritesOrder: new SaveFavoritesOrder(favoritesOrderRepository),
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),

@@ -75,7 +75,7 @@ a la derecha, en cualquiera de las tres pestañas):
 src/
 ├── domain/                      # Reglas de negocio puras. No importa React ni Expo.
 │   ├── user/
-│   │   ├── entities/            # UserProfile (nombre + moodFavorite + financeFavorite + fontScale)
+│   │   ├── entities/            # UserProfile (nombre + moodFavorite + financeFavorite; fontScale sin usar)
 │   │   ├── repositories/        # UserRepository (puerto)
 │   │   └── usecases/            # GetUserProfile, UpdateUserProfile, GetWelcomeMessage
 │   ├── mood/
@@ -99,6 +99,7 @@ src/
 │   │   ├── repositories/        # FinanceCategoryRepository, FinanceTransactionRepository (puertos)
 │   │   └── usecases/            # Get/Save/Delete Categoría y Movimiento, GetCurrentBalance,
 │   │                            # GetFinanceReport (desglose del período)
+│   ├── favorites/               # FavoriteRef (claves) + Get/SaveFavoritesOrder (orden manual)
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
@@ -107,6 +108,7 @@ src/
 │   ├── tracker/                 # dto + AsyncStorage datasources + repo impls
 │   ├── list/                    # dto + AsyncStorage datasources + repo impls
 │   ├── finance/                 # dto + AsyncStorage datasources (siembra categorías) + repo impls
+│   ├── favorites/               # FavoritesOrderRepositoryImpl (array JSON de claves)
 │   └── backup/                  # BackupRepositoryImpl (multiGet/multiSet sobre AsyncStorage)
 │
 ├── core/
@@ -115,7 +117,7 @@ src/
 │   │                            # ListDetail, Finances, Settings, MoodProgress, CreateTracker,
 │   │                            # EditTracker, TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
-│   ├── text/textScale.ts        # Escala global de la tipografía (parcha Text.render)
+│   ├── text/textScale.ts        # Escala global de la tipografía (a medio hacer, sin montar)
 │   ├── theme.ts                 # Paleta: fondos claros (no blancos) + acento
 │   └── utils/                   # date.ts (fechas ISO locales + formateo es), id.ts
 │
@@ -126,16 +128,16 @@ src/
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
     ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox, FavoriteStar
     ├── backup/                  # useBackup (exportar/importar el .json)
-    ├── user/components/         # UserNameCard, FontSizeCard (Ajustes)
+    ├── user/components/         # UserNameCard (Ajustes); FontSizeCard existe pero no se monta
     ├── screens/
     │   ├── onboarding/          # OnboardingScreen (elegir el nombre, la 1ª vez)
     │   ├── favorites/           # FavoritesScreen + useFavorites + CreateChooserModal +
-    │   │                        # FavoritesSortSelector (principal)
+    │   │                        # FavoriteReorderRow (principal)
     │   ├── trackers/            # TrackersScreen + useTrackersViewModel
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
     │   ├── finances/            # FinancesScreen + useFinances
-    │   ├── settings/            # SettingsScreen (nombre + tamaño de letra + backup)
+    │   ├── settings/            # SettingsScreen (nombre + backup)
     │   ├── mood-progress/       # MoodProgressScreen
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
     │   └── tracker-progress/    # TrackerProgressScreen
@@ -181,11 +183,12 @@ guardado (`UserProfile` = `{ name, moodFavorite, financeFavorite, fontScale }`).
 guarda y resetea la navegación a Favoritos.
 
 Si ya hay perfil, la app arranca siempre en **Favoritos**. En **Ajustes** se
-cambian el **nombre** (`UserNameCard`) y el **tamaño de la letra**
-(`FontSizeCard`: 100 % a 150 %, de a 10 %). El tamaño de letra se aplica global
-parcheando `Text.render` (`core/text/textScale.ts`): el número se guarda en el
-perfil, se lee al arrancar y, al cambiarlo, la pantalla actual se ajusta en el
-momento y el resto al recibir el foco.
+cambia el **nombre** (`UserNameCard`); el saludo se actualiza al volver.
+
+> El **tamaño de letra** global quedó a medio hacer: `FontSizeCard`,
+> `core/text/textScale.ts` y el campo `fontScale` del perfil están en el repo
+> pero **no montados** (el reemplazo del `Text` de RN no funcionó bien). Se deja
+> para retomar.
 
 ## Navegación
 
@@ -252,20 +255,21 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 
 ## Favoritos
 
-La **pantalla principal**. Junta los trackers y las listas que el usuario marcó
-con la **estrella** (flag `favorite` en cada entidad; se togglea con
-`SetTrackerFavorite` / `SetListFavorite`). `useFavorites` trae todo y filtra por
-`.favorite` — no hay una colección de "favoritos" aparte. El **mood tracker** y
-el **resumen de finanzas** (`FinanceSummaryCard`: economía actual + botones de
-añadir) están incluidos por defecto — sus flags viven en `UserProfile`
-(`moodFavorite` / `financeFavorite`, arrancan en `true`) y se sacan con su
-propia estrella.
+La **pantalla principal**. Junta las cards que el usuario marca con la
+**estrella**: el **resumen de finanzas** (`FinanceSummaryCard`) y el **mood
+tracker** (incluidos por defecto — flags `financeFavorite` / `moodFavorite` en
+`UserProfile`), más los **trackers** y **listas** favoritos (flag `favorite` en
+cada entidad, `SetTrackerFavorite` / `SetListFavorite`). `useFavorites` arma la
+lista de cards y no hay una colección de "favoritos" aparte.
 
-- Las cards especiales (finanzas, mood) van fijas arriba; abajo, los trackers y
-  listas favoritos con un selector para **ordenar la lista**: **Por tipo**
-  (trackers y después listas, por antigüedad), **A-Z** o **Recientes**.
-- Cada favorito se muestra con su card normal (`TrackerCard` / `ListCard` /
-  `FinanceSummaryCard`), con la misma estrella para sacarlo.
+- **Orden manual.** Botón **"Ordenar"**: entra en modo reordenar, donde cada
+  ítem se muestra como una fila compacta (`FavoriteReorderRow`) con flechas
+  **▲ / ▼** para subirlo o bajarlo. El orden se guarda como una lista de claves
+  (`"finance"`, `"mood"`, `"tracker:<id>"`, `"list:<id>"`) en
+  `@app-celu/favorites-order/v1`; al cargar, los ítems no guardados van al final.
+- Fuera de ese modo, cada favorito se muestra con su card normal (`TrackerCard`
+  / `ListCard` / `FinanceSummaryCard` / `MoodTrackerCard`), con la misma
+  estrella para sacarlo.
 - Botón **"＋ Crear"**: abre el `CreateChooserModal` (**Tracker** / **Lista** como
   botones centrados, **Cancelar** abajo) y navega a esa
   pestaña (con un param `{ create: true }` que la pantalla consume una vez para
@@ -410,6 +414,7 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/list-entries/v1` | `{ [listId]: { [entryId]: ListEntryDto } }` |
 | `@app-celu/finance-categories/v1` | `{ [id]: FinanceCategoryDto }` (siembra defaults la 1ª vez) |
 | `@app-celu/finance-transactions/v1` | `{ [id]: FinanceTransactionDto }` (movimientos) |
+| `@app-celu/favorites-order/v1` | `string[]` (orden manual de la pantalla Favoritos) |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué
 exportar/importar (todo en un solo archivo). Para cambiar a SQLite o a una API basta con escribir otra

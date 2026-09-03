@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   listEntries: '@app-celu/list-entries/v1',
   financeCategories: '@app-celu/finance-categories/v1',
   financeTransactions: '@app-celu/finance-transactions/v1',
+  favoritesOrder: '@app-celu/favorites-order/v1',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

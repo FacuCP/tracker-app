@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { container } from '../../../core/di/container';
@@ -8,38 +8,38 @@ import { ListEntryDraft } from '../../list/components/ListEntryModal';
 import { parseRating } from '../../list/parseRating';
 import { ListCounts } from '../../list/viewmodels/useLists';
 
-export type FavoritesSort = 'type' | 'alpha' | 'recent';
-
-export type FavoriteItem =
-  | { type: 'tracker'; id: string; name: string; createdAt: string; tracker: Tracker }
-  | { type: 'list'; id: string; name: string; createdAt: string; list: List };
+export type FavoriteCard =
+  | { key: 'finance'; kind: 'finance'; title: string; typeLabel: string }
+  | { key: 'mood'; kind: 'mood'; title: string; typeLabel: string }
+  | { key: string; kind: 'tracker'; title: string; typeLabel: string; tracker: Tracker }
+  | { key: string; kind: 'list'; title: string; typeLabel: string; list: List; counts: ListCounts };
 
 /**
- * ViewModel de la pestaña Favoritos: el saludo, los trackers y listas marcados
- * como favoritos (con el conteo de entradas de cada lista) y las acciones de
- * desmarcar favorito y de agregar una entrada rápida a una lista favorita.
+ * ViewModel de la pestaña Favoritos: arma la lista de "cards" (resumen de
+ * finanzas, mood tracker, trackers y listas favoritos) en el **orden manual**
+ * que guardó el usuario, y expone el modo de reordenar (flechas ▲▼).
  */
 export function useFavorites() {
   const [greeting, setGreeting] = useState('');
-  const [moodFavorite, setMoodFavorite] = useState(true);
-  const [financeFavorite, setFinanceFavorite] = useState(true);
   const [balance, setBalance] = useState(0);
-  const [trackers, setTrackers] = useState<Tracker[]>([]);
-  const [lists, setLists] = useState<List[]>([]);
-  const [counts, setCounts] = useState<Record<string, ListCounts>>({});
+  const [cards, setCards] = useState<FavoriteCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [entryTarget, setEntryTarget] = useState<List | null>(null);
-  const [sort, setSort] = useState<FavoritesSort>('type');
+  const [reorderMode, setReorderMode] = useState(false);
 
   const reload = useCallback(async () => {
-    const [message, profile, allTrackers, allLists, bal] = await Promise.all([
+    const [message, profile, allTrackers, allLists, bal, savedOrder] = await Promise.all([
       container.getWelcomeMessage.execute(),
       container.getUserProfile.execute(),
       container.getTrackers.execute(),
       container.getLists.execute(),
       container.getCurrentBalance.execute(),
+      container.getFavoritesOrder.execute(),
     ]);
+
+    const favTrackers = allTrackers.filter((t) => t.favorite);
     const favLists = allLists.filter((l) => l.favorite);
+
     const entryCounts: Record<string, ListCounts> = {};
     await Promise.all(
       favLists.map(async (list) => {
@@ -50,13 +50,54 @@ export function useFavorites() {
         };
       }),
     );
+
+    const defaultOrder: FavoriteCard[] = [];
+    if (profile?.financeFavorite ?? true) {
+      defaultOrder.push({ key: 'finance', kind: 'finance', title: 'Finanzas', typeLabel: 'resumen' });
+    }
+    if (profile?.moodFavorite ?? true) {
+      defaultOrder.push({ key: 'mood', kind: 'mood', title: 'Mood tracker', typeLabel: 'ánimo' });
+    }
+    for (const tracker of favTrackers) {
+      defaultOrder.push({
+        key: `tracker:${tracker.id}`,
+        kind: 'tracker',
+        title: tracker.name,
+        typeLabel: 'tracker',
+        tracker,
+      });
+    }
+    for (const list of favLists) {
+      defaultOrder.push({
+        key: `list:${list.id}`,
+        kind: 'list',
+        title: list.name,
+        typeLabel: 'lista',
+        list,
+        counts: entryCounts[list.id] ?? { total: 0, done: 0 },
+      });
+    }
+
+    const byKey = new Map(defaultOrder.map((c) => [c.key, c]));
+    const ordered: FavoriteCard[] = [];
+    const used = new Set<string>();
+    for (const key of savedOrder) {
+      const card = byKey.get(key);
+      if (card && !used.has(key)) {
+        ordered.push(card);
+        used.add(key);
+      }
+    }
+    for (const card of defaultOrder) {
+      if (!used.has(card.key)) {
+        ordered.push(card);
+        used.add(card.key);
+      }
+    }
+
     setGreeting(message);
-    setMoodFavorite(profile?.moodFavorite ?? true);
-    setFinanceFavorite(profile?.financeFavorite ?? true);
     setBalance(bal);
-    setTrackers(allTrackers.filter((t) => t.favorite));
-    setLists(favLists);
-    setCounts(entryCounts);
+    setCards(ordered);
     setLoading(false);
   }, []);
 
@@ -72,6 +113,18 @@ export function useFavorites() {
     }, [reload]),
   );
 
+  const move = useCallback((key: string, direction: 'up' | 'down') => {
+    setCards((prev) => {
+      const i = prev.findIndex((c) => c.key === key);
+      const j = direction === 'up' ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      container.saveFavoritesOrder.execute(next.map((c) => c.key)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const toggleListFavorite = useCallback(
     async (list: List) => {
       await container.setListFavorite.execute(list.id, !list.favorite);
@@ -81,45 +134,10 @@ export function useFavorites() {
   );
 
   const toggleFinanceFavorite = useCallback(async () => {
-    await container.updateUserProfile.execute({ financeFavorite: !financeFavorite });
+    const financeShown = cards.some((c) => c.kind === 'finance');
+    await container.updateUserProfile.execute({ financeFavorite: !financeShown });
     await reload();
-  }, [financeFavorite, reload]);
-
-  const items = useMemo<FavoriteItem[]>(() => {
-    const combined: FavoriteItem[] = [
-      ...trackers.map(
-        (t): FavoriteItem => ({
-          type: 'tracker',
-          id: t.id,
-          name: t.name,
-          createdAt: t.createdAt,
-          tracker: t,
-        }),
-      ),
-      ...lists.map(
-        (l): FavoriteItem => ({
-          type: 'list',
-          id: l.id,
-          name: l.name,
-          createdAt: l.createdAt,
-          list: l,
-        }),
-      ),
-    ];
-    const byName = (a: FavoriteItem, b: FavoriteItem) =>
-      a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
-    if (sort === 'alpha') {
-      combined.sort(byName);
-    } else if (sort === 'recent') {
-      combined.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || byName(a, b));
-    } else {
-      combined.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'tracker' ? -1 : 1;
-        return a.createdAt.localeCompare(b.createdAt);
-      });
-    }
-    return combined;
-  }, [trackers, lists, sort]);
+  }, [cards, reload]);
 
   const saveEntry = useCallback(
     async (draft: ListEntryDraft) => {
@@ -139,22 +157,13 @@ export function useFavorites() {
 
   return {
     greeting,
-    moodFavorite,
-    financeFavorite,
     balance,
-    trackers,
-    lists,
-    items,
-    sort,
-    setSort,
-    counts,
+    cards,
     loading,
-    isEmpty:
-      !loading &&
-      !moodFavorite &&
-      !financeFavorite &&
-      trackers.length === 0 &&
-      lists.length === 0,
+    isEmpty: !loading && cards.length === 0,
+    reorderMode,
+    toggleReorder: () => setReorderMode((v) => !v),
+    move,
     entryTarget,
     openAddEntry: setEntryTarget,
     closeEntryModal: () => setEntryTarget(null),

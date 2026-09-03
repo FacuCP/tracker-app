@@ -1,13 +1,14 @@
-import React, { useSyncExternalStore } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { ComponentType, createElement, useSyncExternalStore } from 'react';
+import { StyleSheet } from 'react-native';
 
 /**
- * Escala global de la tipografía. Se parchea `Text.render` una sola vez para
- * multiplicar el `fontSize` de cada texto que tenga uno explícito (los textos
- * anidados sin tamaño propio siguen heredando el del padre, ya escalado).
+ * Escala global de la tipografía. En esta versión de RN `Text` es un componente
+ * de función común (sin `.render`), así que se reemplaza el `default` de su
+ * módulo por un wrapper que multiplica el `fontSize` explícito de cada texto
+ * (los anidados sin tamaño propio siguen heredando el del padre, ya escalado).
  *
- * El valor lo fija el perfil del usuario (Ajustes). Cambiarlo re-renderiza
- * desde la raíz; cada pantalla termina de ajustarse al recibir el foco.
+ * Este archivo tiene que importarse **antes** que cualquier componente que use
+ * `Text` (lo hace `App.tsx` en la primera línea).
  */
 let scale = 1;
 const listeners = new Set<() => void>();
@@ -17,9 +18,9 @@ export function getAppFontScale(): number {
 }
 
 export function setAppFontScale(next: number): void {
-  const clamped = Number.isFinite(next) ? next : 1;
-  if (clamped === scale) return;
-  scale = clamped;
+  const value = Number.isFinite(next) ? next : 1;
+  if (value === scale) return;
+  scale = value;
   listeners.forEach((l) => l());
 }
 
@@ -28,28 +29,37 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-/** Se re-renderiza cuando cambia la escala. Úsalo en un componente alto del árbol. */
+/** Se re-renderiza cuando cambia la escala. Úsalo en componentes altos del árbol. */
 export function useAppFontScale(): number {
   return useSyncExternalStore(subscribe, getAppFontScale, getAppFontScale);
 }
 
-const TextAny = Text as unknown as {
-  render?: (...args: unknown[]) => React.ReactElement | null;
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProps = Record<string, any>;
 
-if (typeof TextAny.render === 'function' && !(TextAny.render as { __scaled?: boolean }).__scaled) {
-  const original = TextAny.render;
-  const patched = function patchedRender(this: unknown, ...args: unknown[]) {
-    const element = original.apply(this, args);
-    if (scale === 1 || !element) return element;
-    const flat = StyleSheet.flatten(
-      (element.props as { style?: unknown }).style as never,
-    ) as { fontSize?: number } | undefined;
-    if (!flat || typeof flat.fontSize !== 'number') return element;
-    return React.cloneElement(element, {
-      style: [(element.props as { style?: unknown }).style, { fontSize: flat.fontSize * scale }],
-    } as never);
-  } as typeof original & { __scaled?: boolean };
-  patched.__scaled = true;
-  TextAny.render = patched;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const textModule = require('react-native/Libraries/Text/Text') as { default?: unknown };
+  const Original = textModule.default as ComponentType<AnyProps> & { __scaled?: boolean };
+
+  if (typeof Original === 'function' && !Original.__scaled) {
+    const ScaledText = (props: AnyProps) => {
+      if (scale === 1) return createElement(Original, props);
+      const flat = StyleSheet.flatten(props.style) as { fontSize?: number } | undefined;
+      if (!flat || typeof flat.fontSize !== 'number') return createElement(Original, props);
+      return createElement(Original, {
+        ...props,
+        style: [props.style, { fontSize: flat.fontSize * scale }],
+      });
+    };
+    (ScaledText as unknown as { displayName: string }).displayName = 'Text';
+    (ScaledText as unknown as { __scaled: boolean }).__scaled = true;
+    Object.defineProperty(textModule, 'default', {
+      value: ScaledText,
+      writable: true,
+      configurable: true,
+    });
+  }
+} catch {
+  // Si cambia la estructura del módulo de RN, la escala simplemente no aplica.
 }

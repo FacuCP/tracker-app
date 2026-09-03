@@ -11,28 +11,42 @@ import {
   clampFontScale,
 } from '../../../domain/user/entities/UserProfile';
 
-/** Card de Ajustes para cambiar el tamaño de la letra de toda la app. */
+/**
+ * Card de Ajustes para cambiar el tamaño de la letra de toda la app. Los − / +
+ * ajustan un valor pendiente; el cambio se aplica al tocar "Aplicar".
+ *
+ * NO está montada por ahora (el swap de `Text` de `core/text/textScale.ts` no
+ * funcionó bien). Se deja para retomar más adelante: para reactivarla, volver a
+ * importar `textScale` en `App.tsx`, renderizar esta card en `SettingsScreen` y
+ * fijar la escala al arrancar en `AppNavigator`.
+ */
 export function FontSizeCard() {
-  const [scale, setScale] = useState(1);
+  const [saved, setSaved] = useState(1);
+  const [pending, setPending] = useState(1);
   const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     container.getUserProfile.execute().then((profile) => {
-      setScale(profile?.fontScale ?? 1);
+      const value = profile?.fontScale ?? 1;
+      setSaved(value);
+      setPending(value);
       setLoaded(true);
     });
   }, []);
 
-  async function change(next: number) {
-    const clamped = clampFontScale(next);
-    if (clamped === scale) return;
-    setScale(clamped);
-    setAppFontScale(clamped);
-    await container.updateUserProfile.execute({ fontScale: clamped });
+  async function apply() {
+    if (pending === saved) return;
+    setSaving(true);
+    setAppFontScale(pending);
+    await container.updateUserProfile.execute({ fontScale: pending });
+    setSaved(pending);
+    setSaving(false);
   }
 
-  const atMin = scale <= FONT_SCALE_MIN;
-  const atMax = scale >= FONT_SCALE_MAX;
+  const atMin = pending <= FONT_SCALE_MIN;
+  const atMax = pending >= FONT_SCALE_MAX;
+  const dirty = pending !== saved;
 
   return (
     <View style={styles.card}>
@@ -40,23 +54,37 @@ export function FontSizeCard() {
       <Text style={styles.hint}>Afecta a toda la app. De 100 % a 150 %, de a 10 %.</Text>
 
       {loaded ? (
-        <View style={styles.row}>
+        <>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.button, atMin && styles.disabled]}
+              onPress={() => setPending((p) => clampFontScale(p - FONT_SCALE_STEP))}
+              disabled={atMin}
+            >
+              <Text style={styles.buttonText}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.value}>{Math.round(pending * 100)} %</Text>
+            <TouchableOpacity
+              style={[styles.button, atMax && styles.disabled]}
+              onPress={() => setPending((p) => clampFontScale(p + FONT_SCALE_STEP))}
+              disabled={atMax}
+            >
+              <Text style={styles.buttonText}>＋</Text>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
-            style={[styles.button, atMin && styles.disabled]}
-            onPress={() => change(scale - FONT_SCALE_STEP)}
-            disabled={atMin}
+            style={[styles.apply, (!dirty || saving) && styles.disabled]}
+            onPress={apply}
+            disabled={!dirty || saving}
           >
-            <Text style={styles.buttonText}>−</Text>
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.applyText}>Aplicar</Text>
+            )}
           </TouchableOpacity>
-          <Text style={styles.value}>{Math.round(scale * 100)} %</Text>
-          <TouchableOpacity
-            style={[styles.button, atMax && styles.disabled]}
-            onPress={() => change(scale + FONT_SCALE_STEP)}
-            disabled={atMax}
-          >
-            <Text style={styles.buttonText}>＋</Text>
-          </TouchableOpacity>
-        </View>
+        </>
       ) : (
         <ActivityIndicator />
       )}
@@ -69,7 +97,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderRadius: 16,
     padding: 18,
-    gap: 10,
+    gap: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
@@ -111,5 +139,16 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     minWidth: 80,
     textAlign: 'center',
+  },
+  apply: {
+    backgroundColor: theme.colors.accent,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  applyText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

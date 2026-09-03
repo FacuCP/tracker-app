@@ -806,9 +806,9 @@ que es siempre la principal — ver #38.)
   `Onboarding` (sin perfil) o `Favorites`.
 - **Onboarding.** `OnboardingScreen` (sin header) pide el nombre, lo guarda con
   `updateUserProfile({ name })` y hace `navigation.reset` a Favoritos.
-- **Editar.** `UserNameCard` y `FontSizeCard` en Ajustes. `useFavorites` /
-  `useTrackersViewModel` recargan el saludo con `useFocusEffect`, así que al
-  volver se ve el nombre nuevo.
+- **Editar.** `UserNameCard` en Ajustes. `useFavorites` / `useTrackersViewModel`
+  recargan el saludo con `useFocusEffect`, así que al volver se ve el nombre
+  nuevo. (`fontScale` está en la entidad pero no se usa — ver #40.)
 
 **Alternativas descartadas.**
 
@@ -973,15 +973,24 @@ estrella. Junto con esto se eliminó la preferencia de "pestaña de inicio" (#34
   `TrackerCard` y `MoodTrackerCard` son autónomas, así que suman un callback
   opcional `onFavoriteToggled` para que `FavoritesScreen` recargue y saque la
   card al instante.
-- **Orden de la lista.** Las cards especiales (finanzas, mood) van fijas arriba;
-  los trackers y listas favoritos se combinan en `useFavorites.items` y se
-  ordenan con un `FavoritesSortSelector`: **Por tipo** (default), **A-Z** o
-  **Recientes**. El criterio vive en el estado del hook (no se persiste).
+- **Orden manual.** `useFavorites` arma una única lista de `FavoriteCard`
+  (finanzas, mood, trackers, listas — todo reordenable, incluidas las
+  especiales). El botón "Ordenar" entra en un modo con filas compactas
+  (`FavoriteReorderRow`) y flechas ▲▼; cada movimiento persiste el orden como
+  una lista de claves (`"finance"`, `"mood"`, `"tracker:<id>"`, `"list:<id>"`)
+  en `@app-celu/favorites-order/v1` (`domain/favorites`). Al cargar, se respeta
+  el orden guardado y los ítems nuevos van al final; las claves de ítems que ya
+  no existen se ignoran.
 
 **Alternativas descartadas.**
 
 - **Una colección/entidad "Favoritos" aparte.** Un flag booleano en cada entidad
-  es más simple y no puede quedar desincronizado con el tracker/lista real.
+  es más simple y no puede quedar desincronizado con el tracker/lista real (el
+  orden manual sí es una lista propia, pero es solo un array de claves).
+- **Ordenar por tipo / alfabético / recientes.** Se probó; el usuario prefirió
+  controlar el orden a mano.
+- **Drag & drop.** Necesita `react-native-gesture-handler` + `reanimated`; las
+  flechas ▲▼ alcanzan para una lista corta.
 - **`Alert` nativo para elegir tracker/lista.** Se veía pobre; el usuario pidió
   botones en un modal.
 - **Que "Crear → Tracker" abra directo `CreateTracker`.** El usuario pidió que
@@ -1063,34 +1072,30 @@ colgando en sus movimientos (se muestran como General, no se limpia el campo).
 
 ---
 
-## 40. Tamaño de letra global: parche a `Text.render` *(elección del usuario)*
+## 40. Tamaño de letra global: intentado y pospuesto *(elección del usuario)*
 
 **Contexto.** Se pidió poder agrandar la letra de toda la app (100 % a 150 %, de
 a 10 %) desde Ajustes. Los `fontSize` están hardcodeados en `StyleSheet.create`
 de decenas de componentes; no hay un `<AppText>` central.
 
-**Decisión.** `core/text/textScale.ts` **parchea `Text.render` una sola vez** (al
-importarse): envuelve el elemento devuelto y, si tiene un `fontSize` numérico
-explícito, lo multiplica por la escala actual (los textos anidados sin tamaño
-propio siguen heredando el del padre, ya escalado). La escala es un `let` de
-módulo con listeners; `AppNavigator` la fija al arrancar desde
-`profile.fontScale` y se suscribe con `useAppFontScale()` (re-render desde la
-raíz). La `FontSizeCard` de Ajustes togglea con `updateUserProfile({ fontScale })`
-+ `setAppFontScale`.
+**Estado: no shippeado.** Se probó `core/text/textScale.ts`, que reemplaza el
+`default` del módulo `react-native/Libraries/Text/Text` por un wrapper que
+multiplica el `fontSize` explícito por una escala global (en esta versión de RN
+`Text` es un componente de función sin `.render`, así que no alcanza con
+parchear un método). No terminó de andar y el usuario pidió sacarlo de Ajustes.
 
-**Alternativas descartadas.**
+Quedan en el repo, **sin montar**: `textScale.ts`, `FontSizeCard` y el campo
+`UserProfile.fontScale` (siempre `1`). Para retomar: reimportar `textScale` en
+`App.tsx`, renderizar `FontSizeCard` en `SettingsScreen`, fijar la escala al
+arrancar en `AppNavigator` y hacer que `SettingsScreen` se suscriba con
+`useAppFontScale()`.
 
-- **Context + `<AppText>` propio en toda la app.** Refactor gigante y frágil
-  (habría que acordarse de usarlo siempre).
+**Alternativas (para cuando se retome).**
+
+- **Context + `<AppText>` propio en toda la app.** Refactor grande pero
+  confiable; probablemente el camino correcto si el swap del módulo no alcanza.
 - **Remontar el árbol (`key` en `NavigationContainer`) al cambiar la escala.**
-  Tiraría al usuario a la ruta inicial en cada `+`/`−`. Se acepta que la pantalla
-  actual se ajusta en el momento (re-render propio) y el resto al recibir foco
-  (los viewmodels recargan en `useFocusEffect`).
-
-**Consecuencias.** El parche depende de que `Text` sea un `forwardRef` con
-`.render` (cierto en esta versión de RN); si cambiara, hay un guard que lo
-deja pasar sin romper (la feature simplemente no haría nada). `StyleSheet.flatten`
-corre en cada render de cada `Text` (costo despreciable a esta escala).
+  Tiraría al usuario a la ruta inicial; descartado.
 
 ---
 

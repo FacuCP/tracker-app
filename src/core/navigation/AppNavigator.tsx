@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { container } from '../di/container';
-import { setAppFontScale, useAppFontScale } from '../text/textScale';
 import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
 import { SettingsHeaderButton } from '../../presentation/navigation/SettingsHeaderButton';
 import { FavoritesScreen } from '../../presentation/screens/favorites/FavoritesScreen';
@@ -52,17 +51,11 @@ type Boot = 'loading' | 'onboarding' | 'ready';
 
 export function AppNavigator() {
   const [boot, setBoot] = useState<Boot>('loading');
-  // Se suscribe a la escala de la tipografía: al cambiarla en Ajustes, este
-  // componente (y el árbol por debajo) se re-renderiza.
-  useAppFontScale();
 
   useEffect(() => {
     container.getUserProfile
       .execute()
-      .then((profile) => {
-        if (profile) setAppFontScale(profile.fontScale);
-        setBoot(profile ? 'ready' : 'onboarding');
-      })
+      .then((profile) => setBoot(profile ? 'ready' : 'onboarding'))
       .catch(() => setBoot('onboarding'));
   }, []);
 
