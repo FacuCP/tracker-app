@@ -4,7 +4,9 @@ import { TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
 export interface TrackerEntryDto {
   trackerId: string;
   date: string;
+  /** Legado: una sola opción. Se sigue leyendo. */
   optionId?: string;
+  optionIds?: string[];
   value?: number;
 }
 
@@ -12,16 +14,17 @@ export function trackerEntryToDto(entry: TrackerEntry): TrackerEntryDto {
   return {
     trackerId: entry.trackerId,
     date: entry.date,
-    optionId: entry.optionId,
+    optionIds: entry.optionIds.length > 0 ? [...entry.optionIds] : undefined,
     value: entry.value,
   };
 }
 
 export function trackerEntryFromDto(dto: TrackerEntryDto): TrackerEntry {
+  const optionIds = dto.optionIds ?? (dto.optionId ? [dto.optionId] : []);
   return {
     trackerId: dto.trackerId,
     date: dto.date as IsoDate,
-    optionId: dto.optionId,
+    optionIds,
     value: dto.value,
   };
 }

@@ -7,7 +7,6 @@ import {
   MAX_TRACKER_NAME,
   MIN_OPTIONS,
   Tracker,
-  TrackerKind,
 } from '../../../domain/tracker/entities/Tracker';
 import { TrackerDraft } from '../../../domain/tracker/usecases/TrackerDraft';
 import { OPTION_COLORS } from '../components/OptionColorPicker';
@@ -27,13 +26,17 @@ function defaultRows(): OptionRow[] {
 
 /**
  * ViewModel del formulario de tracker (crear y editar comparten este hook).
+ * Un tracker puede registrar opciones y/o un número.
  */
 export function useTrackerForm(initial?: Tracker | null) {
   const [name, setName] = useState(initial?.name ?? '');
-  const [kind, setKind] = useState<TrackerKind>(initial?.kind ?? 'options');
   const [favorite, setFavorite] = useState(initial?.favorite ?? false);
+  const [hasOptions, setHasOptions] = useState(
+    initial ? initial.options.length > 0 : true,
+  );
+  const [hasCounter, setHasCounter] = useState(initial?.hasCounter ?? false);
   const [options, setOptions] = useState<OptionRow[]>(
-    initial && initial.kind === 'options'
+    initial && initial.options.length > 0
       ? initial.options.map((o) => ({ key: o.id, id: o.id, label: o.label, color: o.color }))
       : defaultRows(),
   );
@@ -62,33 +65,39 @@ export function useTrackerForm(initial?: Tracker | null) {
     return undefined;
   }, [name]);
 
+  const kindError = useMemo(() => {
+    if (!hasOptions && !hasCounter) return 'Elegí opciones y/o número';
+    return undefined;
+  }, [hasOptions, hasCounter]);
+
   const optionsError = useMemo(() => {
-    if (kind !== 'options') return undefined;
+    if (!hasOptions) return undefined;
     if (options.some((o) => o.label.trim().length === 0)) return 'Todas las opciones necesitan nombre';
     return undefined;
-  }, [kind, options]);
+  }, [hasOptions, options]);
 
-  const canSave = !nameError && !optionsError;
+  const canSave = !nameError && !kindError && !optionsError;
 
   function toDraft(): TrackerDraft {
     return {
       name,
-      kind,
       favorite,
-      options:
-        kind === 'options'
-          ? options.map((o) => ({ id: o.id, label: o.label, color: o.color }))
-          : [],
+      hasCounter,
+      options: hasOptions
+        ? options.map((o) => ({ id: o.id, label: o.label, color: o.color }))
+        : [],
     };
   }
 
   return {
     name,
     setName,
-    kind,
-    setKind,
     favorite,
     setFavorite,
+    hasOptions,
+    setHasOptions,
+    hasCounter,
+    setHasCounter,
     options,
     addOption,
     removeOption,
@@ -96,6 +105,7 @@ export function useTrackerForm(initial?: Tracker | null) {
     canAddOption: options.length < MAX_OPTIONS,
     canRemoveOption: options.length > MIN_OPTIONS,
     nameError,
+    kindError,
     optionsError,
     canSave,
     toDraft,

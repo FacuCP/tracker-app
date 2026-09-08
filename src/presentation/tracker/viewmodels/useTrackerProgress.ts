@@ -43,7 +43,7 @@ export function useTrackerProgress(trackerId: string) {
   const entriesByDate = data?.entriesByDate ?? {};
 
   const saveDay = useCallback(
-    async (input: { optionId?: string; value?: number }) => {
+    async (input: { optionIds?: string[]; value?: number }) => {
       if (selectedDate == null) return;
       await container.saveTrackerEntry.execute({ trackerId, date: selectedDate, ...input });
       setSelectedDate(null);

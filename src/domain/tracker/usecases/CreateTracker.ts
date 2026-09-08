@@ -14,11 +14,11 @@ export class CreateTracker {
     const tracker = createTracker({
       id: this.generateId(),
       name: draft.name,
-      kind: draft.kind,
       options:
-        draft.kind === 'options'
+        draft.options.length > 0
           ? draftOptionsToEntities(draft.options, this.generateId)
           : [],
+      hasCounter: draft.hasCounter,
       createdAt: todayIso(),
       favorite: draft.favorite,
     });

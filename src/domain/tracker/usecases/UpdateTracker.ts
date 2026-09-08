@@ -3,8 +3,9 @@ import { TrackerRepository } from '../repositories/TrackerRepository';
 import { TrackerDraft, draftOptionsToEntities } from './TrackerDraft';
 
 /**
- * Edita un tracker existente: nombre, tipo y opciones. Conserva su id y su
- * fecha de creación. Las opciones sin id se tratan como nuevas.
+ * Edita un tracker existente: nombre, opciones y si registra un número.
+ * Conserva su id y su fecha de creación. Las opciones sin id se tratan como
+ * nuevas.
  */
 export class UpdateTracker {
   constructor(
@@ -21,11 +22,11 @@ export class UpdateTracker {
     const tracker = createTracker({
       id: existing.id,
       name: draft.name,
-      kind: draft.kind,
       options:
-        draft.kind === 'options'
+        draft.options.length > 0
           ? draftOptionsToEntities(draft.options, this.generateId)
           : [],
+      hasCounter: draft.hasCounter,
       createdAt: existing.createdAt,
       favorite: draft.favorite,
     });

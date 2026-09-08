@@ -41,24 +41,33 @@ export function TrackerForm({ form, submitLabel, saving, onSubmit, onDelete }: P
       </View>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Tipo</Text>
-        <View style={styles.kindSwitch}>
-          <KindOption
-            active={form.kind === 'options'}
-            title="Opciones"
-            subtitle="Elegís una opción por día (sí/no, etc.)"
-            onPress={() => form.setKind('options')}
-          />
-          <KindOption
-            active={form.kind === 'number'}
-            title="Número"
-            subtitle="Anotás un número por día"
-            onPress={() => form.setKind('number')}
-          />
-        </View>
+        <Text style={styles.label}>Qué registra</Text>
+        <TouchableOpacity
+          style={styles.checkRow}
+          onPress={() => form.setHasOptions(!form.hasOptions)}
+          activeOpacity={0.7}
+        >
+          <Checkbox checked={form.hasOptions} onToggle={() => form.setHasOptions(!form.hasOptions)} />
+          <View style={styles.checkTexts}>
+            <Text style={styles.checkTitle}>Opciones</Text>
+            <Text style={styles.checkHint}>Elegís una o dos opciones por día (sí/no, etc.)</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.checkRow}
+          onPress={() => form.setHasCounter(!form.hasCounter)}
+          activeOpacity={0.7}
+        >
+          <Checkbox checked={form.hasCounter} onToggle={() => form.setHasCounter(!form.hasCounter)} />
+          <View style={styles.checkTexts}>
+            <Text style={styles.checkTitle}>Número</Text>
+            <Text style={styles.checkHint}>Un contador por día (se suma / resta)</Text>
+          </View>
+        </TouchableOpacity>
+        {form.kindError ? <Text style={styles.error}>{form.kindError}</Text> : null}
       </View>
 
-      {form.kind === 'options' ? (
+      {form.hasOptions ? (
         <View style={styles.field}>
           <Text style={styles.label}>Opciones</Text>
           {form.options.map((option, index) => (
@@ -124,29 +133,6 @@ export function TrackerForm({ form, submitLabel, saving, onSubmit, onDelete }: P
   );
 }
 
-function KindOption({
-  active,
-  title,
-  subtitle,
-  onPress,
-}: {
-  active: boolean;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.kindOption, active && styles.kindOptionActive]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <Text style={[styles.kindTitle, active && styles.kindTitleActive]}>{title}</Text>
-      <Text style={styles.kindSubtitle}>{subtitle}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   content: {
     padding: 16,
@@ -173,32 +159,26 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     fontSize: 12,
   },
-  kindSwitch: {
+  checkRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-  },
-  kindOption: {
-    flex: 1,
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 12,
     padding: 12,
-    gap: 3,
     backgroundColor: '#f8f9fc',
   },
-  kindOptionActive: {
-    borderColor: '#2563eb',
-    backgroundColor: '#eff6ff',
+  checkTexts: {
+    flex: 1,
+    gap: 2,
   },
-  kindTitle: {
+  checkTitle: {
     fontSize: 14,
     fontWeight: '800',
     color: '#374151',
   },
-  kindTitleActive: {
-    color: '#1e3a8a',
-  },
-  kindSubtitle: {
+  checkHint: {
     fontSize: 11,
     color: '#6b7280',
   },

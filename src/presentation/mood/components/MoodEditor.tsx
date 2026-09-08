@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import { MoodColor, getMoodColorInfo } from '../../../domain/mood/entities/MoodColor';
 import { NOTE_MAX, NOTE_MIN } from '../../../domain/mood/entities/MoodEntry';
 import { parseNoteInput } from '../parseNoteInput';
-import { DiagonalSplitSquare } from './DiagonalSplitSquare';
+import { DiagonalSplitSquare } from '../../components/DiagonalSplitSquare';
 import { MoodColorPicker } from './MoodColorPicker';
 
 interface Props {

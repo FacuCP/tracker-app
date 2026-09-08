@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { getMoodColorInfo } from '../../../domain/mood/entities/MoodColor';
 import { MoodEntry } from '../../../domain/mood/entities/MoodEntry';
 import { formatNote } from '../parseNoteInput';
-import { DiagonalSplitSquare } from './DiagonalSplitSquare';
+import { DiagonalSplitSquare } from '../../components/DiagonalSplitSquare';
 
 interface Props {
   entry: MoodEntry;

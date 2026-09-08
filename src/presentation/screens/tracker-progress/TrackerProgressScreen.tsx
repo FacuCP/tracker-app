@@ -53,19 +53,19 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
     });
   }, [navigation, tracker, trackerId]);
 
-  function dayFill(date: string): string | undefined {
+  function dayFills(date: string): string[] | undefined {
     const entry = vm.entriesByDate[date];
     if (!entry || !tracker) return undefined;
-    if (tracker.kind === 'options') {
-      return entry.optionId ? getTrackerOption(tracker, entry.optionId)?.color : undefined;
-    }
-    return entry.value != null ? NUMBER_DAY_FILL : undefined;
+    const optionColors = entry.optionIds
+      .map((id) => getTrackerOption(tracker, id)?.color)
+      .filter((c): c is string => c != null);
+    if (optionColors.length > 0) return optionColors;
+    return entry.value != null ? [NUMBER_DAY_FILL] : undefined;
   }
 
   function dayLabel(date: string): string | undefined {
     const entry = vm.entriesByDate[date];
-    if (!entry || tracker?.kind !== 'number') return undefined;
-    return entry.value != null ? String(entry.value) : undefined;
+    return entry?.value != null ? String(entry.value) : undefined;
   }
 
   const renderDay = ({ date, dayOfMonth, isToday, size }: {
@@ -79,7 +79,7 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
       date={date}
       size={size}
       isToday={isToday}
-      fill={dayFill(date)}
+      fills={dayFills(date)}
       label={dayLabel(date)}
       onPress={vm.openDay}
     />
@@ -130,7 +130,7 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
               ) : (
                 <CalendarYear
                   year={vm.anchor.getFullYear()}
-                  dayColor={dayFill}
+                  dayColors={dayFills}
                   onSelectMonth={vm.showMonth}
                 />
               )}

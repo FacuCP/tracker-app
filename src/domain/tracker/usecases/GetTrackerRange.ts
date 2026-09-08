@@ -40,8 +40,8 @@ export class GetTrackerRange {
     for (const entry of list) {
       entriesByDate[entry.date] = entry;
 
-      if (entry.optionId != null) {
-        optionCounts[entry.optionId] = (optionCounts[entry.optionId] ?? 0) + 1;
+      for (const optionId of entry.optionIds) {
+        optionCounts[optionId] = (optionCounts[optionId] ?? 0) + 1;
       }
       if (entry.value != null) {
         count += 1;

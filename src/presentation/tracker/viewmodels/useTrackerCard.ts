@@ -3,24 +3,23 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { container } from '../../../core/di/container';
 import { todayIso } from '../../../core/utils/date';
-import { Tracker } from '../../../domain/tracker/entities/Tracker';
+import { MAX_OPTIONS_PER_DAY, Tracker } from '../../../domain/tracker/entities/Tracker';
 import { TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
 
 /**
  * ViewModel de la card de un tracker del usuario en el home.
  *
- * - Opciones: se elige una opción y se **guarda**; una vez guardado el día
- *   queda en modo lectura y se edita desde "Ver progreso" (igual que el mood
- *   tracker).
- * - Número: funciona como **contador**; cada − / + persiste al instante y se
- *   puede seguir ajustando durante el día.
+ * - Opciones: se eligen una o dos (como el mood tracker) y se **guardan**; una
+ *   vez guardadas quedan en modo lectura y se editan desde "Ver progreso".
+ * - Número: funciona como **contador**; cada − / + persiste al instante.
+ * Un tracker puede tener las dos cosas a la vez.
  */
 export function useTrackerCard(trackerId: string) {
   const date = todayIso();
   const [tracker, setTracker] = useState<Tracker | null>(null);
   const [entry, setEntry] = useState<TrackerEntry | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(undefined);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -31,7 +30,7 @@ export function useTrackerCard(trackerId: string) {
     ]);
     setTracker(t);
     setEntry(e);
-    setSelectedOptionId(undefined);
+    setSelectedOptionIds([]);
     setLoading(false);
   }, [trackerId, date]);
 
@@ -47,32 +46,46 @@ export function useTrackerCard(trackerId: string) {
     }, [reload]),
   );
 
-  // --- Opciones ---
-  const selectOption = useCallback((optionId: string) => {
-    setSelectedOptionId((prev) => (prev === optionId ? undefined : optionId));
+  // --- Opciones (hasta 2, reemplaza la más vieja) ---
+  const toggleOption = useCallback((optionId: string) => {
+    setSelectedOptionIds((prev) => {
+      if (prev.includes(optionId)) return prev.filter((id) => id !== optionId);
+      if (prev.length < MAX_OPTIONS_PER_DAY) return [...prev, optionId];
+      return [...prev.slice(1), optionId];
+    });
   }, []);
 
-  const saveOption = useCallback(async () => {
-    if (!selectedOptionId) return;
+  const saveOptions = useCallback(async () => {
+    if (selectedOptionIds.length === 0) return;
     setSaving(true);
     try {
-      await container.saveTrackerEntry.execute({ trackerId, date, optionId: selectedOptionId });
+      await container.saveTrackerEntry.execute({
+        trackerId,
+        date,
+        optionIds: selectedOptionIds,
+        value: entry?.value,
+      });
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2500);
       await reload();
     } finally {
       setSaving(false);
     }
-  }, [selectedOptionId, trackerId, date, reload]);
+  }, [selectedOptionIds, trackerId, date, entry, reload]);
 
   // --- Número (contador) ---
   const setCount = useCallback(
     async (next: number) => {
       const value = Math.max(0, Math.round(next));
-      await container.saveTrackerEntry.execute({ trackerId, date, value });
+      await container.saveTrackerEntry.execute({
+        trackerId,
+        date,
+        value,
+        optionIds: entry?.optionIds ?? [],
+      });
       await reload();
     },
-    [trackerId, date, reload],
+    [trackerId, date, entry, reload],
   );
 
   const clearEntry = useCallback(async () => {
@@ -92,9 +105,10 @@ export function useTrackerCard(trackerId: string) {
     loading,
     saving,
     justSaved,
-    selectedOptionId,
-    selectOption,
-    saveOption,
+    selectedOptionIds,
+    toggleOption,
+    saveOptions,
+    optionsLocked: (entry?.optionIds.length ?? 0) > 0,
     count: entry?.value ?? 0,
     setCount,
     clearEntry,

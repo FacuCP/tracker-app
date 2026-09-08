@@ -320,7 +320,8 @@ siempre ocurre en semana o mes, nunca sobre las celdas diminutas del año.
 **Contexto.** Un día con dos colores tiene que verse "mitad y mitad" en
 diagonal, tanto en el calendario como en la card.
 
-**Decisión.** [`DiagonalSplitSquare`](../src/presentation/mood/components/DiagonalSplitSquare.tsx):
+**Decisión.** [`DiagonalSplitSquare`](../src/presentation/components/DiagonalSplitSquare.tsx)
+(genérico; lo usan el mood y también las celdas de tracker y la vista Año):
 un `View` con `backgroundColor` (una mitad) y encima un triángulo hecho con el
 truco de **bordes de una caja de tamaño cero** (`borderTopWidth` +
 `borderRightWidth` con un color y el resto transparente). Con un solo color,
@@ -554,36 +555,41 @@ calendario Semana/Mes/Año, pero pintan los días distinto.
 `CalendarMonth` y `CalendarYear` sólo saben de grillas, semanas que empiezan en
 lunes y tamaños de celda. Reciben un **`renderDay(day)`** (con `date`,
 `dayOfMonth`, `isToday`, `size`) y devuelven lo que la feature quiera. Para el
-año, un `dayColor(date)` que devuelve un hex o `undefined`. El estado del
-período es el hook compartido `useCalendarPeriod` (#12b).
+año, un **`dayColors(date)`** que devuelve 1 o 2 hex (o `undefined`); con 2, el
+puntito se dibuja dividido en diagonal (`DiagonalSplitSquare`, ahora en
+`presentation/components/`). El estado del período es el hook compartido
+`useCalendarPeriod` (#12b).
 
 **Consecuencias.** El mood pinta con `DayCell` (diagonal + nota); el tracker con
-`TrackerDayCell` (un color de relleno + número opcional). Agregar otra vista de
-calendario en el futuro se hace una sola vez.
+`TrackerDayCell` (uno o dos colores en diagonal + número opcional). La vista Año
+muestra los días de dos colores igual que semana/mes.
 
 ---
 
-## 26. Modelo de tracker: `kind`, un valor por día, opciones con id
+## 26. Modelo de tracker: opciones y/o número, hasta 2 opciones por día
 
-**Decisión.**
+**Decisión.** *(Rediseñado — antes había un `kind: 'options' | 'number'` y un
+solo valor por día.)*
 
-- `Tracker` tiene `kind: 'options' | 'number'`. Si es `'options'`, lleva entre
-  **1 y 6** `TrackerOption` (`id`, `label`, `color` hex); si es `'number'`, la
-  lista va vacía. Validado en `createTracker`. Con una sola opción el tracker
-  funciona como un "hecho / no hecho" (el día tiene registro o no).
-- `TrackerEntry` es **un valor por día**: `optionId` (para `'options'`) o
-  `value: number` (para `'number'`). `createTrackerEntry(tracker, ...)` recibe
-  el tracker para validar que la opción existe / el número es finito.
-- Las opciones tienen **id estable**: al editar un tracker, renombrar o
-  recolorear una opción **no** rompe los registros históricos que la usan. Las
-  opciones nuevas reciben id en el momento de guardar.
+- `Tracker` = `{ options: TrackerOption[], hasCounter: boolean, ... }`. Puede
+  tener **opciones** (1 a 6, con `id`/`label`/`color`), **contador** (número), o
+  **las dos cosas**. `createTracker` exige al menos una. Con una sola opción
+  funciona como un "hecho / no hecho".
+- `TrackerEntry` = `{ optionIds: string[], value?: number }`. Se pueden elegir
+  **hasta 2 opciones** por día (como el mood tracker; `MAX_OPTIONS_PER_DAY`,
+  reemplazo FIFO en la UI) y/o un número. `createTrackerEntry(tracker, ...)`
+  filtra las opciones inválidas, dedupe, cap a 2, y pide que haya al menos una
+  opción o un número.
+- Las opciones tienen **id estable**: renombrar/recolorear no rompe la historia.
+- **Compatibilidad.** Los DTO viejos se siguen leyendo: `kind: 'number'` →
+  `hasCounter: true`; `optionId: X` → `optionIds: [X]`.
 
 **Alternativas descartadas.**
 
 - **Guardar la opción elegida como su label o su color.** Editar la opción
   reescribiría la historia.
-- **Varios registros por día.** Se descartó por pedido explícito: uno por día,
-  como el sí/no típico.
+- **Un tracker es opciones *o* número, no las dos.** El usuario pidió que
+  pudieran ser las dos a la vez.
 
 ---
 
@@ -612,22 +618,21 @@ dos comportamientos distintos por tipo.
 
 **Decisión.**
 
-- **Opciones.** Se elige una opción (estado local `selectedOptionId`) y se toca
-  **Guardar**. Al guardar, `entry` queda seteado y la card pasa a modo lectura
-  (`OptionSummary`), igual que el mood tracker (#18): se edita desde "Ver
-  progreso". `useTrackerCard` recarga con `useFocusEffect`, así que volver del
-  calendario refleja el cambio.
+- **Opciones.** Se eligen una o dos opciones (estado local `selectedOptionIds`)
+  y se toca **Guardar**. Al guardar, la parte de opciones pasa a modo lectura
+  (`OptionsSummary`), igual que el mood tracker (#18): se edita desde "Ver
+  progreso". El "bloqueo" se decide por `entry.optionIds.length > 0`, no por
+  `entry != null`.
 - **Número.** La card muestra un [`Counter`](../src/presentation/tracker/components/Counter.tsx)
-  (− valor +). Cada toque **persiste al instante** (`saveTrackerEntry` con el
-  valor absoluto nuevo) para poder ir sumando/restando durante el día. Nunca
-  baja de 0. "Borrar" elimina el registro del día. No se bloquea: un contador
-  se sigue moviendo.
+  (− valor +). Cada toque **persiste al instante** para poder ir sumando/restando
+  durante el día. Nunca baja de 0. "Borrar" elimina el registro del día. No se
+  bloquea.
+- **Híbrido.** Un tracker con las dos cosas muestra los dos bloques. Guardar las
+  opciones preserva el `value` actual y mover el contador preserva los
+  `optionIds` (el viewmodel mergea con `entry`).
 
-El mismo `Counter` se usa en el modal de edición del calendario para trackers
-de número (antes era un `TextInput`).
-
-**Consecuencias.** El "bloqueo tras guardar" aplica al mood y a los trackers de
-opciones; los de número son la excepción por su naturaleza de contador.
+**Consecuencias.** El "bloqueo tras guardar" aplica al mood y a la parte de
+opciones de un tracker; el contador es siempre editable.
 
 ---
 

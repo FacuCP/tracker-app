@@ -6,13 +6,13 @@ import { TrackerRepository } from '../repositories/TrackerRepository';
 export interface SaveTrackerEntryInput {
   trackerId: string;
   date: IsoDate;
-  optionId?: string;
+  optionIds?: readonly string[];
   value?: number;
 }
 
 /**
  * Crea o actualiza el registro de un día. Busca el tracker para validar que
- * la opción/el número tengan sentido para su tipo.
+ * las opciones / el número tengan sentido.
  */
 export class SaveTrackerEntry {
   constructor(
@@ -28,7 +28,7 @@ export class SaveTrackerEntry {
 
     const entry = createTrackerEntry(tracker, {
       date: input.date,
-      optionId: input.optionId,
+      optionIds: input.optionIds,
       value: input.value,
     });
     await this.entries.saveEntry(entry);

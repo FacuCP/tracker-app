@@ -10,27 +10,12 @@ interface Props {
 }
 
 /**
- * Resumen del período: para trackers de opciones, una card por opción con su
- * conteo; para trackers de número, promedio / mínimo / máximo / total.
+ * Resumen del período: si el tracker tiene opciones, una card por opción con su
+ * conteo; si tiene número, promedio / mínimo / máximo / total. Un tracker con
+ * las dos cosas muestra ambos bloques.
  */
 export function TrackerStats({ tracker, optionCounts, numberStats }: Props) {
-  if (tracker.kind === 'options') {
-    return (
-      <View style={styles.grid}>
-        {tracker.options.map((option) => (
-          <View key={option.id} style={styles.card}>
-            <View style={styles.top}>
-              <View style={[styles.swatch, { backgroundColor: option.color }]} />
-              <Text style={styles.count}>{optionCounts[option.id] ?? 0}</Text>
-            </View>
-            <Text style={styles.label}>{option.label}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  }
-
-  const stats: { label: string; value: string }[] = [
+  const numberCards: { label: string; value: string }[] = [
     { label: 'Registros', value: String(numberStats.count) },
     { label: 'Promedio', value: numberStats.average != null ? String(numberStats.average) : '—' },
     { label: 'Mínimo', value: numberStats.min != null ? String(numberStats.min) : '—' },
@@ -39,18 +24,39 @@ export function TrackerStats({ tracker, optionCounts, numberStats }: Props) {
   ];
 
   return (
-    <View style={styles.grid}>
-      {stats.map((stat) => (
-        <View key={stat.label} style={styles.card}>
-          <Text style={styles.count}>{stat.value}</Text>
-          <Text style={styles.label}>{stat.label}</Text>
+    <View style={styles.wrap}>
+      {tracker.options.length > 0 ? (
+        <View style={styles.grid}>
+          {tracker.options.map((option) => (
+            <View key={option.id} style={styles.card}>
+              <View style={styles.top}>
+                <View style={[styles.swatch, { backgroundColor: option.color }]} />
+                <Text style={styles.count}>{optionCounts[option.id] ?? 0}</Text>
+              </View>
+              <Text style={styles.label}>{option.label}</Text>
+            </View>
+          ))}
         </View>
-      ))}
+      ) : null}
+
+      {tracker.hasCounter ? (
+        <View style={styles.grid}>
+          {numberCards.map((stat) => (
+            <View key={stat.label} style={styles.card}>
+              <Text style={styles.count}>{stat.value}</Text>
+              <Text style={styles.label}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    gap: 12,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

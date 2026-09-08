@@ -76,9 +76,9 @@ export function MoodProgressScreen() {
         ) : (
           <CalendarYear
             year={vm.anchor.getFullYear()}
-            dayColor={(date) => {
+            dayColors={(date) => {
               const entry = vm.entriesByDate[date];
-              return entry ? getMoodColorInfo(entry.colors[0]).hex : undefined;
+              return entry ? entry.colors.map((c) => getMoodColorInfo(c).hex) : undefined;
             }}
             onSelectMonth={vm.showMonth}
           />

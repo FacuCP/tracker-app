@@ -1,35 +1,47 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { IsoDate } from '../../../core/utils/date';
+import { DiagonalSplitSquare } from '../../components/DiagonalSplitSquare';
 
 interface Props {
   day: number;
   date: IsoDate;
   size: number;
   isToday?: boolean;
-  /** Color de relleno del día (opción elegida). */
-  fill?: string;
-  /** Texto sobre la celda (el número, para trackers de tipo número). */
+  /** Uno o dos colores de relleno (opciones elegidas). */
+  fills?: string[];
+  /** Texto sobre la celda (el número). */
   label?: string;
   onPress?: (date: IsoDate) => void;
 }
 
 /**
- * Celda de un día para trackers del usuario. Más simple que la del mood
- * tracker: un solo color de relleno y, opcionalmente, un número encima.
+ * Celda de un día para trackers del usuario: relleno de uno o dos colores
+ * (dividido en diagonal) y, opcionalmente, un número encima.
  */
-export function TrackerDayCell({ day, date, size, isToday, fill, label, onPress }: Props) {
-  const filled = fill != null;
+export function TrackerDayCell({ day, date, size, isToday, fills, label, onPress }: Props) {
+  const colors = fills ?? [];
+  const filled = colors.length > 0;
+
   const content = (
     <View style={[styles.cell, { width: size, height: size }]}>
-      <View
-        style={[
-          styles.box,
-          { width: size, height: size },
-          filled ? { backgroundColor: fill } : styles.empty,
-          isToday && styles.today,
-        ]}
-      />
+      {colors.length >= 2 ? (
+        <DiagonalSplitSquare
+          colors={colors.slice(0, 2)}
+          size={size}
+          borderRadius={8}
+          borderColor={isToday ? '#111827' : undefined}
+        />
+      ) : (
+        <View
+          style={[
+            styles.box,
+            { width: size, height: size },
+            filled ? { backgroundColor: colors[0] } : styles.empty,
+            isToday && styles.today,
+          ]}
+        />
+      )}
 
       <View style={[styles.badge, filled && styles.badgeOnColor]}>
         <Text style={[styles.badgeText, filled && styles.badgeTextOnColor]}>{day}</Text>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { capitalize, formatLongDate, IsoDate } from '../../../core/utils/date';
-import { Tracker } from '../../../domain/tracker/entities/Tracker';
+import { MAX_OPTIONS_PER_DAY, Tracker } from '../../../domain/tracker/entities/Tracker';
 import { TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
 import { Counter } from './Counter';
 
@@ -11,28 +11,43 @@ interface Props {
   date: IsoDate | null;
   entry: TrackerEntry | null;
   onClose: () => void;
-  onSave: (input: { optionId?: string; value?: number }) => Promise<void> | void;
+  onSave: (input: { optionIds?: string[]; value?: number }) => Promise<void> | void;
   onDelete: () => Promise<void> | void;
 }
 
 /** Modal para editar el registro de un día de un tracker del usuario. */
 export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelete }: Props) {
-  const [optionId, setOptionId] = useState<string | undefined>(undefined);
+  const [optionIds, setOptionIds] = useState<string[]>([]);
   const [count, setCount] = useState(0);
   const [saving, setSaving] = useState(false);
 
+  const hasOptions = tracker.options.length > 0;
+
   useEffect(() => {
-    setOptionId(entry?.optionId);
+    setOptionIds([...(entry?.optionIds ?? [])]);
     setCount(entry?.value != null ? Math.max(0, Math.round(entry.value)) : 0);
     setSaving(false);
   }, [date, entry]);
 
-  const canSave = tracker.kind === 'options' ? optionId != null : true;
+  function toggleOption(id: string) {
+    setOptionIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length < MAX_OPTIONS_PER_DAY) return [...prev, id];
+      return [...prev.slice(1), id];
+    });
+  }
+
+  // Un tracker con contador siempre se puede guardar (aunque sea con 0); si
+  // solo tiene opciones, hace falta elegir al menos una.
+  const canSave = tracker.hasCounter || optionIds.length > 0;
 
   async function handleSave() {
     setSaving(true);
     try {
-      await onSave(tracker.kind === 'options' ? { optionId } : { value: count });
+      await onSave({
+        optionIds: hasOptions ? optionIds : undefined,
+        value: tracker.hasCounter ? count : undefined,
+      });
     } finally {
       setSaving(false);
     }
@@ -46,11 +61,11 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
           <Text style={styles.title}>{date ? capitalize(formatLongDate(date)) : ''}</Text>
           <Text style={styles.trackerName}>{tracker.name}</Text>
 
-          <ScrollView keyboardShouldPersistTaps="handled" style={styles.body}>
-            {tracker.kind === 'options' ? (
+          <ScrollView keyboardShouldPersistTaps="handled" style={styles.body} contentContainerStyle={styles.bodyContent}>
+            {hasOptions ? (
               <View style={styles.options}>
                 {tracker.options.map((option) => {
-                  const selected = option.id === optionId;
+                  const selected = optionIds.includes(option.id);
                   return (
                     <TouchableOpacity
                       key={option.id}
@@ -59,7 +74,7 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
                         { borderColor: option.color },
                         selected && { backgroundColor: option.color },
                       ]}
-                      onPress={() => setOptionId(selected ? undefined : option.id)}
+                      onPress={() => toggleOption(option.id)}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
@@ -69,11 +84,13 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
                   );
                 })}
               </View>
-            ) : (
+            ) : null}
+
+            {tracker.hasCounter ? (
               <View style={styles.counterWrap}>
                 <Counter value={count} onChange={(next) => setCount(Math.max(0, next))} />
               </View>
-            )}
+            ) : null}
           </ScrollView>
 
           <View style={styles.actions}>
@@ -129,6 +146,9 @@ const styles = StyleSheet.create({
   },
   body: {
     marginVertical: 12,
+  },
+  bodyContent: {
+    gap: 16,
   },
   options: {
     flexDirection: 'row',

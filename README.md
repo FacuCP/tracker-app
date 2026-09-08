@@ -83,7 +83,7 @@ src/
 │   │   ├── repositories/        # MoodRepository (puerto)
 │   │   └── usecases/            # GetMoodEntry, SaveMoodEntry, DeleteMoodEntry, GetMoodRange
 │   ├── tracker/
-│   │   ├── entities/            # Tracker (kind 'options' | 'number', opciones), TrackerEntry
+│   │   ├── entities/            # Tracker (opciones y/o hasCounter), TrackerEntry (optionIds[], value?)
 │   │   ├── repositories/        # TrackerRepository, TrackerEntryRepository (puertos)
 │   │   └── usecases/            # Create/Update/Delete/GetTracker(s), Save/Delete/GetTrackerEntry,
 │   │                            # GetTrackerRange (registros + estadísticas del rango)
@@ -128,7 +128,8 @@ src/
     │                            # CalendarWeek/Month/Year (render-prop por día),
     │                            # CalendarViewSwitch, useCalendarPeriod
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
-    ├── components/              # ComingSoon (placeholder), KeyboardAvoider, Checkbox, FavoriteStar
+    ├── components/              # ComingSoon, KeyboardAvoider, Checkbox, FavoriteStar,
+    │                            # DiagonalSplitSquare (celda de 1-2 colores en diagonal)
     ├── backup/                  # useBackup (exportar/importar el .json)
     ├── user/components/         # UserNameCard, NotificationsCard (Ajustes); FontSizeCard sin montar
     ├── screens/
@@ -149,7 +150,7 @@ src/
     │   ├── viewmodels/          # useLists, useListDetail
     │   └── parseRating.ts       # Parseo/validación del campo Rating / Prioridad
     ├── mood/
-    │   ├── components/          # DiagonalSplitSquare, MoodColorPicker, MoodEditor,
+    │   ├── components/          # MoodColorPicker, MoodEditor,
     │   │                        # MoodEntrySummary, MoodTrackerCard, DayCell,
     │   │                        # MoodReferenceCards, MoodDayModal
     │   ├── viewmodels/          # useMoodTrackerCard, useMoodProgress
@@ -279,40 +280,36 @@ lista de cards y no hay una colección de "favoritos" aparte.
 
 ## Trackers del usuario
 
-Versión más simple del mood tracker. Cada tracker tiene un **nombre** y un
-**tipo**, y se registra **un solo valor por día**.
+Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
+(al menos una de las dos):
 
-- **Tracker de opciones**: se elige una opción por día. Arranca con **Sí**
-  (verde) y **No** (rojo), pero las opciones se configuran (nombre y color, de 1
-  a 6). Con una sola opción funciona como un "hecho / no hecho".
-- **Tracker de número**: un **contador** por día que se va sumando/restando
-  (nunca baja de 0).
+- **Opciones**: se eligen **una o dos** por día (como el mood tracker; al tocar
+  una tercera se reemplaza la más vieja). Arrancan con **Sí** (verde) / **No**
+  (rojo), configurables (nombre y color, de 1 a 6). Con una sola opción funciona
+  como un "hecho / no hecho".
+- **Número**: un **contador** por día que se va sumando/restando (nunca baja de 0).
 
 ### Pantallas
 
 - **Nuevo tracker / Editar tracker** ([`tracker-form/`](src/presentation/screens/tracker-form/)):
-  nombre, tipo y —si es de opciones— la lista de opciones editable. Editar
-  además permite **borrar** el tracker (y todos sus registros).
+  nombre, dos checkboxes (**Opciones** / **Número**) y —si tiene opciones— la
+  lista editable. Editar además permite **borrar** el tracker (y sus registros).
 - **Progreso del tracker** ([`tracker-progress/`](src/presentation/screens/tracker-progress/)):
-  el mismo calendario Semana/Mes/Año. Además del control de arriba, se puede
-  **swipear el calendario** a los lados para cambiar de vista (izquierda =
-  alejar hacia Año, derecha = acercar hacia Semana).
-  - Opciones → el día se pinta del color de la opción; abajo, una card por
-    opción con su conteo del período.
-  - Número → el contador se muestra sobre el día; abajo, **registros / promedio /
-    mínimo / máximo / total**.
-  - "Editar" en la barra superior abre el formulario de edición.
+  el mismo calendario Semana/Mes/Año, con **swipe** para cambiar de vista. Los
+  días con dos opciones se pintan **divididos en diagonal** (también en la vista
+  Año); el número va sobre la celda. Abajo, el **resumen**: una card por opción
+  con su conteo y/o **registros / promedio / mín / máx / total** del número.
+  "Editar" en la barra superior abre el formulario.
 
 ### Card del tracker
 
-- **Opciones**: se elige una opción y se toca **Guardar**. Una vez guardado el
-  día queda en modo lectura; para cambiarlo hay que ir a "Ver progreso" (igual
-  que el mood tracker).
-- **Número**: es un **contador** con botones − / +. Cada toque persiste al
-  instante, así se puede seguir ajustando durante el día; "Borrar" lo saca.
-- **Estrella** en la esquina superior derecha: marca/desmarca el tracker como
-  favorito. También hay un checkbox "Agregar a Favoritos" en el formulario de
-  crear/editar.
+- **Opciones**: se eligen 1 o 2 y se toca **Guardar**. Quedan en modo lectura;
+  para cambiarlas hay que ir a "Ver progreso" (igual que el mood tracker).
+- **Número**: **contador** con − / +. Cada toque persiste al instante; "Borrar"
+  lo saca.
+- Un tracker con las dos cosas muestra los dos bloques.
+- **Estrella** arriba a la derecha: favorito. También hay un checkbox "Agregar a
+  Favoritos" en el formulario.
 
 ## Listas
 

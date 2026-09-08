@@ -1,4 +1,4 @@
-import { TrackerKind, TrackerOption } from '../entities/Tracker';
+import { TrackerOption } from '../entities/Tracker';
 
 /** Datos que manda la UI para crear o editar un tracker. */
 export interface TrackerOptionDraft {
@@ -10,8 +10,10 @@ export interface TrackerOptionDraft {
 
 export interface TrackerDraft {
   name: string;
-  kind: TrackerKind;
+  /** Opciones a registrar; vacío = el tracker no registra opciones. */
   options: TrackerOptionDraft[];
+  /** Si registra un número por día. */
+  hasCounter: boolean;
   favorite: boolean;
 }
 

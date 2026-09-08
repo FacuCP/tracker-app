@@ -23,6 +23,8 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
     onFavoriteToggled?.();
   }
 
+  const hasOptions = (tracker?.options.length ?? 0) > 0;
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -38,60 +40,70 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
 
       {vm.loading || !tracker ? (
         <ActivityIndicator style={styles.loader} />
-      ) : tracker.kind === 'options' ? (
-        vm.entry ? (
-          <OptionSummary
-            label={getTrackerOption(tracker, vm.entry.optionId ?? '')?.label ?? '—'}
-            color={getTrackerOption(tracker, vm.entry.optionId ?? '')?.color ?? '#9ca3af'}
-          />
-        ) : (
-          <>
-            <View style={styles.options}>
-              {tracker.options.map((option) => {
-                const selected = vm.selectedOptionId === option.id;
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[
-                      styles.optionChip,
-                      { borderColor: option.color },
-                      selected && { backgroundColor: option.color },
-                    ]}
-                    onPress={() => vm.selectOption(option.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                (!vm.selectedOptionId || vm.saving) && styles.saveButtonDisabled,
-              ]}
-              onPress={vm.saveOption}
-              disabled={!vm.selectedOptionId || vm.saving}
-            >
-              {vm.saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.saveText}>Guardar</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        )
       ) : (
-        <View style={styles.counterRow}>
-          <Counter value={vm.count} onChange={vm.setCount} />
-          {vm.entry ? (
-            <TouchableOpacity onPress={vm.clearEntry} style={styles.clearButton}>
-              <Text style={styles.clearText}>Borrar</Text>
-            </TouchableOpacity>
+        <>
+          {hasOptions ? (
+            vm.optionsLocked ? (
+              <OptionsSummary
+                labels={(vm.entry?.optionIds ?? []).map(
+                  (id) => getTrackerOption(tracker, id)?.label ?? '—',
+                )}
+                colors={(vm.entry?.optionIds ?? []).map(
+                  (id) => getTrackerOption(tracker, id)?.color ?? '#9ca3af',
+                )}
+              />
+            ) : (
+              <>
+                <View style={styles.options}>
+                  {tracker.options.map((option) => {
+                    const selected = vm.selectedOptionIds.includes(option.id);
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[
+                          styles.optionChip,
+                          { borderColor: option.color },
+                          selected && { backgroundColor: option.color },
+                        ]}
+                        onPress={() => vm.toggleOption(option.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    (vm.selectedOptionIds.length === 0 || vm.saving) && styles.saveButtonDisabled,
+                  ]}
+                  onPress={vm.saveOptions}
+                  disabled={vm.selectedOptionIds.length === 0 || vm.saving}
+                >
+                  {vm.saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveText}>Guardar</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )
           ) : null}
-        </View>
+
+          {tracker.hasCounter ? (
+            <View style={styles.counterRow}>
+              <Counter value={vm.count} onChange={vm.setCount} />
+              {vm.entry ? (
+                <TouchableOpacity onPress={vm.clearEntry} style={styles.clearButton}>
+                  <Text style={styles.clearText}>Borrar</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+        </>
       )}
 
       <TouchableOpacity onPress={onSeeProgress} style={styles.progressButton}>
@@ -101,12 +113,16 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
   );
 }
 
-function OptionSummary({ label, color }: { label: string; color: string }) {
+function OptionsSummary({ labels, colors }: { labels: string[]; colors: string[] }) {
   return (
     <View style={styles.summary}>
-      <View style={[styles.summaryDot, { backgroundColor: color }]} />
+      <View style={styles.summaryDots}>
+        {colors.map((color, i) => (
+          <View key={i} style={[styles.summaryDot, { backgroundColor: color }]} />
+        ))}
+      </View>
       <View style={styles.summaryTexts}>
-        <Text style={styles.summaryLabel}>{label}</Text>
+        <Text style={styles.summaryLabel}>{labels.join(' · ') || '—'}</Text>
         <Text style={styles.summaryHint}>Ya registraste hoy. Editás desde “Ver progreso”.</Text>
       </View>
     </View>
@@ -195,6 +211,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  summaryDots: {
+    flexDirection: 'row',
+    gap: 4,
   },
   summaryDot: {
     width: 28,
