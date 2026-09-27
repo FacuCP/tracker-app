@@ -8,6 +8,7 @@ export interface GymExerciseDto {
   reps: number | null;
   weightKg: number;
   position: number;
+  description?: string;
 }
 
 export function gymExerciseToDto(exercise: GymExercise): GymExerciseDto {
@@ -19,6 +20,7 @@ export function gymExerciseToDto(exercise: GymExercise): GymExerciseDto {
     reps: exercise.reps,
     weightKg: exercise.weightKg,
     position: exercise.position,
+    description: exercise.description,
   };
 }
 
@@ -31,5 +33,6 @@ export function gymExerciseFromDto(dto: GymExerciseDto): GymExercise {
     reps: dto.reps,
     weightKg: dto.weightKg ?? 0,
     position: dto.position,
+    description: dto.description,
   });
 }

@@ -15,6 +15,8 @@ export interface GymExercise {
   readonly weightKg: number;
   /** Orden dentro de la rutina (1, 2, 3...). */
   readonly position: number;
+  /** Notas opcionales (técnica, video, etc.); puede incluir un link. */
+  readonly description?: string;
 }
 
 export const MAX_EXERCISE_NAME = 60;
@@ -24,6 +26,7 @@ export const MIN_REPS = 1;
 export const MAX_REPS = 200;
 export const DEFAULT_SETS = 4;
 export const DEFAULT_REPS = 12;
+export const MAX_DESCRIPTION = 500;
 
 /** Pasos de peso disponibles para los botones +/- del editor. */
 export const WEIGHT_STEPS_KG: readonly number[] = [1, 2.5, 5];
@@ -36,6 +39,7 @@ export function createGymExercise(params: {
   reps: number | null;
   weightKg: number;
   position: number;
+  description?: string;
 }): GymExercise {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -43,6 +47,10 @@ export function createGymExercise(params: {
   }
   if (name.length > MAX_EXERCISE_NAME) {
     throw new Error(`El nombre no puede superar los ${MAX_EXERCISE_NAME} caracteres`);
+  }
+  const description = params.description?.trim() || undefined;
+  if (description != null && description.length > MAX_DESCRIPTION) {
+    throw new Error(`La descripción no puede superar los ${MAX_DESCRIPTION} caracteres`);
   }
   if (!Number.isInteger(params.sets) || params.sets < MIN_SETS || params.sets > MAX_SETS) {
     throw new Error(`Las series tienen que ser un entero entre ${MIN_SETS} y ${MAX_SETS}`);
@@ -68,6 +76,7 @@ export function createGymExercise(params: {
     reps: params.reps,
     weightKg: Math.round(params.weightKg * 100) / 100,
     position: params.position,
+    description,
   };
 }
 

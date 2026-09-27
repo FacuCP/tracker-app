@@ -12,6 +12,7 @@ export interface SaveGymExerciseInput {
   weightKg: number;
   /** Si no viene, se le asigna el siguiente puesto libre de la rutina. */
   position?: number;
+  description?: string;
 }
 
 /** Crea o actualiza un ejercicio de una rutina. */
@@ -36,6 +37,7 @@ export class SaveGymExercise {
       reps: input.reps,
       weightKg: input.weightKg,
       position,
+      description: input.description,
     });
     await this.repository.save(exercise);
     return exercise;

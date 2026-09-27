@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { theme } from '../../../core/theme';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { useGymTodayCard } from '../viewmodels/useGymTodayCard';
+import { GymExerciseInfoModal } from './GymExerciseInfoModal';
 
 interface Props {
   onFavoriteToggled?: () => void;
@@ -17,6 +18,7 @@ interface Props {
 export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Props) {
   const vm = useGymTodayCard();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   async function toggleFavorite() {
     await vm.toggleFavorite();
@@ -102,7 +104,18 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
       ) : vm.session.currentExercise ? (
         <View style={styles.exercise}>
           <Text style={styles.routineName}>{vm.session.routine.name}</Text>
-          <Text style={styles.exerciseName}>{vm.session.currentExercise.exercise.name}</Text>
+          <View style={styles.exerciseNameRow}>
+            <Text style={styles.exerciseName}>{vm.session.currentExercise.exercise.name}</Text>
+            {vm.session.currentExercise.exercise.description ? (
+              <TouchableOpacity
+                style={styles.infoButton}
+                onPress={() => setInfoOpen(true)}
+                hitSlop={8}
+              >
+                <Text style={styles.infoButtonText}>i</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <Text style={styles.exerciseInfo}>
             {vm.session.currentExercise.exercise.reps != null
               ? `${vm.session.currentExercise.exercise.reps} repeticiones`
@@ -151,6 +164,11 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
       ) : (
         <Text style={styles.emptyText}>Esta rutina no tiene ejercicios todavía.</Text>
       )}
+
+      <GymExerciseInfoModal
+        exercise={infoOpen ? (vm.session?.currentExercise?.exercise ?? null) : null}
+        onClose={() => setInfoOpen(false)}
+      />
     </View>
   );
 }
@@ -263,10 +281,30 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontWeight: '700',
   },
+  exerciseNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   exerciseName: {
     fontSize: 20,
     fontWeight: '800',
     color: theme.colors.text,
+  },
+  infoButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    color: theme.colors.accent,
   },
   exerciseInfo: {
     fontSize: 13,

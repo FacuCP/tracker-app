@@ -428,8 +428,9 @@ Tocar cualquier movimiento abre el modal para editarlo o borrarlo.
 
 Una **rutina** (`GymRoutine`) es solo un nombre; sus **ejercicios**
 (`GymExercise`) tienen nombre, **series**, **repeticiones** (o **"al
-fallo"**, sin número fijo), un **peso en kg** (0 = sin peso) y un **puesto**
-interno que define el orden en la lista.
+fallo"**, sin número fijo), un **peso en kg** (0 = sin peso), un **puesto**
+interno que define el orden en la lista y una **descripción opcional** (notas,
+técnica, un link a un video, etc.).
 
 - **Nuevo/editar ejercicio** ([`GymExerciseModal`](src/presentation/gym/components/GymExerciseModal.tsx)):
   nombre, series (por defecto **4**) y repeticiones (por defecto **12**, o
@@ -438,7 +439,16 @@ interno que define el orden en la lista.
   el medio, 3 pasos de a +1/+2,5/+5 kg), con la cantidad de cada botón como
   etiqueta chiquita debajo de él; nunca baja de 0 y solo se muestra en la fila
   del ejercicio cuando es mayor a 0. El puesto ya no se edita a mano acá: un
-  ejercicio nuevo siempre se agrega al final.
+  ejercicio nuevo siempre se agrega al final. Al fondo, un campo de texto
+  multilínea para la **descripción** (opcional).
+- **Info del ejercicio** ([`GymExerciseInfoModal`](src/presentation/gym/components/GymExerciseInfoModal.tsx)):
+  si un ejercicio tiene descripción, aparece un círculo **"i"** al lado de su
+  nombre (en el detalle de la rutina y en la Rutina de hoy); tocarlo abre un
+  modal de solo lectura con el resumen (series × repeticiones y peso) y la
+  descripción completa. Si la descripción tiene un link (`http(s)://` o
+  `www.`), se muestra subrayado y se puede tocar para abrirlo
+  ([`LinkedText`](src/presentation/components/LinkedText.tsx), reutilizable,
+  parte el texto con un regex y abre el link con `Linking.openURL`).
 - **Detalle de la rutina** ([`gym-routine-detail/`](src/presentation/screens/gym-routine-detail/)):
   cada ejercicio muestra cuántas series lleva (`2/4`) con **+/-** para
   sumar/restar sin entrar a editarlo; tocar la fila abre el editor completo.

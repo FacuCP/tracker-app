@@ -54,6 +54,7 @@ export function useGymRoutineDetail(routineId: string) {
         reps: draft.reps,
         weightKg: draft.weightKg,
         position: editing?.exercise.position,
+        description: draft.description,
       });
       setFormOpen(false);
       setEditing(null);

@@ -1290,6 +1290,65 @@ carrera real si se llegaran a lanzar varios `save()` en paralelo.
 
 ---
 
+## 44. Gimnasio: descripción de ejercicio con link tocable *(elección del usuario)*
+
+**Contexto.** Se pidió poder agregarle una descripción a un ejercicio, editable
+desde el mismo editor. Si tiene descripción, en la lista de la rutina y en la
+"Rutina de hoy" tiene que aparecer un símbolo **"i"** que, al tocarlo, muestre
+esa info; y si la descripción es un link, tiene que poder tocarse para abrirlo.
+
+**Decisión.**
+
+- `description?: string` se agregó a `GymExercise` como campo opcional más
+  (mismo patrón que `weightKg` antes de ser obligatorio): se recorta
+  (`trim()`) al guardar y, si queda vacío, se guarda como `undefined` en vez de
+  como string vacío — así "tiene descripción" se puede chequear con un simple
+  `if (exercise.description)` en toda la UI, sin distinguir "vacío" de "no
+  tiene".
+- El símbolo "i" y el modal de info son el mismo componente reutilizado en dos
+  lugares: [`GymExerciseInfoModal`](src/presentation/gym/components/GymExerciseInfoModal.tsx),
+  un modal de **solo lectura** con el resumen del ejercicio (series ×
+  repeticiones, peso) y la descripción. `GymExerciseRow` (detalle de rutina) y
+  `GymTodayCard` (rutina de hoy) cada uno maneja su propio estado local
+  `infoOpen` — no hace falta subirlo a un viewmodel, es puramente de UI, igual
+  que el desplegable de rutinas (#43).
+- **Links tocables**: se armó [`LinkedText`](src/presentation/components/LinkedText.tsx),
+  un componente chico y genérico en el `components/` compartido (no atado a
+  Gimnasio, por si se necesita en otra descripción de texto libre más
+  adelante). Parte el string con `text.split(regex)` usando un regex con **un
+  solo grupo de captura** (`/(https?:\/\/|www\.)[^\s]+/`), lo que hace que
+  `split` devuelva texto plano y links intercalados en paridad fija (par =
+  texto, impar = link) — así se sabe qué segmento es un link **por posición**,
+  sin volver a testear el string contra el regex. Eso importa: un regex
+  `/g` es *stateful* (guarda `lastIndex` entre llamadas), así que
+  `regex.test(segment)` en un `.map()` da resultados salteados si se lo
+  usa ingenuamente; se evitó esa trampa desde el principio en vez de
+  introducirla y tener que repararla después. Cada link se abre con
+  `Linking.openURL` (núcleo de React Native, no `expo-linking` — no hacía
+  falta un módulo nuevo de Expo), anteponiendo `https://` si el usuario pegó
+  algo que arranca con `www.`.
+- El campo de descripción en [`GymExerciseModal`](src/presentation/gym/components/GymExerciseModal.tsx)
+  es un `TextInput` multilínea al fondo del formulario, opcional, con un
+  límite (`MAX_DESCRIPTION = 500`) igual de estilo que `MAX_EXERCISE_NAME`.
+
+**Alternativas descartadas.**
+
+- **Un componente de texto enriquecido (markdown, etc.) para la descripción.**
+  Sobrecarga para notas de gimnasio; alcanza con texto plano + detectar
+  links.
+- **Guardar el link en un campo aparte (`link?: string`) en vez de dentro de
+  la descripción libre.** El pedido fue "si pego un link como descripción,
+  que se pueda tocar" — es texto libre que *puede* contener un link, no un
+  campo de link dedicado; detectarlo con regex evita forzar al usuario a
+  decidir de antemano si su nota "es" un link o no.
+
+**Consecuencias.** El detector de links es un regex simple: no valida que la
+URL sea alcanzable ni maneja casos raros (link pegado sin espacio antes/después
+de otro texto, dominios sin `http`/`www`). Alcanza para el caso de uso real
+(pegar un link de YouTube o similar) sin sumar una librería de parsing de URLs.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

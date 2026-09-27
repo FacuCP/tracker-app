@@ -14,6 +14,7 @@ import { theme } from '../../../core/theme';
 import {
   DEFAULT_REPS,
   DEFAULT_SETS,
+  MAX_DESCRIPTION,
   MAX_EXERCISE_NAME,
   WEIGHT_STEPS_KG,
   adjustWeightKg,
@@ -29,6 +30,8 @@ export interface GymExerciseDraft {
   reps: number | null;
   /** 0 = sin peso. */
   weightKg: number;
+  /** Notas opcionales; puede incluir un link. */
+  description: string;
 }
 
 interface Props {
@@ -55,6 +58,7 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
   const [reps, setReps] = useState('');
   const [toFailure, setToFailure] = useState(false);
   const [weightKg, setWeightKg] = useState(0);
+  const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const wasVisible = useRef(false);
 
@@ -66,6 +70,7 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
       setToFailure(initial != null && initialReps == null);
       setReps(initialReps != null ? String(initialReps) : String(DEFAULT_REPS));
       setWeightKg(initial?.exercise.weightKg ?? 0);
+      setDescription(initial?.exercise.description ?? '');
       setSaving(false);
     }
     wasVisible.current = visible;
@@ -94,6 +99,7 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
         sets: setsValue,
         reps: toFailure ? null : repsValue,
         weightKg,
+        description,
       });
     } finally {
       setSaving(false);
@@ -196,6 +202,20 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
                   </View>
                 </View>
               </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Descripción (opcional)</Text>
+                <TextInput
+                  style={[styles.input, styles.descriptionInput]}
+                  placeholder="Notas, técnica, link a un video..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={description}
+                  onChangeText={setDescription}
+                  maxLength={MAX_DESCRIPTION}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
             </ScrollView>
 
             <View style={styles.actions}>
@@ -273,6 +293,9 @@ const styles = StyleSheet.create({
   },
   inputDisabled: {
     opacity: 0.4,
+  },
+  descriptionInput: {
+    minHeight: 70,
   },
   inputError: {
     borderColor: '#f87171',
