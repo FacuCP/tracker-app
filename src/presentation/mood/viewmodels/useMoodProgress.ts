@@ -59,6 +59,7 @@ export function useMoodProgress() {
     ...period,
     entriesByDate,
     colorCounts: data?.colorCounts ?? emptyMoodColorCounts(),
+    topMonthByColor: data?.topMonthByColor ?? null,
     noteAverage: data?.noteAverage ?? null,
     noteCount: data?.noteCount ?? 0,
     entryCount: Object.keys(entriesByDate).length,

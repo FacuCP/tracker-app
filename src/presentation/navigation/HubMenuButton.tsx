@@ -6,19 +6,20 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { RootStackParamList } from '../../core/navigation/types';
 import { theme } from '../../core/theme';
 
-export type HubRoute = 'Favorites' | 'Trackers' | 'Lists' | 'Finances';
+export type HubRoute = 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym';
 
 const ITEMS: { route: HubRoute; label: string }[] = [
   { route: 'Favorites', label: 'Favoritos' },
   { route: 'Trackers', label: 'Trackers' },
   { route: 'Lists', label: 'Listas' },
   { route: 'Finances', label: 'Finanzas' },
+  { route: 'Gym', label: 'Gimnasio' },
 ];
 
 /**
- * Título del header en las cuatro pantallas principales: muestra el nombre de la
+ * Título del header en las cinco pantallas principales: muestra el nombre de la
  * pestaña actual y, al tocarlo, despliega un menú (anclado justo debajo del
- * título) para moverse entre Favoritos, Trackers, Listas y Finanzas.
+ * título) para moverse entre Favoritos, Trackers, Listas, Finanzas y Gimnasio.
  */
 export function HubMenuButton({ current }: { current: HubRoute }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();

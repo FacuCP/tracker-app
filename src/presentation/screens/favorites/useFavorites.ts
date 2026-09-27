@@ -11,6 +11,7 @@ import { ListCounts } from '../../list/viewmodels/useLists';
 export type FavoriteCard =
   | { key: 'finance'; kind: 'finance'; title: string; typeLabel: string }
   | { key: 'mood'; kind: 'mood'; title: string; typeLabel: string }
+  | { key: 'gym'; kind: 'gym'; title: string; typeLabel: string }
   | { key: string; kind: 'tracker'; title: string; typeLabel: string; tracker: Tracker }
   | { key: string; kind: 'list'; title: string; typeLabel: string; list: List; counts: ListCounts };
 
@@ -57,6 +58,9 @@ export function useFavorites() {
     }
     if (profile?.moodFavorite ?? true) {
       defaultOrder.push({ key: 'mood', kind: 'mood', title: 'Mood tracker', typeLabel: 'ánimo' });
+    }
+    if (profile?.gymFavorite ?? true) {
+      defaultOrder.push({ key: 'gym', kind: 'gym', title: 'Gimnasio', typeLabel: 'rutina' });
     }
     for (const tracker of favTrackers) {
       defaultOrder.push({

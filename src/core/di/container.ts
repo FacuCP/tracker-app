@@ -55,6 +55,28 @@ import { SaveFinanceTransaction } from '../../domain/finance/usecases/SaveFinanc
 import { FavoritesOrderRepositoryImpl } from '../../data/favorites/FavoritesOrderRepositoryImpl';
 import { GetFavoritesOrder } from '../../domain/favorites/usecases/GetFavoritesOrder';
 import { SaveFavoritesOrder } from '../../domain/favorites/usecases/SaveFavoritesOrder';
+import { AsyncStorageGymRoutineLocalDataSource } from '../../data/gym/datasources/GymRoutineLocalDataSource';
+import { AsyncStorageGymExerciseLocalDataSource } from '../../data/gym/datasources/GymExerciseLocalDataSource';
+import { AsyncStorageGymProgressLocalDataSource } from '../../data/gym/datasources/GymProgressLocalDataSource';
+import { AsyncStorageGymSelectionLocalDataSource } from '../../data/gym/datasources/GymSelectionLocalDataSource';
+import { GymRoutineRepositoryImpl } from '../../data/gym/repositories/GymRoutineRepositoryImpl';
+import { GymExerciseRepositoryImpl } from '../../data/gym/repositories/GymExerciseRepositoryImpl';
+import { GymProgressRepositoryImpl } from '../../data/gym/repositories/GymProgressRepositoryImpl';
+import { GymSelectionRepositoryImpl } from '../../data/gym/repositories/GymSelectionRepositoryImpl';
+import { CreateGymRoutine } from '../../domain/gym/usecases/CreateGymRoutine';
+import { DeleteGymExercise } from '../../domain/gym/usecases/DeleteGymExercise';
+import { DeleteGymRoutine } from '../../domain/gym/usecases/DeleteGymRoutine';
+import { GetGymExercises } from '../../domain/gym/usecases/GetGymExercises';
+import { GetGymProgress } from '../../domain/gym/usecases/GetGymProgress';
+import { GetGymRoutine } from '../../domain/gym/usecases/GetGymRoutine';
+import { GetGymRoutines } from '../../domain/gym/usecases/GetGymRoutines';
+import { GetGymSelection } from '../../domain/gym/usecases/GetGymSelection';
+import { GetGymSession } from '../../domain/gym/usecases/GetGymSession';
+import { ReorderGymExercises } from '../../domain/gym/usecases/ReorderGymExercises';
+import { ResetGymRoutineProgress } from '../../domain/gym/usecases/ResetGymRoutineProgress';
+import { SaveGymExercise } from '../../domain/gym/usecases/SaveGymExercise';
+import { SaveGymSelection } from '../../domain/gym/usecases/SaveGymSelection';
+import { SetGymSetCount } from '../../domain/gym/usecases/SetGymSetCount';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -89,6 +111,20 @@ const financeTransactionRepository = new FinanceTransactionRepositoryImpl(
 
 // --- Favoritos (orden manual) ---
 const favoritesOrderRepository = new FavoritesOrderRepositoryImpl();
+
+// --- Gimnasio ---
+const gymRoutineRepository = new GymRoutineRepositoryImpl(new AsyncStorageGymRoutineLocalDataSource());
+const gymExerciseRepository = new GymExerciseRepositoryImpl(
+  new AsyncStorageGymExerciseLocalDataSource(),
+);
+const gymProgressRepository = new GymProgressRepositoryImpl(
+  new AsyncStorageGymProgressLocalDataSource(),
+);
+const gymSelectionRepository = new GymSelectionRepositoryImpl(
+  new AsyncStorageGymSelectionLocalDataSource(),
+);
+const getGymExercises = new GetGymExercises(gymExerciseRepository);
+const getGymProgress = new GetGymProgress(gymProgressRepository);
 
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
@@ -135,6 +171,26 @@ export const container = {
 
   getFavoritesOrder: new GetFavoritesOrder(favoritesOrderRepository),
   saveFavoritesOrder: new SaveFavoritesOrder(favoritesOrderRepository),
+
+  getGymRoutines: new GetGymRoutines(gymRoutineRepository),
+  getGymRoutine: new GetGymRoutine(gymRoutineRepository),
+  createGymRoutine: new CreateGymRoutine(gymRoutineRepository, generateId),
+  deleteGymRoutine: new DeleteGymRoutine(
+    gymRoutineRepository,
+    gymExerciseRepository,
+    gymProgressRepository,
+    gymSelectionRepository,
+  ),
+  getGymExercises,
+  saveGymExercise: new SaveGymExercise(gymExerciseRepository, generateId),
+  reorderGymExercises: new ReorderGymExercises(gymExerciseRepository),
+  deleteGymExercise: new DeleteGymExercise(gymExerciseRepository, gymProgressRepository),
+  getGymProgress,
+  setGymSetCount: new SetGymSetCount(gymExerciseRepository, gymProgressRepository),
+  resetGymRoutineProgress: new ResetGymRoutineProgress(gymProgressRepository),
+  getGymSession: new GetGymSession(gymRoutineRepository, getGymExercises, getGymProgress),
+  getGymSelection: new GetGymSelection(gymSelectionRepository),
+  saveGymSelection: new SaveGymSelection(gymSelectionRepository),
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),

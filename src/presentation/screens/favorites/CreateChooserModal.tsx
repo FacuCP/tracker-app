@@ -5,10 +5,10 @@ import { theme } from '../../../core/theme';
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onChoose: (what: 'tracker' | 'list') => void;
+  onChoose: (what: 'tracker' | 'list' | 'routine') => void;
 }
 
-/** Modal del botón "＋ Crear" de Favoritos: elegir entre tracker o lista. */
+/** Modal del botón "＋ Crear" de Favoritos: elegir entre tracker, lista o rutina. */
 export function CreateChooserModal({ visible, onClose, onChoose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -31,6 +31,13 @@ export function CreateChooserModal({ visible, onClose, onChoose }: Props) {
               activeOpacity={0.85}
             >
               <Text style={styles.choiceText}>Lista</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.choice}
+              onPress={() => onChoose('routine')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.choiceText}>Rutina</Text>
             </TouchableOpacity>
           </View>
 

@@ -9,6 +9,8 @@ import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
 import { SettingsHeaderButton } from '../../presentation/navigation/SettingsHeaderButton';
 import { FavoritesScreen } from '../../presentation/screens/favorites/FavoritesScreen';
 import { FinancesScreen } from '../../presentation/screens/finances/FinancesScreen';
+import { GymRoutineDetailScreen } from '../../presentation/screens/gym-routine-detail/GymRoutineDetailScreen';
+import { GymScreen } from '../../presentation/screens/gym/GymScreen';
 import { ListDetailScreen } from '../../presentation/screens/list-detail/ListDetailScreen';
 import { ListsScreen } from '../../presentation/screens/lists/ListsScreen';
 import { MoodProgressScreen } from '../../presentation/screens/mood-progress/MoodProgressScreen';
@@ -40,7 +42,7 @@ const navTheme: Theme = {
  * menú al tocarlo), sin flecha de volver, y el cambio entre pestañas es un
  * fundido suave en vez del deslizamiento del stack.
  */
-const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances') => ({
+const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym') => ({
   headerTitle: () => <HubMenuButton current={current} />,
   headerRight: () => <SettingsHeaderButton />,
   headerTitleAlign: 'left' as const,
@@ -103,6 +105,12 @@ export function AppNavigator() {
         <Stack.Screen name="Lists" component={ListsScreen} options={hubOptions('Lists')} />
         <Stack.Screen name="ListDetail" component={ListDetailScreen} options={{ title: 'Lista' }} />
         <Stack.Screen name="Finances" component={FinancesScreen} options={hubOptions('Finances')} />
+        <Stack.Screen name="Gym" component={GymScreen} options={hubOptions('Gym')} />
+        <Stack.Screen
+          name="GymRoutineDetail"
+          component={GymRoutineDetailScreen}
+          options={{ title: 'Rutina' }}
+        />
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}

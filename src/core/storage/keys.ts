@@ -13,6 +13,10 @@ export const STORAGE_KEYS = {
   financeCategories: '@app-celu/finance-categories/v1',
   financeTransactions: '@app-celu/finance-transactions/v1',
   favoritesOrder: '@app-celu/favorites-order/v1',
+  gymRoutines: '@app-celu/gym-routines/v1',
+  gymExercises: '@app-celu/gym-exercises/v1',
+  gymProgress: '@app-celu/gym-progress/v1',
+  gymSelection: '@app-celu/gym-selection/v1',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { theme } from '../../../core/theme';
+import { theme } from '../../core/theme';
 
 interface Props {
   title: string;
@@ -11,8 +11,8 @@ interface Props {
   onDown: () => void;
 }
 
-/** Fila compacta que se muestra en modo "Ordenar", con flechas ▲▼. */
-export function FavoriteReorderRow({ title, typeLabel, isFirst, isLast, onUp, onDown }: Props) {
+/** Fila compacta para modo "Ordenar": nombre + flechas ▲▼ para mover. */
+export function ReorderRow({ title, typeLabel, isFirst, isLast, onUp, onDown }: Props) {
   return (
     <View style={styles.row}>
       <View style={styles.texts}>

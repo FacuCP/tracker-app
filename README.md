@@ -1,16 +1,18 @@
 # app-celu
 
 App personal hecha con **Expo + React Native + TypeScript**, organizada con
-**Clean Architecture**. Tiene cuatro áreas, elegibles desde el menú del header:
+**Clean Architecture**. Tiene cinco áreas, elegibles desde el menú del header:
 
 - **Favoritos** — pantalla principal. Junta los trackers y listas marcados con la
-  estrella; tiene un botón "＋ Crear" (tracker o lista).
+  estrella; tiene un botón "＋ Crear" (tracker, lista o rutina).
 - **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
   rating); una lista puede ser una **to-do list** (entradas que se tildan).
 - **Finanzas** — economía actual + ingresos/gastos (con repetición mensual y
   categorías) y su desglose por semana/mes/año.
+- **Gimnasio** — rutinas con ejercicios (series, repeticiones, peso, puesto) y un
+  cuadro guiado para ir haciendo la rutina de hoy, con reseteo semanal.
 
 Todo se guarda local en el teléfono y se puede exportar/importar como un único
 archivo de backup.
@@ -61,7 +63,7 @@ Todo lo que cargás se guarda **solo en el teléfono** (AsyncStorage).
   desinstalar primero).
 
 Como red de seguridad, la app tiene **Ajustes y backup** (botón "Ajustes" arriba
-a la derecha, en cualquiera de las tres pestañas):
+a la derecha, en cualquiera de las pestañas):
 
 - **Exportar datos**: genera un archivo `.json` con todo y abre el menú de
   compartir (mandátelo a Google Drive / mail / WhatsApp).
@@ -101,6 +103,13 @@ src/
 │   │   └── usecases/            # Get/Save/Delete Categoría y Movimiento, GetCurrentBalance,
 │   │                            # GetFinanceReport (desglose del período)
 │   ├── favorites/               # FavoriteRef (claves) + Get/SaveFavoritesOrder (orden manual)
+│   ├── gym/
+│   │   ├── entities/            # GymRoutine, GymExercise (series, reps, peso, puesto),
+│   │   │                        # GymProgress (cycleStart + completedSets), GymSession (agregado)
+│   │   ├── repositories/        # GymRoutine/GymExercise/GymProgress/GymSelection (puertos)
+│   │   └── usecases/            # CRUD de rutina/ejercicio, GetGymProgress, SetGymSetCount,
+│   │                            # GetGymSession (rutina + ejercicios + progreso + siguiente),
+│   │                            # Get/SaveGymSelection (rutina elegida para hoy)
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
@@ -110,13 +119,15 @@ src/
 │   ├── list/                    # dto + AsyncStorage datasources + repo impls
 │   ├── finance/                 # dto + AsyncStorage datasources (siembra categorías) + repo impls
 │   ├── favorites/               # FavoritesOrderRepositoryImpl (array JSON de claves)
+│   ├── gym/                     # dto + AsyncStorage datasources + repo impls
 │   └── backup/                  # BackupRepositoryImpl (multiGet/multiSet sobre AsyncStorage)
 │
 ├── core/
 │   ├── di/container.ts          # Composition root: arma todas las dependencias
 │   ├── navigation/              # Stack tipado (Onboarding, Favorites, Trackers, Lists,
-│   │                            # ListDetail, Finances, Settings, MoodProgress, CreateTracker,
-│   │                            # EditTracker, TrackerProgress) + gate de primer arranque
+│   │                            # ListDetail, Finances, Gym, GymRoutineDetail, Settings,
+│   │                            # MoodProgress, CreateTracker, EditTracker, TrackerProgress)
+│   │                            # + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
 │   ├── notifications/           # notifications.ts (agenda/cancela las locales según perfil + datos)
 │   ├── text/textScale.ts        # Escala global de la tipografía (a medio hacer, sin montar)
@@ -140,6 +151,8 @@ src/
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
     │   ├── finances/            # FinancesScreen + useFinances
+    │   ├── gym/                 # GymScreen + useGymScreen (todas las rutinas)
+    │   ├── gym-routine-detail/  # GymRoutineDetailScreen (una rutina con sus ejercicios)
     │   ├── settings/            # SettingsScreen (nombre + backup)
     │   ├── mood-progress/       # MoodProgressScreen
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
@@ -160,12 +173,17 @@ src/
     │   │                        # TrackerDayCell, TrackerDayModal, TrackerStats,
     │   │                        # CreateTrackerButton
     │   └── viewmodels/          # useTrackerCard, useTrackerForm, useTrackerProgress
-    └── finance/
-        ├── components/          # FinanceSummaryCard (recuadro favoriteable),
-        │                        # FinanceTransactionModal, FinanceCategoriesModal,
-        │                        # FinanceReportSection
-        ├── money.ts             # formatMoney / parseAmount / formatAmountInput
-        └── period.ts            # FinancePeriod + rango del período
+    ├── finance/
+    │   ├── components/          # FinanceSummaryCard (recuadro favoriteable),
+    │   │                        # FinanceTransactionModal, FinanceCategoriesModal,
+    │   │                        # FinanceReportSection
+    │   ├── money.ts             # formatMoney / parseAmount / formatAmountInput
+    │   └── period.ts            # FinancePeriod + rango del período
+    └── gym/
+        ├── components/          # GymTodayCard (recuadro favoriteable, guiado),
+        │                        # CreateGymRoutineModal, GymRoutineCard,
+        │                        # GymExerciseModal (con botones de peso), GymExerciseRow
+        └── viewmodels/          # useGymTodayCard, useGymScreen, useGymRoutineDetail
 ```
 
 ### Regla de dependencias
@@ -181,7 +199,8 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 ## Primer arranque
 
 La primera vez que se abre la app, `AppNavigator` mira si hay un **perfil**
-guardado (`UserProfile` = `{ name, moodFavorite, financeFavorite, fontScale }`). Si no, arranca en
+guardado (`UserProfile` = `{ name, moodFavorite, financeFavorite, gymFavorite, fontScale,
+notifyTrackers, notifyDueTasks }`). Si no, arranca en
 **`OnboardingScreen`**: pide el **nombre**, avisa que se cambia en Ajustes, lo
 guarda y resetea la navegación a Favoritos.
 
@@ -195,7 +214,7 @@ cambia el **nombre** (`UserNameCard`); el saludo se actualiza al volver.
 
 ## Navegación
 
-El título del header de las cuatro pantallas principales muestra el **nombre de
+El título del header de las cinco pantallas principales muestra el **nombre de
 la pestaña actual** con una flechita ▾
 ([`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)); al tocarlo se
 despliega un menú para moverse entre:
@@ -205,10 +224,11 @@ despliega un menú para moverse entre:
 - **Trackers** — mood tracker + todos los trackers del usuario.
 - **Listas** — las listas del usuario (ver más abajo).
 - **Finanzas** — economía actual + ingresos/gastos (ver más abajo).
+- **Gimnasio** — rutinas del usuario (ver más abajo).
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
-es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las cuatro
+es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las cinco
 tienen el botón **"Ajustes"** arriba a la derecha
 (`SettingsHeaderButton`, en `hubOptions`). El resto de pantallas (progreso,
 formularios, ajustes) sí son push con su flecha.
@@ -253,8 +273,10 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
   Mes / Año**, navegación entre períodos y edición/borrado de cualquier día. En
   **Año**, tocar un mes lo abre. Cada día con nota la muestra sobre los colores;
   arriba se ve el **promedio** de las notas del período. Debajo, las
-  **Referencias**: una card por color (emoción + contador del período). Orden
-  fijo: naranja solo, después rojo/violeta, rosa/gris, verde/azul, amarillo/marrón.
+  **Referencias**: una card por color (emoción + contador), **ordenadas por
+  cantidad**. Un día con **un** color suma 1; con **dos** colores suma 0.5 a cada
+  uno. En la vista **Año** cada card muestra además el **mes con más
+  ocurrencias** de ese color.
 
 ## Favoritos
 
@@ -402,6 +424,52 @@ contiene hoy): totales de ingresos y gastos, y dos vistas:
 
 Tocar cualquier movimiento abre el modal para editarlo o borrarlo.
 
+## Gimnasio
+
+Una **rutina** (`GymRoutine`) es solo un nombre; sus **ejercicios**
+(`GymExercise`) tienen nombre, **series**, **repeticiones** (o **"al
+fallo"**, sin número fijo), un **peso en kg** (0 = sin peso) y un **puesto**
+interno que define el orden en la lista.
+
+- **Nuevo/editar ejercicio** ([`GymExerciseModal`](src/presentation/gym/components/GymExerciseModal.tsx)):
+  nombre, series (por defecto **4**) y repeticiones (por defecto **12**, o
+  tildar **"Al fallo"** para dejarlas sin número). El peso se ajusta con una
+  sola fila `− − − peso + + +` (3 pasos de a −5/−2,5/−1 kg, el valor actual en
+  el medio, 3 pasos de a +1/+2,5/+5 kg), con la cantidad de cada botón como
+  etiqueta chiquita debajo de él; nunca baja de 0 y solo se muestra en la fila
+  del ejercicio cuando es mayor a 0. El puesto ya no se edita a mano acá: un
+  ejercicio nuevo siempre se agrega al final.
+- **Detalle de la rutina** ([`gym-routine-detail/`](src/presentation/screens/gym-routine-detail/)):
+  cada ejercicio muestra cuántas series lleva (`2/4`) con **+/-** para
+  sumar/restar sin entrar a editarlo; tocar la fila abre el editor completo.
+  "Agregar Ejercicio" arriba a la derecha. Un botón **"Ordenar"/"Listo"**
+  cambia la lista a filas con flechas ▲▼ (mismo componente `ReorderRow` que usa
+  el reordenamiento de Favoritos) para reordenar los ejercicios a mano; el
+  nuevo orden se persiste reescribiendo el `position` de cada uno
+  (`ReorderGymExercises`). Al fondo, **"Resetear rutina"** vuelve a 0 las
+  series de todos los ejercicios sin esperar al reseteo semanal
+  (`ResetGymRoutineProgress`, borra el progreso guardado de esa rutina), y
+  debajo, "Borrar esta rutina".
+- **Rutina de hoy** ([`GymTodayCard`](src/presentation/gym/components/GymTodayCard.tsx)):
+  cuadro para elegir una rutina y hacerla guiado. El selector es un
+  **desplegable** (se abre/cierra tocando "Elegir rutina") que **no lista las
+  rutinas sin ejercicios** (no hay nada para elegir ahí) y muestra las ya
+  completadas esta semana **al final**, tachadas (`line-through`). Una vez
+  elegida, muestra el **primer ejercicio sin terminar**, un botón
+  grande **"＋"** para sumar una serie (arranca en 0) y un **"−"** para
+  deshacer. Al llegar a las series objetivo pasa solo al siguiente ejercicio;
+  al terminar todos, la rutina queda **hecha** (*"¡Completaste ... esta
+  semana!"*). Tiene su propia **estrella** (favorito por defecto) y aparece
+  igual en Favoritos y en Gimnasio.
+
+**Reseteo semanal, sin job en segundo plano.** El progreso de un ejercicio
+(`GymExerciseProgress`) se guarda con la fecha del **lunes de esa semana**
+(`cycleStart`). Al leerlo, si ese lunes no es el de la semana actual, se trata
+como si fueran 0 series hechas (`resolveCompletedSets`) — así "se resetea los
+domingos a la noche" (funcionalmente, en el arranque del lunes) sin tener que
+programar nada; el primer toque de la semana nueva ya escribe con el
+`cycleStart` correcto.
+
 ## Notificaciones
 
 Notificaciones **locales programadas** (`expo-notifications`): se le dice al SO
@@ -433,7 +501,7 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 
 | Clave (`core/storage/keys.ts`) | Contenido |
 |-------|-----------|
-| `@app-celu/user-profile/v1` | `{ name, moodFavorite, financeFavorite, fontScale, notifyTrackers, notifyDueTasks }` |
+| `@app-celu/user-profile/v1` | `{ name, moodFavorite, financeFavorite, gymFavorite, fontScale, notifyTrackers, notifyDueTasks }` |
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config + `favorite` de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |
@@ -442,6 +510,10 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/finance-categories/v1` | `{ [id]: FinanceCategoryDto }` (siembra defaults la 1ª vez) |
 | `@app-celu/finance-transactions/v1` | `{ [id]: FinanceTransactionDto }` (movimientos) |
 | `@app-celu/favorites-order/v1` | `string[]` (orden manual de la pantalla Favoritos) |
+| `@app-celu/gym-routines/v1` | `{ [routineId]: GymRoutineDto }` |
+| `@app-celu/gym-exercises/v1` | `{ [routineId]: { [exerciseId]: GymExerciseDto } }` |
+| `@app-celu/gym-progress/v1` | `{ [routineId]: { [exerciseId]: GymProgressDto } }` (series de la semana actual) |
+| `@app-celu/gym-selection/v1` | `{ routineId }` (rutina elegida para hoy) |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué
 exportar/importar (todo en un solo archivo). Para cambiar a SQLite o a una API basta con escribir otra

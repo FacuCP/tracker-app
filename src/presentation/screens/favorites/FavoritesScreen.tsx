@@ -5,13 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { ReorderRow } from '../../components/ReorderRow';
 import { FinanceSummaryCard } from '../../finance/components/FinanceSummaryCard';
+import { GymTodayCard } from '../../gym/components/GymTodayCard';
 import { ListCard } from '../../list/components/ListCard';
 import { ListEntryModal } from '../../list/components/ListEntryModal';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
 import { CreateChooserModal } from './CreateChooserModal';
-import { FavoriteReorderRow } from './FavoriteReorderRow';
 import { FavoriteCard, useFavorites } from './useFavorites';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
@@ -20,9 +21,11 @@ export function FavoritesScreen({ navigation }: Props) {
   const vm = useFavorites();
   const [chooserOpen, setChooserOpen] = useState(false);
 
-  function choose(what: 'tracker' | 'list') {
+  function choose(what: 'tracker' | 'list' | 'routine') {
     setChooserOpen(false);
-    navigation.navigate(what === 'tracker' ? 'Trackers' : 'Lists', { create: true });
+    if (what === 'tracker') navigation.navigate('Trackers', { create: true });
+    else if (what === 'list') navigation.navigate('Lists', { create: true });
+    else navigation.navigate('Gym', { create: true });
   }
 
   function renderCard(card: FavoriteCard) {
@@ -44,6 +47,15 @@ export function FavoritesScreen({ navigation }: Props) {
             key={card.key}
             onSeeProgress={() => navigation.navigate('MoodProgress')}
             onFavoriteToggled={vm.reload}
+          />
+        );
+      case 'gym':
+        return (
+          <GymTodayCard
+            key={card.key}
+            onFavoriteToggled={vm.reload}
+            onOpenGym={() => navigation.navigate('Gym')}
+            onOpenRoutine={(routineId) => navigation.navigate('GymRoutineDetail', { routineId })}
           />
         );
       case 'tracker':
@@ -99,7 +111,7 @@ export function FavoritesScreen({ navigation }: Props) {
           <>
             {vm.reorderMode
               ? vm.cards.map((card, index) => (
-                  <FavoriteReorderRow
+                  <ReorderRow
                     key={card.key}
                     title={card.title}
                     typeLabel={card.typeLabel}

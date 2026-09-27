@@ -86,9 +86,13 @@ export function MoodProgressScreen() {
 
         <Text style={styles.sectionTitle}>Referencias</Text>
         <Text style={styles.sectionHint}>
-          El número es cuántas veces apareció cada color en {periodNoun(vm.view)}.
+          Cuántas veces apareció cada color en {periodNoun(vm.view)} (un día con dos
+          colores suma 0.5 a cada uno). Ordenadas por cantidad.
         </Text>
-        <MoodReferenceCards counts={vm.colorCounts} />
+        <MoodReferenceCards
+          counts={vm.colorCounts}
+          topMonthByColor={vm.view === 'year' ? vm.topMonthByColor : null}
+        />
       </ScrollView>
 
       <MoodDayModal

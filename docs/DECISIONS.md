@@ -443,35 +443,31 @@ muestra".
 [`MoodReferenceCards`](../src/presentation/mood/components/MoodReferenceCards.tsx):
 una card por color (swatch + nombre + emoción + número grande). El número es
 `colorCounts[color]` que viene calculado del caso de uso `GetMoodRange` para el
-período visible (semana / mes / año), **contando los dos colores de cada día**.
-Las cards que están en cero se muestran atenuadas.
+período visible. **Peso por día:** un día con **un** color suma 1; un día con
+**dos** colores suma **0.5** a cada uno (pedido del usuario, para que el total
+por día sea siempre 1). Las cards en cero se muestran atenuadas.
 
-**Motivo.** El contador vive en el caso de uso (dominio-cercano y testeable), no
-en el componente.
+En la **vista Año**, cada card muestra además el **mes con más ocurrencias** de
+ese color (`GetMoodRange.topMonthByColor`; el UI lo pasa solo cuando
+`view === 'year'`).
+
+**Motivo.** El contador y el "mes top" viven en el caso de uso (dominio-cercano
+y testeable), no en el componente.
 
 ---
 
-## 21. Orden fijo de las reference cards *(elección del usuario)*
+## 21. Orden de las reference cards: por cantidad *(elección del usuario, ida y vuelta)*
 
-**Contexto.** Al principio las cards se ordenaban por frecuencia, y eso hacía que
-saltaran de lugar al cambiar de período. El usuario pidió un orden fijo:
+**Historia.** Al principio se ordenaban por frecuencia; el usuario pidió un
+**orden fijo** (naranja solo arriba, después rojo/violeta, rosa/gris,
+verde/azul, amarillo/marrón) porque saltaban de lugar. Más tarde pidió
+**volver a ordenarlas por cantidad** (de mayor a menor).
 
-```
-naranja (solo, fila entera)
-rojo      violeta
-rosa      gris
-verde     azul
-amarillo  marrón
-```
-
-**Decisión.** El orden vive en el dominio como
-`MOOD_COLOR_DISPLAY_ORDER` (en `MoodColor.ts`). `MoodReferenceCards` pinta el
-primero a ancho completo y el resto en una grilla de dos columnas siguiendo ese
-array.
-
-**Motivo.** Un orden estable se memoriza: el usuario aprende dónde está cada
-color y lee el tablero de un vistazo. La frecuencia igual se ve en el número de
-cada card.
+**Decisión.** `MoodReferenceCards` ordena por `counts[color]` descendente,
+desempatando por `MOOD_COLOR_DISPLAY_ORDER` (así en un período vacío quedan en el
+orden histórico). La primera card (la de más ocurrencias) va a ancho completo y
+el resto en dos columnas. `MOOD_COLOR_DISPLAY_ORDER` queda solo como criterio de
+desempate.
 
 ---
 
@@ -1157,6 +1153,140 @@ pasadas las 23:00 sin nunca mandarla a segundo plano, puede llegar el
 recordatorio igual. Las notificaciones **no funcionan en Expo Go**: hay que
 probar en un build de EAS (development o preview), que además hace falta rehacer
 por el módulo nativo nuevo (no es OTA).
+
+---
+
+## 42. Gimnasio: reseteo semanal sin job en segundo plano *(elección del usuario)*
+
+**Contexto.** Se pidió una 4ª sección "Gimnasio" con rutinas (como una lista,
+con nombre y ejercicios) y ejercicios con nombre, series, repeticiones, peso en
+kg (editable con botones ±1/±2.5/±5 kg) y un puesto que define el orden. Rutinas
+y ejercicios se van marcando como hechos a medida que se cargan series, y ese
+progreso **se resetea los domingos a la noche**. También se pidió un cuadro
+"Seleccionar rutina para hoy" (favoritable, favorito por defecto) que guía
+ejercicio por ejercicio: carga series de a una y avanza sola al siguiente
+ejercicio cuando se completan las del actual.
+
+**Decisión.** El progreso de un ejercicio no se guarda como "hecho: sí/no" sino
+como `GymExerciseProgress { routineId, exerciseId, cycleStart, completedSets }`,
+donde `cycleStart` es la fecha ISO del lunes de la semana en que se cargó esa
+serie (`currentCycleStart()`). Al **leer** progreso (`GetGymProgress`,
+`GetGymSession`) se compara el `cycleStart` guardado contra el del lunes actual:
+si no coinciden, se trata como `completedSets: 0` sin tocar el storage
+(`resolveCompletedSets`). Al **escribir** (`SetGymSetCount`) siempre se graba
+con el `cycleStart` de hoy. Entonces el reseteo no lo dispara nada: la primera
+vez que se interactúa con una rutina después de que pasó la semana, esa
+interacción ya escribe (o lee) contra el ciclo nuevo y el progreso viejo queda
+implícitamente descartado. Sobre esta misma base:
+
+- `currentExercise` en `GetGymSession` es **derivado**, no un puntero guardado:
+  es el primer ejercicio de la rutina (ordenado por puesto) que no está
+  "hecho" (`completedSets >= sets`). Cargar una serie y volver a pedir la
+  sesión ya refleja el avance al siguiente ejercicio, sin lógica extra de
+  "avanzar".
+- El cuadro "Seleccionar rutina para hoy" no tiene una entidad propia para
+  favoritear: se agregó `gymFavorite: boolean` a `UserProfile` (arranca en
+  `true`), mismo patrón que `moodFavorite`/`financeFavorite`. El componente
+  `GymTodayCard` es autocontenido (viewmodel propio, toggle de favorito propio),
+  igual que `MoodTrackerCard`/`FinanceSummaryCard`; `useFavorites` solo lee el
+  flag del perfil para decidir si lo incluye en la lista.
+- El `position` (puesto) de un ejercicio es opcional al guardar
+  (`SaveGymExercise`): si no se manda, se asigna `max(puestos existentes) + 1`
+  (así un ejercicio nuevo siempre entra al final). Ver #43 para cómo se
+  reordena.
+
+**Alternativas descartadas.**
+
+- **Guardar un booleano `done` por ejercicio y resetearlo con un job/notificación
+  programada los domingos a la noche.** Requiere infraestructura de background
+  task o notificaciones solo para "poner en `false`" un montón de flags; además
+  no corre si la app estuvo cerrada toda la semana. El modelo de `cycleStart`
+  logra el mismo resultado percibido (arranca en cero cada semana) sin ejecutar
+  nada en segundo plano: el reseteo es un efecto de cómo se *lee* el dato, no
+  un evento que hay que disparar.
+- **Guardar `currentExerciseIndex` como estado explícito de la rutina.**
+  Duplicaría lo que ya se puede derivar de `completedSets` por ejercicio, y se
+  podría desincronizar si se edita un ejercicio (ej. le bajan las series) o se
+  borra uno de en medio.
+
+**Consecuencias.** El progreso de la semana pasada nunca se borra del storage
+(queda una fila vieja con un `cycleStart` que ya no coincide); no molesta a
+escala personal, pero el blob de `gymProgress` crece indefinidamente. Si el
+usuario cambia la hora/fecha del teléfono, el cálculo del "lunes actual" se
+corre con eso, como el resto de la app.
+
+---
+
+## 43. Gimnasio: ajustes de uso tras probar la primera versión *(elección del usuario)*
+
+**Contexto.** Ya con Gimnasio andando, se pidió una tanda de ajustes de uso:
+selector de rutina como desplegable (con las completadas tachadas), series y
+repeticiones con default 4×12 o "al fallo" (sin número fijo), sacar el campo
+"puesto" del editor y poder reordenar ejercicios como en Favoritos, textos más
+cortos ("Agregar Ejercicio", "Completada por esta semana", sin emojis), una
+opción para resetear el progreso de una rutina a mano, y el editor de peso sin
+el checkbox "Con peso": directo 3 botones para bajar y 3 para subir (±1/±2.5/±5
+kg), con la cantidad como etiqueta debajo de cada botón en vez de dentro.
+
+**Decisión.**
+
+- **Reordenar ejercicios = mismo patrón que Favoritos.** Se sacó el
+  `FavoriteReorderRow` de `screens/favorites/` y se generalizó como
+  [`ReorderRow`](src/presentation/components/ReorderRow.tsx) en el `components/`
+  compartido (fila con flechas ▲▼), reutilizado tanto en Favoritos como en el
+  detalle de rutina. `GymRoutineDetailScreen` suma un modo "Ordenar"/"Listo"
+  igual al de Favoritos; al soltar, `useGymRoutineDetail.moveExercise` reordena
+  el array en memoria y llama a `ReorderGymExercises`, un caso de uso nuevo que
+  relee los ejercicios de la rutina y reescribe el `position` de cada uno según
+  el orden recibido. Para que reescribir varias posiciones a la vez no pise
+  datos entre sí (cada `save()` hacía su propio read-modify-write del blob
+  compartido), se agregó `GymExerciseRepository.saveMany` /
+  `GymExerciseLocalDataSource.writeMany`, que lee el blob una sola vez, aplica
+  todos los cambios y persiste una sola vez.
+- **"Al fallo" como `reps: number | null`.** En vez de una repetición mágica
+  (0, -1) se usa `null` para decir "sin repeticiones fijas"; `isExerciseDone`
+  sigue dependiendo solo de `completedSets` contra `sets`, así que no cambia
+  nada del lado del progreso. El modal precarga sets en 4 y reps en 12 para un
+  ejercicio nuevo, con un checkbox "Al fallo" que oculta/anula el campo de
+  reps.
+- **Peso sin el checkbox "Con peso".** `weightKg` pasa de opcional a
+  obligatorio (`number`, default `0`) en la entidad, el DTO y el caso de uso:
+  ya no hace falta un booleano aparte para decidir si el ejercicio "tiene" peso
+  — 0 kg y "sin peso" son la misma cosa, y en la fila/tarjeta se sigue
+  ocultando cuando es 0 (`weightKg > 0`).
+- **Resetear rutina** (`ResetGymRoutineProgress`) simplemente borra todo el
+  progreso guardado de esa rutina (`GymProgressRepository.deleteAllForRoutine`,
+  ya existía para el borrado de rutina). Como "no hay progreso" ya se lee como
+  0 series (ver #42), no hace falta un caso especial: es la misma función que
+  usa el borrado en cascada, solo que sin borrar la rutina ni los ejercicios.
+- **Selector como desplegable.** No se sumó ninguna librería de "select": es un
+  botón que abre/cierra una lista en el lugar (estado local del componente,
+  no del viewmodel, igual que otros toggles de UI en la app). `useGymTodayCard`
+  pide `getGymSession` de cada rutina al recargar (mismo patrón N+1 que ya usa
+  `useGymScreen` para los resúmenes del hub) para armar dos cosas: el mapa
+  `doneByRoutine` (tachar las completadas) y la lista `pickerRoutines`, que es
+  la que realmente se muestra en el desplegable — sale de ahí **filtrando las
+  rutinas sin ejercicios** (nada que elegir en una rutina vacía) y
+  **ordenando las completadas al final** (`sort` estable por `done`, que
+  conserva el orden por antigüedad de `GetGymRoutines` dentro de cada grupo).
+  `routines` (sin filtrar) se mantiene aparte para decidir si mostrar "todavía
+  no creaste ninguna rutina" vs. "tus rutinas no tienen ejercicios todavía".
+
+**Alternativas descartadas.**
+
+- **Mantener el checkbox "Con peso" y solo agregar más botones de paso.** El
+  pedido era explícitamente sacarlo: con los pasos de a 1 kg alcanza para
+  marcar "sin peso" bajando a 0, y sacar el toggle simplifica el modal.
+- **Guardar el orden de ejercicios aparte, como el `savedOrder` de Favoritos**
+  (una lista de ids en un storage propio). Los ejercicios ya tenían un
+  `position` persistido por entidad; reescribirlo es más simple que mantener
+  dos fuentes de verdad para el mismo orden.
+
+**Consecuencias.** `ReorderGymExercises` sigue siendo O(n) escrituras
+conceptuales pero ahora en una sola pasada de lectura/escritura del blob
+(`saveMany`), no n pasadas — a la escala de una rutina personal (pocos
+ejercicios) esto no importaba para la corrección, pero evita una condición de
+carrera real si se llegaran a lanzar varios `save()` en paralelo.
 
 ---
 

@@ -16,7 +16,7 @@ export function SettingsScreen({ navigation }: Props) {
   function confirmImport() {
     Alert.alert(
       'Importar backup',
-      'Esto reemplaza TODOS los datos actuales (nombre, mood tracker, trackers, listas y finanzas) por los del archivo. ¿Seguir?',
+      'Esto reemplaza TODOS los datos actuales (nombre, mood tracker, trackers, listas, finanzas y gimnasio) por los del archivo. ¿Seguir?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {

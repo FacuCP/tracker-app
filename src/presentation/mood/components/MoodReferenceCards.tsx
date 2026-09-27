@@ -1,29 +1,48 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { capitalize, MONTHS_ES } from '../../../core/utils/date';
 import {
   getMoodColorInfo,
   MOOD_COLOR_DISPLAY_ORDER,
+  MoodColor,
   MoodColorCounts,
 } from '../../../domain/mood/entities/MoodColor';
+import { MoodTopMonthByColor } from '../../../domain/mood/usecases/GetMoodRange';
 
 interface Props {
-  /** Cuántas veces ocurrió cada color en el período que se está mostrando. */
+  /** Cuántas veces ocurrió cada color en el período (un día con 2 colores suma 0.5 a c/u). */
   counts: MoodColorCounts;
+  /** Si viene (vista Año), cada card muestra el mes con más ocurrencias del color. */
+  topMonthByColor?: MoodTopMonthByColor | null;
 }
 
 /**
- * Referencias de colores como cards: color, emoción y cuántas veces apareció
- * en el período visible. El orden es fijo (ver MOOD_COLOR_DISPLAY_ORDER): el
- * primero va solo en su fila y el resto de a pares.
+ * Referencias de colores como cards: color, emoción y cuántas veces apareció en
+ * el período. Se ordenan por cantidad (de mayor a menor); el primero va solo en
+ * su fila y el resto de a pares.
  */
-export function MoodReferenceCards({ counts }: Props) {
-  const [firstColor, ...restColors] = MOOD_COLOR_DISPLAY_ORDER;
+export function MoodReferenceCards({ counts, topMonthByColor }: Props) {
+  const displayIndex = (color: MoodColor) => MOOD_COLOR_DISPLAY_ORDER.indexOf(color);
+  const sorted = [...MOOD_COLOR_DISPLAY_ORDER].sort(
+    (a, b) => counts[b] - counts[a] || displayIndex(a) - displayIndex(b),
+  );
+  const [firstColor, ...restColors] = sorted;
 
   return (
     <View style={styles.grid}>
-      <ReferenceCard color={firstColor} count={counts[firstColor]} fullWidth />
+      <ReferenceCard
+        color={firstColor}
+        count={counts[firstColor]}
+        topMonth={topMonthByColor?.[firstColor] ?? null}
+        fullWidth
+      />
       {restColors.map((color) => (
-        <ReferenceCard key={color} color={color} count={counts[color]} />
+        <ReferenceCard
+          key={color}
+          color={color}
+          count={counts[color]}
+          topMonth={topMonthByColor?.[color] ?? null}
+        />
       ))}
     </View>
   );
@@ -32,10 +51,12 @@ export function MoodReferenceCards({ counts }: Props) {
 function ReferenceCard({
   color,
   count,
+  topMonth,
   fullWidth = false,
 }: {
-  color: (typeof MOOD_COLOR_DISPLAY_ORDER)[number];
+  color: MoodColor;
   count: number;
+  topMonth: number | null;
   fullWidth?: boolean;
 }) {
   const info = getMoodColorInfo(color);
@@ -49,10 +70,13 @@ function ReferenceCard({
     >
       <View style={styles.top}>
         <View style={[styles.swatch, { backgroundColor: info.hex }]} />
-        <Text style={styles.count}>{count}</Text>
+        <Text style={styles.count}>{String(count)}</Text>
       </View>
       <Text style={styles.name}>{info.name}</Text>
       <Text style={styles.meaning}>{info.meaning}</Text>
+      {topMonth != null && count > 0 ? (
+        <Text style={styles.topMonth}>Más en {capitalize(MONTHS_ES[topMonth])}</Text>
+      ) : null}
     </View>
   );
 }
@@ -105,5 +129,11 @@ const styles = StyleSheet.create({
   meaning: {
     fontSize: 12,
     color: '#6b7280',
+  },
+  topMonth: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563eb',
+    marginTop: 2,
   },
 });
