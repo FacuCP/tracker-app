@@ -198,8 +198,11 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
                 <Text style={styles.failureLabel}>Por tiempo (en segundos)</Text>
               </TouchableOpacity>
 
-              <View style={styles.weightBox}>
-                <WeightStepRow valueKg={weightKg} onAdjust={(delta) => setWeightKg((w) => adjustWeightKg(w, delta))} />
+              <View style={styles.field}>
+                <Text style={styles.label}>Peso utilizado</Text>
+                <View style={styles.weightBox}>
+                  <WeightStepRow valueKg={weightKg} onAdjust={(delta) => setWeightKg((w) => adjustWeightKg(w, delta))} />
+                </View>
               </View>
 
               <View style={styles.field}>

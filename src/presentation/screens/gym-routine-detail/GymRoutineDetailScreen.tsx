@@ -104,7 +104,7 @@ export function GymRoutineDetailScreen({ route, navigation }: Props) {
                           item.exercise.reps == null
                             ? 'al fallo'
                             : item.exercise.isTimed
-                              ? `${item.exercise.reps} s`
+                              ? `${item.exercise.reps} seg`
                               : `${item.exercise.reps} rep`
                         }`}
                         isFirst={index === 0}

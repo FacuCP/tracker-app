@@ -23,7 +23,7 @@ export function GymExerciseInfoModal({ exercise, onClose }: Props) {
                 {exercise.reps == null
                   ? 'al fallo'
                   : exercise.isTimed
-                    ? `${exercise.reps} s`
+                    ? `${exercise.reps} seg`
                     : `${exercise.reps} rep`}
                 {exercise.weightKg > 0 ? ` · ${exercise.weightKg} kg` : ''}
               </Text>
