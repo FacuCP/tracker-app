@@ -1,7 +1,8 @@
 /**
- * Un ejercicio de una rutina: nombre, series y repeticiones objetivo (o "al
- * fallo", sin repeticiones fijas), un peso en kg y el puesto (orden) en el
- * que se muestra dentro de la rutina.
+ * Un ejercicio de una rutina: nombre, series y repeticiones objetivo (o
+ * segundos, si es "por tiempo"; o "al fallo", sin número fijo — mutuamente
+ * excluyentes), un peso en kg y el puesto (orden) en el que se muestra dentro
+ * de la rutina.
  */
 export interface GymExercise {
   readonly id: string;
@@ -9,8 +10,10 @@ export interface GymExercise {
   readonly name: string;
   /** Cantidad de series objetivo (>= 1). */
   readonly sets: number;
-  /** Repeticiones por serie (>= 1), o `null` si es "al fallo". */
+  /** Repeticiones (o segundos, si `isTimed`) por serie (>= 1), o `null` si es "al fallo". */
   readonly reps: number | null;
+  /** Si es `true`, `reps` se interpreta y se muestra como segundos ("por tiempo"). */
+  readonly isTimed: boolean;
   /** Peso en kg (0 = sin peso). */
   readonly weightKg: number;
   /** Orden dentro de la rutina (1, 2, 3...). */
@@ -37,6 +40,7 @@ export function createGymExercise(params: {
   name: string;
   sets: number;
   reps: number | null;
+  isTimed: boolean;
   weightKg: number;
   position: number;
   description?: string;
@@ -61,6 +65,9 @@ export function createGymExercise(params: {
   ) {
     throw new Error(`Las repeticiones tienen que ser un entero entre ${MIN_REPS} y ${MAX_REPS}`);
   }
+  if (params.isTimed && params.reps == null) {
+    throw new Error('Un ejercicio "por tiempo" necesita un tiempo (no puede ser "al fallo")');
+  }
   if (!Number.isFinite(params.weightKg) || params.weightKg < 0) {
     throw new Error('El peso tiene que ser un número mayor o igual a 0');
   }
@@ -74,6 +81,7 @@ export function createGymExercise(params: {
     name,
     sets: params.sets,
     reps: params.reps,
+    isTimed: params.isTimed,
     weightKg: Math.round(params.weightKg * 100) / 100,
     position: params.position,
     description,

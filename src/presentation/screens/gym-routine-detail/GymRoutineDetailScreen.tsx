@@ -101,7 +101,11 @@ export function GymRoutineDetailScreen({ route, navigation }: Props) {
                         key={item.exercise.id}
                         title={item.exercise.name}
                         typeLabel={`${item.exercise.sets} series × ${
-                          item.exercise.reps != null ? `${item.exercise.reps} rep` : 'al fallo'
+                          item.exercise.reps == null
+                            ? 'al fallo'
+                            : item.exercise.isTimed
+                              ? `${item.exercise.reps} s`
+                              : `${item.exercise.reps} rep`
                         }`}
                         isFirst={index === 0}
                         isLast={index === vm.exercises.length - 1}

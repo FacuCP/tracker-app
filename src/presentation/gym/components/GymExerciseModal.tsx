@@ -16,18 +16,20 @@ import {
   DEFAULT_SETS,
   MAX_DESCRIPTION,
   MAX_EXERCISE_NAME,
-  WEIGHT_STEPS_KG,
   adjustWeightKg,
 } from '../../../domain/gym/entities/GymExercise';
 import { GymSessionExercise } from '../../../domain/gym/entities/GymSession';
 import { Checkbox } from '../../components/Checkbox';
 import { KeyboardAvoider } from '../../components/KeyboardAvoider';
+import { WeightStepRow } from './WeightStepRow';
 
 export interface GymExerciseDraft {
   name: string;
   sets: number;
   /** null = "al fallo", sin repeticiones fijas. */
   reps: number | null;
+  /** Si es true, `reps` son segundos ("por tiempo"); excluyente con "al fallo". */
+  isTimed: boolean;
   /** 0 = sin peso. */
   weightKg: number;
   /** Notas opcionales; puede incluir un link. */
@@ -43,20 +45,18 @@ interface Props {
   onDelete?: () => Promise<void> | void;
 }
 
-function formatStep(step: number): string {
-  return Number.isInteger(step) ? String(step) : step.toFixed(1);
-}
-
 /**
  * Modal para crear o editar un ejercicio: nombre, series, repeticiones (o "al
- * fallo") y peso, con 3 botones para sumar y 3 para restar (±1 / ±2.5 / ±5 kg).
- * El orden dentro de la rutina se cambia desde el modo "Ordenar" del detalle.
+ * fallo", o "por tiempo" en segundos — mutuamente excluyentes) y peso, con 3
+ * botones para sumar y 3 para restar (±1 / ±2.5 / ±5 kg). El orden dentro de
+ * la rutina se cambia desde el modo "Ordenar" del detalle.
  */
 export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }: Props) {
   const [name, setName] = useState('');
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
   const [toFailure, setToFailure] = useState(false);
+  const [isTimed, setIsTimed] = useState(false);
   const [weightKg, setWeightKg] = useState(0);
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
@@ -68,6 +68,7 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
       setSets(initial ? String(initial.exercise.sets) : String(DEFAULT_SETS));
       const initialReps = initial?.exercise.reps;
       setToFailure(initial != null && initialReps == null);
+      setIsTimed(initial?.exercise.isTimed ?? false);
       setReps(initialReps != null ? String(initialReps) : String(DEFAULT_REPS));
       setWeightKg(initial?.exercise.weightKg ?? 0);
       setDescription(initial?.exercise.description ?? '');
@@ -98,6 +99,7 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
         name,
         sets: setsValue,
         reps: toFailure ? null : repsValue,
+        isTimed,
         weightKg,
         description,
       });
@@ -138,14 +140,14 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
                   />
                 </View>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Repeticiones</Text>
+                  <Text style={styles.label}>{isTimed ? 'Tiempo (segundos)' : 'Repeticiones'}</Text>
                   <TextInput
                     style={[
                       styles.input,
                       toFailure && styles.inputDisabled,
                       repsError && reps.length > 0 && styles.inputError,
                     ]}
-                    placeholder={String(DEFAULT_REPS)}
+                    placeholder={isTimed ? '30' : String(DEFAULT_REPS)}
                     placeholderTextColor={theme.colors.textMuted}
                     value={reps}
                     onChangeText={setReps}
@@ -156,51 +158,48 @@ export function GymExerciseModal({ visible, initial, onClose, onSave, onDelete }
                 </View>
               </View>
               {setsError && sets.length > 0 ? <Text style={styles.error}>Series: {setsError}</Text> : null}
-              {repsError && reps.length > 0 ? <Text style={styles.error}>Repeticiones: {repsError}</Text> : null}
+              {repsError && reps.length > 0 ? (
+                <Text style={styles.error}>{isTimed ? 'Tiempo' : 'Repeticiones'}: {repsError}</Text>
+              ) : null}
 
               <TouchableOpacity
                 style={styles.failureToggle}
-                onPress={() => setToFailure((v) => !v)}
+                onPress={() => {
+                  setToFailure((v) => !v);
+                  setIsTimed(false);
+                }}
                 activeOpacity={0.7}
               >
-                <Checkbox checked={toFailure} onToggle={() => setToFailure((v) => !v)} />
+                <Checkbox
+                  checked={toFailure}
+                  onToggle={() => {
+                    setToFailure((v) => !v);
+                    setIsTimed(false);
+                  }}
+                />
                 <Text style={styles.failureLabel}>Al fallo (sin repeticiones fijas)</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={styles.failureToggle}
+                onPress={() => {
+                  setIsTimed((v) => !v);
+                  setToFailure(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Checkbox
+                  checked={isTimed}
+                  onToggle={() => {
+                    setIsTimed((v) => !v);
+                    setToFailure(false);
+                  }}
+                />
+                <Text style={styles.failureLabel}>Por tiempo (en segundos)</Text>
+              </TouchableOpacity>
+
               <View style={styles.weightBox}>
-                <View style={styles.weightRow}>
-                  <View style={styles.weightSide}>
-                    {[...WEIGHT_STEPS_KG].reverse().map((step) => (
-                      <View key={`minus-${step}`} style={styles.stepWrap}>
-                        <TouchableOpacity
-                          style={styles.stepButton}
-                          onPress={() => setWeightKg((w) => adjustWeightKg(w, -step))}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.stepSign}>−</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.stepLabel}>{formatStep(step)}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  <Text style={styles.weightValue}>{weightKg} kg</Text>
-
-                  <View style={styles.weightSide}>
-                    {WEIGHT_STEPS_KG.map((step) => (
-                      <View key={`plus-${step}`} style={styles.stepWrap}>
-                        <TouchableOpacity
-                          style={[styles.stepButton, styles.stepButtonPlus]}
-                          onPress={() => setWeightKg((w) => adjustWeightKg(w, step))}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.stepSignPlus}>＋</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.stepLabel}>{formatStep(step)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
+                <WeightStepRow valueKg={weightKg} onAdjust={(delta) => setWeightKg((w) => adjustWeightKg(w, delta))} />
               </View>
 
               <View style={styles.field}>
@@ -319,51 +318,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
-  },
-  weightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  weightSide: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  weightValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  stepWrap: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  stepButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fee2e2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepButtonPlus: {
-    backgroundColor: '#dcfce7',
-  },
-  stepSign: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#b91c1c',
-  },
-  stepSignPlus: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#15803d',
-  },
-  stepLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
   },
   actions: {
     flexDirection: 'row',

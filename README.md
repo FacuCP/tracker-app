@@ -427,10 +427,11 @@ Tocar cualquier movimiento abre el modal para editarlo o borrarlo.
 ## Gimnasio
 
 Una **rutina** (`GymRoutine`) es solo un nombre; sus **ejercicios**
-(`GymExercise`) tienen nombre, **series**, **repeticiones** (o **"al
-fallo"**, sin número fijo), un **peso en kg** (0 = sin peso), un **puesto**
-interno que define el orden en la lista y una **descripción opcional** (notas,
-técnica, un link a un video, etc.).
+(`GymExercise`) tienen nombre, **series**, **repeticiones** (o **"por
+tiempo"** en segundos, o **"al fallo"** sin número fijo — las tres, mutuamente
+excluyentes), un **peso en kg** (0 = sin peso), un **puesto** interno que
+define el orden en la lista y una **descripción opcional** (notas, técnica,
+un link a un video, etc.).
 
 - **Nuevo/editar ejercicio** ([`GymExerciseModal`](src/presentation/gym/components/GymExerciseModal.tsx)):
   nombre, series (por defecto **4**) y repeticiones (por defecto **12**, o
@@ -439,8 +440,11 @@ técnica, un link a un video, etc.).
   el medio, 3 pasos de a +1/+2,5/+5 kg), con la cantidad de cada botón como
   etiqueta chiquita debajo de él; nunca baja de 0 y solo se muestra en la fila
   del ejercicio cuando es mayor a 0. El puesto ya no se edita a mano acá: un
-  ejercicio nuevo siempre se agrega al final. Al fondo, un campo de texto
-  multilínea para la **descripción** (opcional).
+  ejercicio nuevo siempre se agrega al final. Dos checkboxes mutuamente
+  excluyentes (tildar uno destilda el otro): **"Al fallo"** (sin repeticiones
+  fijas) y **"Por tiempo"** (el campo pasa a llamarse "Tiempo (segundos)" y se
+  muestra siempre en segundos donde sea que aparezca el ejercicio). Al fondo,
+  un campo de texto multilínea para la **descripción** (opcional).
 - **Info del ejercicio** ([`GymExerciseInfoModal`](src/presentation/gym/components/GymExerciseInfoModal.tsx)):
   si un ejercicio tiene descripción, aparece un círculo **"i"** al lado de su
   nombre (en el detalle de la rutina y en la Rutina de hoy); tocarlo abre un
@@ -469,8 +473,14 @@ técnica, un link a un video, etc.).
   grande **"＋"** para sumar una serie (arranca en 0) y un **"−"** para
   deshacer. Al llegar a las series objetivo pasa solo al siguiente ejercicio;
   al terminar todos, la rutina queda **hecha** (*"¡Completaste ... esta
-  semana!"*). Tiene su propia **estrella** (favorito por defecto) y aparece
-  igual en Favoritos y en Gimnasio.
+  semana!"*). Al lado del nombre hay dos links: **"Ajustar peso"** (abre
+  inline la misma fila `− − − peso + + +` del editor —
+  [`WeightStepRow`](src/presentation/gym/components/WeightStepRow.tsx),
+  compartida entre los dos lugares — y guarda cada click al toque) y
+  **"Saltar ejercicio"** (muestra el siguiente sin terminar en orden de
+  puesto, dando la vuelta al final hasta el primero que no esté completado;
+  no marca nada como hecho). Tiene su propia **estrella** (favorito por
+  defecto) y aparece igual en Favoritos y en Gimnasio.
 
 **Reseteo semanal, sin job en segundo plano.** El progreso de un ejercicio
 (`GymExerciseProgress`) se guarda con la fecha del **lunes de esa semana**

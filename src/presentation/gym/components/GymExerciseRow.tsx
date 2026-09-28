@@ -49,7 +49,8 @@ export function GymExerciseRow({ item, first, onPress, onAddSet, onRemoveSet }: 
           ) : null}
         </View>
         <Text style={styles.info}>
-          {exercise.sets} series × {exercise.reps != null ? `${exercise.reps} rep` : 'al fallo'}
+          {exercise.sets} series ×{' '}
+          {exercise.reps == null ? 'al fallo' : exercise.isTimed ? `${exercise.reps} s` : `${exercise.reps} rep`}
           {exercise.weightKg > 0 ? ` · ${exercise.weightKg} kg` : ''}
         </Text>
       </View>

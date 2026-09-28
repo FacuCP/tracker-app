@@ -52,6 +52,7 @@ export function useGymRoutineDetail(routineId: string) {
         name: draft.name,
         sets: draft.sets,
         reps: draft.reps,
+        isTimed: draft.isTimed,
         weightKg: draft.weightKg,
         position: editing?.exercise.position,
         description: draft.description,

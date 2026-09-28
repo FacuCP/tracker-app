@@ -9,6 +9,8 @@ export interface SaveGymExerciseInput {
   sets: number;
   /** `null` = "al fallo", sin repeticiones fijas. */
   reps: number | null;
+  /** Si es `true`, `reps` son segundos ("por tiempo") en vez de repeticiones. */
+  isTimed: boolean;
   weightKg: number;
   /** Si no viene, se le asigna el siguiente puesto libre de la rutina. */
   position?: number;
@@ -35,6 +37,7 @@ export class SaveGymExercise {
       name: input.name,
       sets: input.sets,
       reps: input.reps,
+      isTimed: input.isTimed,
       weightKg: input.weightKg,
       position,
       description: input.description,

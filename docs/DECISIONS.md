@@ -1349,6 +1349,105 @@ de otro texto, dominios sin `http`/`www`). Alcanza para el caso de uso real
 
 ---
 
+## 45. Rutina de hoy: saltar ejercicio, ajustar peso y ejercicios "por tiempo" *(elección del usuario)*
+
+**Contexto.** En "Rutina de hoy" se pidieron tres cosas: (1) poder ajustar el
+peso del ejercicio actual sin salir del cuadro, (2) un botón "Saltar
+ejercicio" que muestre el siguiente de la lista sin marcar el actual como
+hecho, dando la vuelta al llegar al final (mostrando el primero que no esté
+completado), y (3) que un ejercicio pueda marcarse "por tiempo", donde
+"repeticiones" pasa a llamarse y mostrarse como "tiempo" en segundos —
+excluyente con "al fallo" (tildar uno destilda el otro).
+
+**Decisión.**
+
+- **"Por tiempo" es un booleano más junto a `reps`, no un tipo de dato nuevo.**
+  `GymExercise.isTimed: boolean` reinterpreta el mismo campo numérico `reps`
+  como segundos en vez de repeticiones; no hizo falta un campo `seconds`
+  aparte. La UI (`GymExerciseModal`, `GymExerciseRow`, `GymExerciseInfoModal`,
+  `GymTodayCard`, el `typeLabel` del modo "Ordenar") decide el texto
+  ("12 rep" vs. "12 s" / "Al fallo") mirando `reps == null` primero y
+  `isTimed` después. La mutua exclusión con "al fallo" es una regla de UI: al
+  tildar un checkbox se destilda el otro (`setToFailure(false)` /
+  `setIsTimed(false)` cruzados); del lado del dominio, `createGymExercise`
+  igual valida que `isTimed && reps == null` sea inválido, como red de
+  seguridad si algún caller no respeta esa regla.
+- **"Saltar ejercicio" necesita un estado que la sesión (`GetGymSession`) no
+  tiene: cuál es el ejercicio "enfocado" ahora mismo**, distinto del
+  `currentExercise` derivado (siempre "el primero sin terminar"). Se agregó
+  `focusedExerciseId` como estado **local del hook** `useGymTodayCard` (no en
+  el dominio: es una preferencia de navegación de la sesión de uso, no datos
+  persistentes) y un valor derivado `displayExercise` que es el ejercicio
+  enfocado *si sigue sin terminar*, si no, cae solo al `currentExercise` de
+  siempre — así no hace falta limpiar el estado a mano cuando el ejercicio
+  saltado se termina (por completar sus series) ni cuando se cambia de
+  rutina (el id enfocado de la rutina vieja simplemente no matchea ningún
+  ejercicio de la nueva). `skip()` recorre `session.exercises` (ya ordenados
+  por puesto) desde el ejercicio actual +1, módulo el total, hasta encontrar
+  uno sin terminar — eso da la vuelta al final sola.
+- Antes de este cambio, `changeSet` operaba siempre sobre
+  `session.currentExercise`; ahora opera sobre `displayExercise`, así sumar o
+  restar series afecta al que está enfocado (saltado o no).
+- **"Ajustar peso" reutiliza el mismo control que ya existía en el editor de
+  ejercicio**, extraído a [`WeightStepRow`](src/presentation/gym/components/WeightStepRow.tsx)
+  (antes vivía inline en `GymExerciseModal`): la fila `− − − peso + + +` es
+  ahora un componente con un solo prop de callback (`onAdjust(delta)`), usado
+  tanto en el editor (que junta los cambios en estado local hasta guardar)
+  como en `GymTodayCard` (que persiste cada click al toque, vía
+  `useGymTodayCard.adjustWeight`, que llama a `saveGymExercise` con el resto
+  de los campos del ejercicio sin tocar — mismo patrón que ya usa
+  `GetGymSession` de reconstruir el ejercicio completo antes de guardar).
+
+**Alternativas descartadas.**
+
+- **Guardar el "ejercicio saltado" en el dominio** (por ejemplo, un
+  `skippedExerciseId` en la sesión o la rutina). No es progreso real, es una
+  preferencia de la sesión de uso actual del cuadro; guardarlo en storage
+  sería persistir algo que solo tiene sentido mientras el cuadro está en
+  pantalla, y complicaría `GetGymSession` sin necesidad.
+- **Un campo `unit: 'reps' | 'seconds'` en vez de `isTimed: boolean`.**
+  Funcionalmente equivalente pero más genérico de lo que hace falta (solo hay
+  dos casos, y el tercero — "al fallo" — ya lo cubre `reps: null`); un
+  booleano es más simple de leer en cada `if`.
+
+**Consecuencias.** `displayExercise` se recalcula en cada render a partir de
+`session` y `focusedExerciseId` (no es estado propio), así que un ejercicio
+"saltado" que se completa por fuera del cuadro (por ejemplo editándolo desde
+el detalle de la rutina) también se resuelve solo la próxima vez que
+`useGymTodayCard` recarga.
+
+---
+
+## 46. Bug: el orden de Favoritos de "Rutina de hoy" no se guardaba *(fix)*
+
+**Contexto.** Se reportó que reordenar la card de "Rutina de hoy" en
+Favoritos parecía funcionar (la UI reflejaba el nuevo orden en el momento),
+pero al reabrir la app volvía a aparecer en su posición por defecto.
+
+**Causa raíz.** `FavoriteRefKind` (en
+[`FavoriteRef.ts`](src/domain/favorites/entities/FavoriteRef.ts)) listaba
+`'finance' | 'mood' | 'tracker' | 'list'` — **sin `'gym'`** (quedó afuera
+cuando se agregó el cuadro de Gimnasio a Favoritos, ver #42). `parseFavoriteRef`
+usa esa lista para validar cada clave, y `sanitizeFavoritesOrder` descarta
+toda clave que no pasa `parseFavoriteRef`. Como `SaveFavoritesOrder.execute`
+sanea el array **antes de guardarlo**, la clave `'gym'` se borraba en cada
+guardado — el array persistido nunca la tuvo. Al recargar, como `'gym'` no
+aparece en el orden guardado, `useFavorites.reload()` la agrega al final del
+merge en su posición **por defecto** (fija, justo después de `mood`),
+pisando cualquier lugar donde el usuario la hubiera puesto.
+
+**Decisión.** Se agregó `'gym'` a `FavoriteRefKind` y a la lista de kinds
+"singleton" que `parseFavoriteRef`/`favoriteRefKey` reconocen sin necesitar
+un `:id` (mismo trato que `'finance'` y `'mood'`, ya que "Rutina de hoy" no
+tiene una instancia por id como sí tienen trackers o listas).
+
+**Consecuencias.** Ninguna migración de datos necesaria: el orden guardado
+previamente ya no tenía `'gym'` (se descartaba en cada guardado), así que a
+partir de este fix simplemente empieza a guardarse correctamente la primera
+vez que el usuario reordene o la app guarde el orden actual.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

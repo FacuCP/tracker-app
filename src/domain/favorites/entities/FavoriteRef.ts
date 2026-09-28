@@ -1,10 +1,13 @@
 /**
  * Referencia a un ítem de la pantalla Favoritos, serializada como string para
  * guardar el orden que eligió el usuario:
- *   - `"finance"` y `"mood"` son singletons (el resumen de finanzas y el mood tracker).
+ *   - `"finance"`, `"mood"` y `"gym"` son singletons (resumen de finanzas,
+ *     mood tracker y "Rutina de hoy").
  *   - `"tracker:<id>"` y `"list:<id>"` apuntan a un tracker o lista del usuario.
  */
-export type FavoriteRefKind = 'finance' | 'mood' | 'tracker' | 'list';
+export type FavoriteRefKind = 'finance' | 'mood' | 'gym' | 'tracker' | 'list';
+
+const SINGLETON_KINDS: readonly FavoriteRefKind[] = ['finance', 'mood', 'gym'];
 
 export interface FavoriteRef {
   readonly kind: FavoriteRefKind;
@@ -12,12 +15,14 @@ export interface FavoriteRef {
 }
 
 export function favoriteRefKey(ref: FavoriteRef): string {
-  if (ref.kind === 'finance' || ref.kind === 'mood') return ref.kind;
+  if ((SINGLETON_KINDS as readonly string[]).includes(ref.kind)) return ref.kind;
   return `${ref.kind}:${ref.id ?? ''}`;
 }
 
 export function parseFavoriteRef(key: string): FavoriteRef | null {
-  if (key === 'finance' || key === 'mood') return { kind: key };
+  if ((SINGLETON_KINDS as readonly string[]).includes(key)) {
+    return { kind: key as FavoriteRefKind };
+  }
   const [kind, ...rest] = key.split(':');
   const id = rest.join(':');
   if ((kind === 'tracker' || kind === 'list') && id.length > 0) {

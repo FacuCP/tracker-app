@@ -5,6 +5,7 @@ import { theme } from '../../../core/theme';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { useGymTodayCard } from '../viewmodels/useGymTodayCard';
 import { GymExerciseInfoModal } from './GymExerciseInfoModal';
+import { WeightStepRow } from './WeightStepRow';
 
 interface Props {
   onFavoriteToggled?: () => void;
@@ -19,6 +20,7 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
   const vm = useGymTodayCard();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [weightEditorOpen, setWeightEditorOpen] = useState(false);
 
   async function toggleFavorite() {
     await vm.toggleFavorite();
@@ -101,12 +103,12 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
             <Text style={styles.link}>Elegir otra rutina</Text>
           </TouchableOpacity>
         </View>
-      ) : vm.session.currentExercise ? (
+      ) : vm.displayExercise ? (
         <View style={styles.exercise}>
           <Text style={styles.routineName}>{vm.session.routine.name}</Text>
           <View style={styles.exerciseNameRow}>
-            <Text style={styles.exerciseName}>{vm.session.currentExercise.exercise.name}</Text>
-            {vm.session.currentExercise.exercise.description ? (
+            <Text style={styles.exerciseName}>{vm.displayExercise.exercise.name}</Text>
+            {vm.displayExercise.exercise.description ? (
               <TouchableOpacity
                 style={styles.infoButton}
                 onPress={() => setInfoOpen(true)}
@@ -117,26 +119,26 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
             ) : null}
           </View>
           <Text style={styles.exerciseInfo}>
-            {vm.session.currentExercise.exercise.reps != null
-              ? `${vm.session.currentExercise.exercise.reps} repeticiones`
-              : 'Al fallo'}
-            {vm.session.currentExercise.exercise.weightKg > 0
-              ? ` · ${vm.session.currentExercise.exercise.weightKg} kg`
-              : ''}
+            {vm.displayExercise.exercise.reps == null
+              ? 'Al fallo'
+              : vm.displayExercise.exercise.isTimed
+                ? `${vm.displayExercise.exercise.reps} segundos`
+                : `${vm.displayExercise.exercise.reps} repeticiones`}
+            {vm.displayExercise.exercise.weightKg > 0 ? ` · ${vm.displayExercise.exercise.weightKg} kg` : ''}
           </Text>
 
           <View style={styles.setsRow}>
             <TouchableOpacity
-              style={[styles.setButton, (vm.busy || vm.session.currentExercise.completedSets === 0) && styles.disabled]}
+              style={[styles.setButton, (vm.busy || vm.displayExercise.completedSets === 0) && styles.disabled]}
               onPress={vm.removeSet}
-              disabled={vm.busy || vm.session.currentExercise.completedSets === 0}
+              disabled={vm.busy || vm.displayExercise.completedSets === 0}
               activeOpacity={0.7}
             >
               <Text style={styles.setButtonSign}>−</Text>
             </TouchableOpacity>
 
             <Text style={styles.setsValue}>
-              {vm.session.currentExercise.completedSets}/{vm.session.currentExercise.exercise.sets}
+              {vm.displayExercise.completedSets}/{vm.displayExercise.exercise.sets}
             </Text>
             <Text style={styles.setsLabel}>series</Text>
 
@@ -149,6 +151,21 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
               <Text style={styles.setButtonPrimarySign}>＋</Text>
             </TouchableOpacity>
           </View>
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity onPress={() => setWeightEditorOpen((v) => !v)}>
+              <Text style={styles.link}>{weightEditorOpen ? 'Cerrar peso' : 'Ajustar peso'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={vm.skip} disabled={vm.busy}>
+              <Text style={styles.linkMuted}>Saltar ejercicio</Text>
+            </TouchableOpacity>
+          </View>
+
+          {weightEditorOpen ? (
+            <View style={styles.weightBox}>
+              <WeightStepRow valueKg={vm.displayExercise.exercise.weightKg} onAdjust={vm.adjustWeight} />
+            </View>
+          ) : null}
 
           <View style={styles.footerRow}>
             {onOpenRoutine ? (
@@ -166,7 +183,7 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
       )}
 
       <GymExerciseInfoModal
-        exercise={infoOpen ? (vm.session?.currentExercise?.exercise ?? null) : null}
+        exercise={infoOpen ? (vm.displayExercise?.exercise ?? null) : null}
         onClose={() => setInfoOpen(false)}
       />
     </View>
@@ -309,6 +326,19 @@ const styles = StyleSheet.create({
   exerciseInfo: {
     fontSize: 13,
     color: theme.colors.textMuted,
+    marginBottom: 10,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  weightBox: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    padding: 10,
     marginBottom: 10,
   },
   setsRow: {

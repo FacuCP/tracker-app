@@ -19,7 +19,12 @@ export function GymExerciseInfoModal({ exercise, onClose }: Props) {
             <>
               <Text style={styles.title}>{exercise.name}</Text>
               <Text style={styles.summary}>
-                {exercise.sets} series × {exercise.reps != null ? `${exercise.reps} rep` : 'al fallo'}
+                {exercise.sets} series ×{' '}
+                {exercise.reps == null
+                  ? 'al fallo'
+                  : exercise.isTimed
+                    ? `${exercise.reps} s`
+                    : `${exercise.reps} rep`}
                 {exercise.weightKg > 0 ? ` · ${exercise.weightKg} kg` : ''}
               </Text>
               {exercise.description ? (
