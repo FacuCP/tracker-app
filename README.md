@@ -150,7 +150,8 @@ src/
     ├── components/              # ComingSoon, KeyboardAvoider, Checkbox, FavoriteStar,
     │                            # DiagonalSplitSquare (celda de 1-2 colores en diagonal),
     │                            # ReorderRow (modo "Ordenar"), LinkedText (links tocables),
-    │                            # InfoButton + InfoModal (botón "i" + modal de descripción)
+    │                            # InfoButton + InfoModal (botón "i" + modal de descripción),
+    │                            # PinButton (ícono Lucide)
     ├── backup/                  # useBackup (exportar/importar el .json)
     ├── user/components/         # UserNameCard, NotificationsCard (Ajustes); FontSizeCard sin montar
     ├── screens/
@@ -169,8 +170,9 @@ src/
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
     │   └── tracker-progress/    # TrackerProgressScreen
     ├── list/
-    │   ├── components/          # ListCard (con estrella), CreateListButton, CreateListModal,
-    │   │                        # ListEntryRow, ListEntryModal, ListSortSelector, DateField
+    │   ├── components/          # ListCard (con estrella, pin y desplegable), CreateListButton,
+    │   │                        # CreateListModal, ListEntryRow, ListEntryModal,
+    │   │                        # ListEntryInfoModal, ListSortSelector, DateField
     │   ├── viewmodels/          # useLists, useListDetail
     │   └── parseRating.ts       # Parseo/validación del campo Rating / Prioridad
     ├── mood/
@@ -385,6 +387,22 @@ Cada lista tiene también un flag **`favorite`**: una **estrella** a la izquierd
 del nombre en la card, más un checkbox "Agregar a Favoritos" en el modal de
 crear. Las favoritas aparecen en la pestaña **Favoritos**.
 
+### Card desplegable
+
+Tanto en **Listas** como en **Favoritos**, cada card de lista tiene un botón
+con un **triángulo** (▸/▾) que despliega/colapsa una vista **de solo
+lectura** de sus ítems — nombre nomás, con **checkbox** en to-do lists.
+Tocar un ítem ahí abre un modal mostrando **toda su info** (fecha, prioridad/
+rating, estado, comentario —
+[`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx));
+tildar el checkbox no abre nada. Para editar, o borrar, hay que entrar a la
+lista como siempre. En **Favoritos** además hay un botón de **pin**
+([`PinButton`](src/presentation/components/PinButton.tsx), ícono de
+[Lucide](https://lucide.dev)): al pinear, la lista queda desplegada por
+defecto la próxima vez (`List.pinnedExpanded`, mismo patrón que `favorite`)
+— tanto en Favoritos como en Listas, ya que es una propiedad de la lista, no
+de la pantalla.
+
 ### Pantallas
 
 - **Listas** (hub): saludo "Hola {nombre}!" + "Estas son tus listas", y
@@ -401,10 +419,11 @@ crear. Las favoritas aparecen en la pestaña **Favoritos**.
   a la izquierda el **nº** (o un **checkbox** en una to-do list, que tacha el
   nombre al tildarlo); arriba **nombre + fecha (DD/MM/AAAA)**; abajo el
   **comentario recortado con “…”** si tiene (y, al lado del nombre, un botón
-  **”i”** para verlo completo en un modal de solo lectura, con links tocables
-  — ver “Info con botón 'i'” más abajo); **★/⚑ rating** a la derecha. Tocar la
-  fila abre el modal para editar los campos (o borrar la entrada). Arriba a
-  la derecha, **＋ Entrada**.
+  **”i”** que aparece si hay fecha, rating o comentario — abre
+  [`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx),
+  de solo lectura, con toda la info de la entrada y links tocables en el
+  comentario); **★/⚑ rating** a la derecha. Tocar la fila abre el modal para
+  editar los campos (o borrar la entrada). Arriba a la derecha, **＋ Entrada**.
   Al fondo, **Borrar esta lista** (borra la lista y sus entradas, con
   confirmación).
 
@@ -611,7 +630,7 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/mood-entries/v1` | `{ [fecha]: MoodEntryDto }` |
 | `@app-celu/trackers/v1` | `{ [trackerId]: TrackerDto }` (config + `favorite` de los trackers) |
 | `@app-celu/tracker-entries/v1` | `{ [trackerId]: { [fecha]: TrackerEntryDto } }` |
-| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre + `isTodo` + `favorite` de cada lista) |
+| `@app-celu/lists/v1` | `{ [listId]: ListDto }` (nombre + `isTodo` + `favorite` + `pinnedExpanded` de cada lista) |
 | `@app-celu/list-entries/v1` | `{ [listId]: { [entryId]: ListEntryDto } }` |
 | `@app-celu/finance-categories/v1` | `{ [id]: FinanceCategoryDto }` (siembra defaults la 1ª vez) |
 | `@app-celu/finance-transactions/v1` | `{ [id]: FinanceTransactionDto }` (movimientos) |

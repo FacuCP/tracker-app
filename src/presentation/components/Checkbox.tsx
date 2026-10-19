@@ -1,4 +1,5 @@
-import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Check } from 'lucide-react-native';
+import { StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
 
 import { theme } from '../../core/theme';
 
@@ -24,11 +25,7 @@ export function Checkbox({ checked, onToggle, size = 22, style }: Props) {
         style,
       ]}
     >
-      {checked ? (
-        <Text style={[styles.tick, { fontSize: size * 0.7 }]}>✓</Text>
-      ) : (
-        <View />
-      )}
+      {checked ? <Check size={size * 0.7} color="#fff" strokeWidth={3} /> : <View />}
     </TouchableOpacity>
   );
 }
@@ -43,9 +40,5 @@ const styles = StyleSheet.create({
   boxChecked: {
     backgroundColor: theme.colors.accent,
     borderColor: theme.colors.accent,
-  },
-  tick: {
-    color: '#fff',
-    fontWeight: '900',
   },
 });

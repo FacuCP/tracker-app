@@ -6,8 +6,8 @@ import { theme } from '../../../core/theme';
 import { ListEntry, isEntryOverdue } from '../../../domain/list/entities/ListEntry';
 import { Checkbox } from '../../components/Checkbox';
 import { InfoButton } from '../../components/InfoButton';
-import { InfoModal } from '../../components/InfoModal';
 import { formatRating } from '../parseRating';
+import { ListEntryInfoModal } from './ListEntryInfoModal';
 
 interface Props {
   entry: ListEntry;
@@ -31,6 +31,7 @@ interface Props {
  */
 export function ListEntryRow({ entry, position, first, isTodo = false, onPress, onToggleDone }: Props) {
   const [infoOpen, setInfoOpen] = useState(false);
+  const hasInfo = !!entry.comment || entry.date != null || entry.rating != null;
 
   return (
     <TouchableOpacity
@@ -52,7 +53,7 @@ export function ListEntryRow({ entry, position, first, isTodo = false, onPress, 
           >
             {entry.name}
           </Text>
-          {entry.comment ? <InfoButton onPress={() => setInfoOpen(true)} /> : null}
+          {hasInfo ? <InfoButton onPress={() => setInfoOpen(true)} /> : null}
           {isTodo ? (
             <>
               {entry.date != null ? (
@@ -77,11 +78,10 @@ export function ListEntryRow({ entry, position, first, isTodo = false, onPress, 
         </Text>
       ) : null}
 
-      {entry.comment ? (
-        <InfoModal
-          visible={infoOpen}
-          title={entry.name}
-          description={entry.comment}
+      {hasInfo ? (
+        <ListEntryInfoModal
+          entry={infoOpen ? entry : null}
+          isTodo={isTodo}
           onClose={() => setInfoOpen(false)}
         />
       ) : null}

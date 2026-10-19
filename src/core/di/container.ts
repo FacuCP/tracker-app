@@ -40,6 +40,7 @@ import { GetLists } from '../../domain/list/usecases/GetLists';
 import { SaveListEntry } from '../../domain/list/usecases/SaveListEntry';
 import { SetListEntryDone } from '../../domain/list/usecases/SetListEntryDone';
 import { SetListFavorite } from '../../domain/list/usecases/SetListFavorite';
+import { SetListPinnedExpanded } from '../../domain/list/usecases/SetListPinnedExpanded';
 import { AsyncStorageFinanceCategoryLocalDataSource } from '../../data/finance/datasources/FinanceCategoryLocalDataSource';
 import { AsyncStorageFinanceTransactionLocalDataSource } from '../../data/finance/datasources/FinanceTransactionLocalDataSource';
 import { FinanceCategoryRepositoryImpl } from '../../data/finance/repositories/FinanceCategoryRepositoryImpl';
@@ -176,6 +177,7 @@ export const container = {
   getList: new GetList(listRepository),
   createList: new CreateList(listRepository, generateId),
   setListFavorite: new SetListFavorite(listRepository),
+  setListPinnedExpanded: new SetListPinnedExpanded(listRepository),
   deleteList: new DeleteList(listRepository, listEntryRepository),
   getListEntries: new GetListEntries(listEntryRepository),
   saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),

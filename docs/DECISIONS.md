@@ -1769,6 +1769,175 @@ sin variantes a evaluar.
 
 ---
 
+## 54. Listas desplegables (solo lectura) + pin en Favoritos *(elección del usuario)*
+
+**Contexto.** Se pidió poder desplegar una lista desde su card (en Favoritos
+y en Listas) con un botón de triángulo al lado, para ver sus ítems sin entrar
+a la lista — tildar en el caso de to-do lists, pero **nada más**: para
+editar o ver el resto de los campos sigue haciendo falta entrar a la lista
+como ya funciona. En Favoritos, además, un botón de pin que hace que la
+lista quede desplegada por defecto.
+
+**Decisión.**
+
+- `List` suma `pinnedExpanded: boolean` (default `false`), mismo patrón que
+  `favorite` — y por lo tanto vive en el mismo blob de `lists` sin storage
+  key nuevo, el backup lo cubre gratis. Nuevo caso de uso simétrico a
+  `SetListFavorite`: [`SetListPinnedExpanded`](src/domain/list/usecases/SetListPinnedExpanded.ts).
+- **`ListCard` pasó a ser autocontenido para el despliegue**: guarda su
+  propio estado `expanded` (inicializado en `list.pinnedExpanded`) y, al
+  desplegarse, pide `getListEntries` directo (perezoso: solo cuando
+  `expanded` es `true`, no para cada card de entrada) — mismo criterio que ya
+  usan las cards favoriteables de Mood/Gimnasio (autocontenidas, con su
+  propio `reload`). Un `useEffect` fuerza `expanded = true` cuando
+  `list.pinnedExpanded` se vuelve `true` (por ejemplo, al pinear desde otra
+  instancia del card o al recargar la pantalla), pero **nunca fuerza el
+  colapso** al despinear — así despinear no te cierra la vista de golpe.
+- **Vista desplegada deliberadamente mínima**: solo nombre + checkbox (en
+  to-do lists) o un puntito (en listas normales) — sin fecha, comentario,
+  rating ni botón "i". Tildar un ítem llama a `SetListEntryDone` (ya
+  existía) y después a un callback `onEntryToggled` para que la pantalla que
+  lo contiene recargue sus conteos (el "X/Y hechas" del subtítulo, que
+  `ListCard` no sabe recalcular por sí solo).
+- El botón de pin (nuevo [`PinButton`](src/presentation/components/PinButton.tsx),
+  mismo patrón que `FavoriteStar`) solo se muestra con `showPin` — prop que
+  `FavoritesScreen` pasa en `true` y `ListsScreen` no pasa. El `pinnedExpanded`
+  en sí es una sola propiedad de la lista (no hay un flag separado "solo para
+  Favoritos"): si se pinea desde Favoritos, la lista también arranca
+  desplegada al verla en la pestaña Listas. Pinear además expande al toque
+  (sin esperar el round-trip de `reload`), para feedback inmediato.
+
+**Alternativas descartadas.**
+
+- **Guardar qué listas están "pineadas" en un storage separado**, como el
+  orden manual de Favoritos (`favoritesOrder`). Habría sido una fuente de
+  verdad más para lo mismo que ya puede vivir como un campo en `List`.
+- **Que el despliegue muestre fecha/comentario/rating directo en la fila**
+  (como `ListEntryRow`). El pedido fue explícito: "no se puede hacer nada
+  más que ver los ítems (y marcar como hecha)" — la fila en sí se mantiene
+  mínima; ver el resto de la info pasó a resolverse tocando el ítem (ver
+  #55), no mostrándola siempre en la fila. Editar sigue requiriendo entrar a
+  la lista.
+
+**Consecuencias.** Cada card desplegada que no está pineada vuelve a pedir
+sus entradas cada vez que el componente se desmonta y remonta (al salir y
+volver a la pantalla) — no hay caché entre sesiones de la pantalla; aceptable
+a esta escala, mismo criterio que el resto de los conteos N+1 de la app.
+
+---
+
+## 55. Ajustes a las listas desplegables: ícono real, ver ítem completo, tilde centrado *(elección del usuario)*
+
+**Contexto.** Cuatro correcciones a #54: (1) el triángulo de desplegar se
+veía chico, (2) el pin no debía ser un emoji sino un ícono real de Lucide,
+(3) tocar un ítem en la vista desplegada tiene que abrir un modal mostrando
+**toda** la información de la entrada (no solo nombre), y ese mismo modal
+"de ver todo" debería aplicar en todos los módulos que ya tenían un patrón
+parecido, y (4) el tilde del `Checkbox` no se veía centrado en el cuadrado
+(se nota en las filas de listas y de Rutina diaria).
+
+**Decisión.**
+
+- **Primer ícono real de la app**: hasta ahora todo era texto/emoji/Unicode
+  (★, ▸, 📌, i en cursiva...). Se agregaron `lucide-react-native` y su
+  dependencia `react-native-svg` (versión fijada a la que trae el propio
+  Expo SDK 57 para este proyecto, vía su `bundledNativeModules.json`, en vez
+  de la última de npm) — es un módulo nativo, pero empaquetado en el cliente
+  de Expo Go igual que otros módulos comunes, así que no debería hacer falta
+  un build de EAS para probarlo (a diferencia de `expo-notifications`, que sí
+  lo necesita). [`PinButton`](src/presentation/components/PinButton.tsx) pasó
+  de `<Text>📌</Text>` a `<Pin />` de Lucide, coloreado con `theme.colors.accent`
+  cuando está pineado.
+- El triángulo de [`ListCard`](src/presentation/list/components/ListCard.tsx)
+  pasa de `fontSize: 15` a `20` (la mitad del tamaño del botón "＋", que mide
+  40px).
+- **Nuevo modal "ver todo"**: [`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx)
+  envuelve el `InfoModal` genérico (#49) y le agrega, como `children`, la
+  fecha (o "Vence:" + "vencida" en to-do lists), la prioridad/rating y el
+  estado (completada/pendiente) — además de la descripción que `InfoModal`
+  ya mostraba. Se usa en dos lugares: el botón "i" de `ListEntryRow` (que
+  ahora se muestra si hay *cualquier* dato extra — comentario, fecha o
+  rating — no solo comentario) y, nuevo, **tocar un ítem en la vista
+  desplegada de `ListCard`** (antes esas filas no hacían nada al tocarlas).
+  Gimnasio y Rutina diaria ya mostraban toda su información relevante desde
+  que se creó el patrón (#44, #49), así que no necesitaron cambios — "en
+  todos los módulos" ya estaba cubierto ahí.
+- **Centrado del tilde (primer intento, insuficiente — ver #57)**: `Checkbox`
+  le sumó a su `<Text>✓</Text>` `textAlign: 'center'`,
+  `textAlignVertical: 'center'` e `includeFontPadding: false`. Es el fix
+  estándar de RN para el padding que Android le agrega al texto por defecto,
+  pero no alcanzó: el glifo `✓` en sí no está centrado dentro de su propio
+  cuadro de la fuente, así que quedaba corrido igual.
+
+**Alternativas descartadas.**
+
+- **Seguir con emoji/texto para el pin.** Pedido explícito del usuario de
+  usar un ícono real; de paso sienta el precedente para si en el futuro se
+  quiere reemplazar otros emoji (★, ▸) por íconos consistentes.
+
+**Consecuencias.** La app pasa a depender de un módulo nativo más
+(`react-native-svg`) además de `expo-notifications`; si en algún momento deja
+de andar en Expo Go, el mismo tipo de aviso que ya existe para notificaciones
+(probar en un build de EAS) aplicaría acá también.
+
+---
+
+## 56. Bug: la vista desplegada de una lista quedaba desactualizada *(fix)*
+
+**Contexto.** Se reportó que, con una lista desplegada, agregar una entrada
+(desde el **＋** de la card) no la mostraba ahí hasta cerrar y volver a abrir
+el despliegue.
+
+**Causa raíz.** El `useEffect` de [`ListCard`](src/presentation/list/components/ListCard.tsx)
+que pide `getListEntries` solo tenía `[expanded, list.id]` como dependencias:
+una vez desplegada, nada volvía a dispararlo mientras seguía desplegada,
+aunque la lista cambiara por fuera (agregar una entrada, borrarla, tildar una
+tarea desde la lista completa).
+
+**Decisión.** Se agregaron `counts.total` y `counts.done` a las dependencias
+del efecto. `counts` ya lo recalcula la pantalla contenedora (`useFavorites`/
+`useLists`) en cada `reload()`, así que cualquier cambio real en la lista
+hace que esos números cambien y el efecto se vuelva a disparar — sin agregar
+un mecanismo de invalidación nuevo, reusando un valor que ya viajaba como
+prop.
+
+**Consecuencias.** Tildar un ítem *desde la propia vista desplegada* ya
+actualizaba `entries` al toque (de forma optimista) y además dispara
+`onEntryToggled` → `reload()` del padre → `counts` cambia → el efecto se
+vuelve a disparar igual, pidiendo las entradas de nuevo aunque ya estaban
+correctas. Es una lectura redundante (no una lectura incorrecta): aceptable
+a esta escala, mismo criterio de simplicidad que el resto de los efectos
+"recargar todo" de la app.
+
+---
+
+## 57. Tilde del Checkbox: el fix real era un ícono, no un ajuste de texto *(fix)*
+
+**Contexto.** El intento de #55 (`includeFontPadding: false` + alineación)
+no dejó el tilde centrado — el usuario lo confirmó después de probarlo.
+
+**Causa raíz.** El problema no era el padding que Android le agrega al
+`<Text>` (eso sí se corrigió), sino que el glifo `✓` de la fuente del
+sistema no es simétrico dentro de su propio cuadro de avance — ningún ajuste
+de alineación de texto puede centrar algo que la fuente ya dibujó corrido.
+
+**Decisión.** Se reemplazó el `<Text>✓</Text>` por el ícono `Check` de
+Lucide (ya disponible desde #55, cuando se agregó para `PinButton`): un path
+vectorial centrado en su `viewBox` por diseño, inmune a cómo cada fuente
+dibuje el glifo. `Checkbox` queda sin ningún `<Text>` propio.
+
+**Alternativas descartadas.**
+
+- **Seguir ajustando el texto** (un `transform: [{translateY}]` a ojo).
+  Un valor a mano que "más o menos" centra el glifo de una fuente específica
+  se puede romper con cualquier cambio de fuente del sistema o de plataforma
+  (Android/iOS). Un ícono vectorial no tiene ese problema.
+
+**Consecuencias.** Ninguna — mismo tamaño, mismo color, mismo lugar en todos
+los `Checkbox` de la app (listas, Rutina diaria, gimnasio).
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

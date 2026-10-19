@@ -7,6 +7,7 @@ export interface ListDto {
   createdAt: string;
   isTodo?: boolean;
   favorite?: boolean;
+  pinnedExpanded?: boolean;
 }
 
 export function listToDto(list: List): ListDto {
@@ -16,6 +17,7 @@ export function listToDto(list: List): ListDto {
     createdAt: list.createdAt,
     isTodo: list.isTodo,
     favorite: list.favorite || undefined,
+    pinnedExpanded: list.pinnedExpanded || undefined,
   };
 }
 
@@ -26,5 +28,6 @@ export function listFromDto(dto: ListDto): List {
     createdAt: (dto.createdAt ?? '1970-01-01') as IsoDate,
     isTodo: dto.isTodo ?? false,
     favorite: dto.favorite ?? false,
+    pinnedExpanded: dto.pinnedExpanded ?? false,
   });
 }

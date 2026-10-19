@@ -87,6 +87,9 @@ export function FavoritesScreen({ navigation }: Props) {
             onAddEntry={() => vm.openAddEntry(card.list)}
             onOpen={() => navigation.navigate('ListDetail', { listId: card.list.id })}
             onToggleFavorite={() => vm.toggleListFavorite(card.list)}
+            showPin
+            onTogglePin={() => vm.toggleListPinnedExpanded(card.list)}
+            onEntryToggled={vm.reload}
           />
         );
       default:

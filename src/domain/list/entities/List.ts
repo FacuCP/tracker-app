@@ -12,6 +12,8 @@ export interface List {
   readonly isTodo: boolean;
   /** Si está marcada como favorita (aparece en la pestaña Favoritos). */
   readonly favorite: boolean;
+  /** Si queda desplegada (mostrando sus ítems) por defecto, en vez de colapsada. */
+  readonly pinnedExpanded: boolean;
 }
 
 export const MAX_LIST_NAME = 40;
@@ -22,6 +24,7 @@ export function createList(params: {
   createdAt: IsoDate;
   isTodo?: boolean;
   favorite?: boolean;
+  pinnedExpanded?: boolean;
 }): List {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -36,5 +39,6 @@ export function createList(params: {
     createdAt: params.createdAt,
     isTodo: params.isTodo ?? false,
     favorite: params.favorite ?? false,
+    pinnedExpanded: params.pinnedExpanded ?? false,
   };
 }

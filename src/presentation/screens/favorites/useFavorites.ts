@@ -151,6 +151,14 @@ export function useFavorites() {
     [reload],
   );
 
+  const toggleListPinnedExpanded = useCallback(
+    async (list: List) => {
+      await container.setListPinnedExpanded.execute(list.id, !list.pinnedExpanded);
+      await reload();
+    },
+    [reload],
+  );
+
   const toggleFinanceFavorite = useCallback(async () => {
     const financeShown = cards.some((c) => c.kind === 'finance');
     await container.updateUserProfile.execute({ financeFavorite: !financeShown });
@@ -187,6 +195,7 @@ export function useFavorites() {
     closeEntryModal: () => setEntryTarget(null),
     saveEntry,
     toggleListFavorite,
+    toggleListPinnedExpanded,
     toggleFinanceFavorite,
     reload,
   };

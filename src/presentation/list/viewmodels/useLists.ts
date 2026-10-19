@@ -103,5 +103,6 @@ export function useLists() {
     openAddEntry: setEntryTarget,
     closeEntryModal: () => setEntryTarget(null),
     saveEntry,
+    reload,
   };
 }
