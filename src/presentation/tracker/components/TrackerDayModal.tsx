@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpa
 import { capitalize, formatLongDate, IsoDate } from '../../../core/utils/date';
 import { MAX_OPTIONS_PER_DAY, Tracker } from '../../../domain/tracker/entities/Tracker';
 import { MAX_TRACKER_COMMENT, TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
+import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 import { Counter } from './Counter';
 
 interface Props {
@@ -58,71 +59,77 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
 
   return (
     <Modal visible={date != null} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>{date ? capitalize(formatLongDate(date)) : ''}</Text>
-          <Text style={styles.trackerName}>{tracker.name}</Text>
+      <KeyboardAvoider>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.handle} />
+            <Text style={styles.title}>{date ? capitalize(formatLongDate(date)) : ''}</Text>
+            <Text style={styles.trackerName}>{tracker.name}</Text>
 
-          <ScrollView keyboardShouldPersistTaps="handled" style={styles.body} contentContainerStyle={styles.bodyContent}>
-            {hasOptions ? (
-              <View style={styles.options}>
-                {tracker.options.map((option) => {
-                  const selected = optionIds.includes(option.id);
-                  return (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={[
-                        styles.optionChip,
-                        { borderColor: option.color },
-                        selected && { backgroundColor: option.color },
-                      ]}
-                      onPress={() => toggleOption(option.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : null}
-
-            {tracker.hasCounter ? (
-              <View style={styles.counterWrap}>
-                <Counter value={count} onChange={(next) => setCount(Math.max(0, next))} />
-              </View>
-            ) : null}
-
-            <TextInput
-              style={styles.commentInput}
-              placeholder="Comentario (opcional)"
-              placeholderTextColor="#9ca3af"
-              value={comment}
-              onChangeText={setComment}
-              maxLength={MAX_TRACKER_COMMENT}
-              multiline
-              textAlignVertical="top"
-            />
-          </ScrollView>
-
-          <View style={styles.actions}>
-            {entry ? (
-              <TouchableOpacity style={[styles.button, styles.deleteButton]} onPress={onDelete}>
-                <Text style={styles.deleteText}>Borrar</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={[styles.button, styles.saveButton, (!canSave || saving) && styles.disabled]}
-              onPress={handleSave}
-              disabled={!canSave || saving}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              style={styles.body}
+              contentContainerStyle={styles.bodyContent}
             >
-              <Text style={styles.saveText}>{entry ? 'Actualizar' : 'Guardar'}</Text>
-            </TouchableOpacity>
-          </View>
+              {hasOptions ? (
+                <View style={styles.options}>
+                  {tracker.options.map((option) => {
+                    const selected = optionIds.includes(option.id);
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[
+                          styles.optionChip,
+                          { borderColor: option.color },
+                          selected && { backgroundColor: option.color },
+                        ]}
+                        onPress={() => toggleOption(option.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {tracker.hasCounter ? (
+                <View style={styles.counterWrap}>
+                  <Counter value={count} onChange={(next) => setCount(Math.max(0, next))} />
+                </View>
+              ) : null}
+
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Comentario (opcional)"
+                placeholderTextColor="#9ca3af"
+                value={comment}
+                onChangeText={setComment}
+                maxLength={MAX_TRACKER_COMMENT}
+                multiline
+                textAlignVertical="top"
+              />
+            </ScrollView>
+
+            <View style={styles.actions}>
+              {entry ? (
+                <TouchableOpacity style={[styles.button, styles.deleteButton]} onPress={onDelete}>
+                  <Text style={styles.deleteText}>Borrar</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.button, styles.saveButton, (!canSave || saving) && styles.disabled]}
+                onPress={handleSave}
+                disabled={!canSave || saving}
+              >
+                <Text style={styles.saveText}>{entry ? 'Actualizar' : 'Guardar'}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoider>
     </Modal>
   );
 }

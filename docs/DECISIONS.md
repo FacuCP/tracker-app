@@ -1938,6 +1938,28 @@ los `Checkbox` de la app (listas, Rutina diaria, gimnasio).
 
 ---
 
+## 58. Bug: el teclado tapaba el comentario de un tracker *(fix)*
+
+**Contexto.** Al escribir el comentario de un día en
+[`TrackerDayModal`](src/presentation/tracker/components/TrackerDayModal.tsx),
+el teclado tapaba el campo. El resto de los modales con campos de texto
+largo (`GymExerciseModal`, `ListEntryModal`, `DailyRoutineTaskModal`) no
+tienen este problema.
+
+**Causa raíz.** Esos otros modales envuelven su contenido en
+[`KeyboardAvoider`](src/presentation/components/KeyboardAvoider.tsx)
+(`KeyboardAvoidingView`, necesario porque Android no reacomoda solo el
+contenido de un `Modal`). `TrackerDayModal` se armó sin ese wrapper — el
+campo de comentario es justamente lo que se agregó después (#50), sobre un
+modal que nunca lo había necesitado antes.
+
+**Decisión.** Se envolvió el `Pressable` de fondo en `KeyboardAvoider`,
+igual que los demás modales con texto libre.
+
+**Consecuencias.** Ninguna.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para
