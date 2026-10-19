@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { theme } from '../../../core/theme';
 import { GymSessionExercise } from '../../../domain/gym/entities/GymSession';
+import { InfoButton } from '../../components/InfoButton';
 import { GymExerciseInfoModal } from './GymExerciseInfoModal';
 
 interface Props {
@@ -35,18 +36,7 @@ export function GymExerciseRow({ item, first, onPress, onAddSet, onRemoveSet }: 
           <Text style={[styles.name, item.done && styles.nameDone]} numberOfLines={1}>
             {exercise.name}
           </Text>
-          {exercise.description ? (
-            <TouchableOpacity
-              style={styles.infoButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                setInfoOpen(true);
-              }}
-              hitSlop={8}
-            >
-              <Text style={styles.infoButtonText}>i</Text>
-            </TouchableOpacity>
-          ) : null}
+          {exercise.description ? <InfoButton onPress={() => setInfoOpen(true)} /> : null}
         </View>
         <Text style={styles.info}>
           {exercise.sets} series ×{' '}
@@ -130,21 +120,6 @@ const styles = StyleSheet.create({
   nameDone: {
     textDecorationLine: 'line-through',
     color: theme.colors.textMuted,
-  },
-  infoButton: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: theme.colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoButtonText: {
-    fontSize: 11,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    color: theme.colors.accent,
   },
   info: {
     fontSize: 12,

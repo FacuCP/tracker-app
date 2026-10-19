@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
+import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
 import { ReorderRow } from '../../components/ReorderRow';
 import { FinanceSummaryCard } from '../../finance/components/FinanceSummaryCard';
 import { GymTodayCard } from '../../gym/components/GymTodayCard';
@@ -20,6 +22,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
 export function FavoritesScreen({ navigation }: Props) {
   const vm = useFavorites();
   const [chooserOpen, setChooserOpen] = useState(false);
+  // Deslizar hacia la izquierda lleva a "Rutinas diarias" (todavía sin implementar).
+  const swipe = useHorizontalSwipe({
+    onSwipeLeft: () => navigation.navigate('DailyRoutines'),
+    onSwipeRight: () => {},
+  });
 
   function choose(what: 'tracker' | 'list' | 'routine') {
     setChooserOpen(false);
@@ -64,7 +71,9 @@ export function FavoritesScreen({ navigation }: Props) {
             key={card.key}
             trackerId={card.tracker.id}
             onSeeProgress={() =>
-              navigation.navigate('TrackerProgress', { trackerId: card.tracker.id })
+              card.tracker.id === ROUTINE_TRACKER_ID
+                ? navigation.navigate('DailyRoutines')
+                : navigation.navigate('TrackerProgress', { trackerId: card.tracker.id })
             }
             onFavoriteToggled={vm.reload}
           />
@@ -87,16 +96,23 @@ export function FavoritesScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <View style={styles.swipeArea} {...swipe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.headerRow}>
-          <Text style={styles.greeting}>{vm.greeting}</Text>
+        <View style={styles.headerBlock}>
+          <View style={styles.headerRow}>
+            <Text style={styles.greeting}>{vm.greeting}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('DailyRoutines')} hitSlop={8}>
+              <Text style={styles.dailyRoutinesHintText}>Rutina Diaria ›</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.subtitle}>Tus favoritos</Text>
+
           {!vm.loading && vm.cards.length > 1 ? (
-            <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
+            <TouchableOpacity style={styles.reorderButtonWrap} onPress={vm.toggleReorder} hitSlop={8}>
               <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
-        <Text style={styles.subtitle}>Tus favoritos</Text>
 
         {vm.loading ? (
           <ActivityIndicator style={styles.loader} size="large" />
@@ -135,6 +151,7 @@ export function FavoritesScreen({ navigation }: Props) {
           </>
         )}
       </ScrollView>
+      </View>
 
       <CreateChooserModal
         visible={chooserOpen}
@@ -159,11 +176,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  swipeArea: {
+    flex: 1,
+  },
+  dailyRoutinesHintText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+  },
   content: {
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 16,
     gap: 12,
+  },
+  headerBlock: {
+    gap: 2,
   },
   headerRow: {
     flexDirection: 'row',
@@ -180,8 +208,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: theme.colors.textMuted,
-    marginTop: -6,
-    marginBottom: 6,
   },
   loader: {
     marginTop: 48,
@@ -194,6 +220,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  reorderButtonWrap: {
+    alignSelf: 'flex-end',
   },
   reorderButton: {
     color: theme.colors.accent,

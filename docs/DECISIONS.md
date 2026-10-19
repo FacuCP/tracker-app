@@ -1448,6 +1448,327 @@ vez que el usuario reordene o la app guarde el orden actual.
 
 ---
 
+## 47. "Rutinas diarias": placeholder a un deslizo de Favoritos *(elección del usuario)*
+
+**Contexto.** Se pidió que deslizar hacia la izquierda en Favoritos lleve a
+una pantalla nueva con título "Rutinas diarias" que por ahora solo diga "Por
+implementar" — explícitamente sin funcionalidad todavía.
+
+**Decisión.**
+
+- Se resucitó [`ComingSoon`](src/presentation/components/ComingSoon.tsx), el
+  componente placeholder que ya existía desde #31 (se usó para "Finanzas"
+  antes de implementarla) y que había quedado sin ningún screen que lo usara.
+  `DailyRoutinesScreen` es solo `<ComingSoon title="Rutinas diarias"
+  description="Por implementar" />`.
+- El gesto reutiliza [`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts),
+  el mismo hook con el que ya se cambiaba de vista (semana/mes/año) en el
+  progreso de un tracker (#33): solo reclama el gesto cuando el movimiento es
+  claramente horizontal (`HORIZONTAL_RATIO`), así convive con el `ScrollView`
+  de Favoritos sin romper el scroll vertical ni los taps de las cards o del
+  botón "Ordenar". Vive en `presentation/calendar/` pero ya se importaba
+  cross-feature desde `tracker-progress/`, así que importarlo una vez más
+  desde `favorites/` sigue el mismo patrón en vez de mover el archivo.
+  `onSwipeRight` queda como no-op: Favoritos es la pantalla inicial, no hay
+  nada a la derecha todavía.
+- `DailyRoutines` es una pantalla normal del stack (con flecha de volver),
+  no una pantalla "hub": se llega por el gesto, no por el menú del header, así
+  que no tiene sentido sumarla a `HubMenuButton`.
+
+**Alternativas descartadas.**
+
+- **Un componente placeholder nuevo en vez de reusar `ComingSoon`.** Hubiera
+  sido código duplicado para el mismo propósito exacto que ya existía,
+  simplemente sin uso en este momento.
+
+**Consecuencias.** Ninguna todavía: es un placeholder a propósito. Cuando se
+implemente "Rutinas diarias" de verdad, `DailyRoutinesScreen` deja de usar
+`ComingSoon` y pasa a tener su propio viewmodel/componentes, como ya pasó con
+Finanzas.
+
+---
+
+## 48. Rutinas diarias: tareas con reseteo diario y seguimiento automático *(elección del usuario)*
+
+**Contexto.** Se implementó "Rutinas diarias" (hasta ahora un placeholder,
+ver #47) de verdad: tareas con título y descripción (como una entrada de
+lista) y un check que se resetea solo todos los días. Al final del día, el %
+de tareas completadas tiene que "llenar" automáticamente un tracker con
+colores (verde 100%, amarillo 50-99%, naranja 25-50%, rojo 0-25%), mostrado
+abajo de todas las tareas con el título "Seguimiento de Rutina".
+
+**Decisión.**
+
+- **Reseteo diario = el mismo patrón que el reseteo semanal del gimnasio**
+  (#42), con `cycleStart` diario en vez de semanal: `DailyTaskProgress { taskId,
+  day, done }` guarda el día en que se tildó, y `resolveTaskDone` lo trata
+  como no hecho si `day` no es el de hoy. De nuevo, nada dispara el reseteo:
+  el primer toque del día nuevo ya escribe (o lee) contra el día correcto.
+- **"Seguimiento de Rutina" es un tracker de verdad**, no una imitación
+  visual: usa el mismo `Tracker`/`TrackerEntry` que ya existía para los
+  trackers del usuario, con 4 opciones de color fijas. Reusar el modelo
+  entero (en vez de inventar un tipo de dato de calendario propio para esto)
+  significa que el calendario de abajo es literalmente
+  [`CalendarMonth`](src/presentation/calendar/CalendarMonth.tsx) +
+  [`TrackerDayCell`](src/presentation/tracker/components/TrackerDayCell.tsx),
+  los mismos componentes que ya pintan cualquier otro tracker — cero UI
+  nueva para "dibujar un calendario de colores". Como contrapartida, este
+  tracker también aparece en el listado genérico de Trackers (no se lo
+  oculta a propósito): es una decisión de simplicidad, no un descuido.
+- **Id fijo, no generado** (`ROUTINE_TRACKER_ID = 'daily-routine-tracker'`),
+  para poder "encontrarlo" siempre entre reinicios sin guardar una referencia
+  aparte (como sí hace Gimnasio con la rutina seleccionada). Se crea la
+  primera vez que hace falta (`SyncRoutineTracker`), con
+  `TrackerRepository.save()` directo — no por `CreateTracker`, que siempre
+  genera un id nuevo.
+- **Sin "cierre de día": se resincroniza en cada recarga de la pantalla**,
+  usando el progreso de HOY (no de "ayer"). En vez de esperar a medianoche
+  (imposible sin un job en segundo plano, descartado otra vez por el mismo
+  motivo que en #42), cada vez que se tilda/destilda una tarea se recalcula
+  el % de hoy y se pisa el registro de hoy del tracker con el bucket que
+  corresponde. El efecto práctico es el mismo que "al final del día": el
+  último cambio del día es el que queda guardado como el color de ese día.
+  Por eso tampoco hace falta detectar "cambió el día" en ningún lado.
+- **Única dependencia cruzada entre features de dominio de toda la app**:
+  [`SyncRoutineTracker`](src/domain/dailyRoutine/usecases/SyncRoutineTracker.ts)
+  (en `domain/dailyRoutine/`) importa `TrackerRepository`,
+  `TrackerEntryRepository`, `createTracker` y `createTrackerEntry` de
+  `domain/tracker/`. Hasta ahora cada `domain/<feature>/` solo dependía de sí
+  mismo y de `core/utils`; acá "Rutina diaria" necesita *ser* un tracker, no
+  solo parecerse a uno, así que la alternativa (un puerto/evento genérico
+  para no acoplar dominios) era over-engineering para una app personal de un
+  solo usuario. Se documenta como la excepción, no como el patrón a seguir.
+
+**Alternativas descartadas.**
+
+- **Un tipo de dato de "seguimiento" propio de Rutinas diarias** (en vez de
+  reusar `Tracker`). Hubiera duplicado toda la UI de calendario con colores
+  que ya existe y funciona.
+- **Ocultar "Seguimiento de Rutina" del listado de Trackers** con un flag
+  tipo `hidden: boolean` en `Tracker`. Agregaba un campo al modelo genérico
+  de trackers solo para un caso particular; total aparece con un nombre
+  elocuente y no tiene nada "roto" si el usuario lo abre.
+- **Calcular el % al abrir la app al día siguiente** (mirando el progreso de
+  "ayer"), en vez de resincronizar en vivo. Requeriría detectar el cambio de
+  día (comparar contra un "último día sincronizado" guardado) para no
+  recalcular de más; resincronizar siempre con el día de hoy es más simple y
+  da el mismo resultado final.
+
+**Consecuencias.** Si el usuario abre la rutina, tilda alguna tarea, y después
+nunca más vuelve a abrir la app ese día, el color que queda es el de "la
+última vez que se tocó algo" — si esa no fue la última interacción real del
+día con la app (p. ej. completó la última tarea mentalmente pero no volvió a
+abrir la pantalla), el tracker puede no reflejar el estado "final" perfecto.
+Es la misma clase de limitación que ya aceptan las notificaciones (#41) y el
+reseteo del gimnasio (#42): sin job en segundo plano, todo se resuelve en el
+próximo toque, no en el instante exacto del evento.
+
+---
+
+## 49. "i" + modal de descripción, generalizado a tareas y listas *(elección del usuario)*
+
+**Contexto.** El patrón "tocar la fila edita, y si hay descripción aparece un
+botón 'i' que la muestra en un modal con links tocables" ya existía solo para
+ejercicios de gimnasio (#44). Se pidió el mismo comportamiento para las
+tareas de Rutina diaria y para las entradas de listas (`ListEntryRow`), que
+hasta ahora mostraban el comentario siempre, truncado a una línea, dentro de
+la fila.
+
+**Decisión.** Se extrajeron las dos piezas genéricas que antes vivían
+solo del lado de Gimnasio a `presentation/components/`:
+[`InfoButton`](src/presentation/components/InfoButton.tsx) (el círculo "i",
+con `size` para los dos tamaños que ya se usaban) e
+[`InfoModal`](src/presentation/components/InfoModal.tsx) (modal de solo
+lectura con título + `children` opcional + descripción vía `LinkedText`, para
+los links tocables). `GymExerciseInfoModal` pasó a ser un wrapper fino sobre
+`InfoModal` (le agrega como `children` el renglón de series × peso que es
+específico de un ejercicio), y `GymExerciseRow`/`GymTodayCard` ahora usan
+`InfoButton` en vez de repetir el círculo a mano. `DailyRoutineTaskRow` y
+`ListEntryRow` adoptan el mismo patrón desde cero: sacan el comentario/
+descripción de la fila (ya no se ve truncado ahí) y lo muestran solo en el
+modal, detrás del botón "i".
+
+**Alternativas descartadas.**
+
+- **Copiar el botón y el modal a cada fila nueva** (como ya estaba pasando
+  entre Gimnasio y lo nuevo). Tres copias era la señal de extraer.
+
+**Consecuencias.** `ListEntryRow` ya no muestra ninguna vista previa del
+comentario en la lista (antes se veía truncado a una línea); ahora hay que
+tocar "i" para verlo. Es la misma compensación que ya se aceptó para
+Gimnasio: una fila más limpia a cambio de un toque extra para ver el detalle.
+
+---
+
+## 50. Trackers: comentario por día + fix de número en blanco al elegir una opción *(elección del usuario + fix)*
+
+**Contexto.** Se pidió poder agregarle un comentario de texto libre a un
+día de un tracker (como ya tienen mood, listas, ejercicios de gimnasio y
+tareas de rutina diaria), y se reportó un bug: en un tracker que registra
+**opciones y número a la vez**, si se elegía una opción desde la card del
+home (Trackers) sin haber tocado antes el contador, el día quedaba **sin
+número** en vez de arrancar en 0.
+
+**Decisión.**
+
+- `comment?: string` se agregó a `TrackerEntry` (recortado al guardar, igual
+  que las demás descripciones de la app) y se edita desde
+  [`TrackerDayModal`](src/presentation/tracker/components/TrackerDayModal.tsx)
+  (la pantalla de progreso, al tocar un día) — no desde la card rápida del
+  home, mismo criterio que ya separa "la card es para cargar rápido, el
+  detalle es para editar todo" en mood y en los demás trackers.
+- **Causa del bug**: `useTrackerCard.saveOptions` guardaba
+  `value: entry?.value` — si todavía no había entrada ese día (`entry` es
+  `null`), eso es `undefined`, y `SaveTrackerEntry`/`createTrackerEntry`
+  tratan "value `undefined`" como "no hay número", así que el día quedaba sin
+  registrar el contador aunque el tracker lo tuviera. El fix:
+  `value: tracker?.hasCounter ? (entry?.value ?? 0) : entry?.value` — si el
+  tracker tiene contador, un día nuevo arranca en 0 en vez de `undefined`.
+- De paso se corrigió un bug de **pérdida de datos** relacionado: como
+  `SaveTrackerEntry` reemplaza la entrada entera (no hace merge), ni
+  `saveOptions` ni `setCount` mandaban `comment`, así que elegir una opción o
+  tocar el contador **borraba** cualquier comentario ya guardado ese día. Las
+  dos funciones ahora mandan siempre `comment: entry?.comment` para
+  preservarlo.
+
+**Alternativas descartadas.**
+
+- **Que `SaveTrackerEntry` haga merge parcial en vez de reemplazar.** Cambiaría
+  el contrato del caso de uso para todos los que ya lo llaman (Mood, Rutina
+  diaria no aplica pero Gimnasio tampoco usa este caso de uso); mandar los
+  campos completos desde cada call site, como ya se hacía, es más simple y
+  explícito sobre qué se está pisando.
+
+**Consecuencias.** Ninguna migración necesaria (`comment` es opcional,
+entradas viejas simplemente no lo tienen). Cualquier otro call site nuevo de
+`saveTrackerEntry` tiene que acordarse de mandar `comment: entry?.comment`
+si no quiere perderlo — es el mismo cuidado que ya hace falta con
+`optionIds`/`value` al reemplazar una entrada completa.
+
+---
+
+## 51. "Seguimiento de Rutina": primero en Favoritos, progreso completo *(elección del usuario)*
+
+**Contexto.** Como "Seguimiento de Rutina" es un tracker real (#48), también
+aparece en la pestaña Trackers y se puede favoritear como cualquier otro. Se
+pidió que: (1) salga favorito y **primero** en Favoritos por defecto, (2)
+"Ver progreso" sobre él abra la pantalla entera de Rutina diaria en vez del
+progreso genérico de un tracker, (3) el bloque de seguimiento dentro de esa
+pantalla se vea como el progreso de cualquier otro tracker —semana/mes/año,
+navegación, contadores— en vez de solo un mes fijo, manteniéndose abajo de
+todo, y (4) si no hay tareas todavía, un mensaje simple en vez del anterior.
+
+**Decisión.**
+
+- `SyncRoutineTracker` ahora crea el tracker con `favorite: true`. En
+  `useFavorites.reload()`, antes de armar el `defaultOrder` de siempre
+  (finanzas, mood, gimnasio, trackers, listas), se saca aparte el tracker con
+  `id === ROUTINE_TRACKER_ID` de `favTrackers` y se lo empuja **primero**;
+  el resto de los trackers favoritos sigue igual que antes (sin repetirlo).
+  "Por defecto" es literal: si el usuario ya reordenó Favoritos a mano,
+  `savedOrder` sigue ganando como siempre — esto solo define dónde cae la
+  primera vez.
+- **"Ver progreso" con ruteo condicional**: en los tres lugares donde se
+  renderiza su `TrackerCard` (`FavoritesScreen`, `TrackersScreen` — el mismo
+  componente también vive implícitamente en Favoritos a través de
+  `useFavorites`), el callback de `onSeeProgress` chequea
+  `tracker.id === ROUTINE_TRACKER_ID` y navega a `DailyRoutines` en vez de a
+  `TrackerProgress`. No se agregó un flag al dominio ni un caso especial en
+  `TrackerCard` — el componente no sabe nada de Rutina diaria, decide quién
+  lo usa.
+- **El progreso ahora vive en `useDailyRoutines` con `useCalendarPeriod`**, el
+  mismo hook que ya comparten mood y los trackers del usuario: la vista
+  (semana/mes/año) y el rango dejaron de estar fijos en "el mes actual".
+  `reload()` depende de `period.range` (`startIso`/`endIso`), así que cambiar
+  de vista o navegar de período reusa el mismo mecanismo con el que
+  `useFocusEffect` ya recarga al volver a la pantalla (el callback cambia de
+  identidad, React Navigation lo vuelve a correr). `RoutineTrackerCalendar`
+  pasó a ser el mismo tipo de composición que ya usaba
+  `TrackerProgressScreen`: `CalendarViewSwitch` + navegación de período +
+  `CalendarWeek`/`Month`/`Year` + [`TrackerStats`](src/presentation/tracker/components/TrackerStats.tsx)
+  reutilizado tal cual para los "contadores" por color (con un
+  `numberStats` vacío constante, porque este tracker no tiene contador — el
+  componente ya sabe no dibujar ese bloque si `hasCounter` es falso). Sigue
+  siendo de solo lectura (no se agregó un modal de día): nadie pidió poder
+  tocar un día para forzar un color a mano, y sumarlo motivaría la pregunta
+  de qué pasa cuando `SyncRoutineTracker` lo vuelve a pisar.
+- El widget solo se muestra si `tracker` existe (es decir, si ya hubo al
+  menos una tarea creada): con cero tareas `SyncRoutineTracker` nunca llega a
+  crear el tracker, así que no tiene sentido mostrar semana/mes/año vacíos.
+
+**Alternativas descartadas.**
+
+- **Ocultar el tracker de Rutina diaria de la pestaña Trackers** para evitar
+  tener que rutear "Ver progreso" dos veces. Ya se había descartado en #48 por
+  la misma razón (simplicidad > ocultamiento) y seguir mostrándolo ahí es lo
+  que permitió "favoritearlo primero" sin inventar un mecanismo nuevo.
+- **Agregar swipe para cambiar de vista** dentro del widget embebido (como
+  tiene `TrackerProgressScreen`). La pantalla entera ya usa swipe horizontal
+  para volver a Favoritos; anidar otro gesto de swipe en un sub-bloque sin
+  poder probarlo en un dispositivo real era un riesgo innecesario para algo
+  que el botonera de `CalendarViewSwitch` + flechas ya cubre.
+
+**Consecuencias.** Ninguna.
+
+---
+
+## 52. Dos ajustes al patrón de descripciones: punto en el tracker, comentario visible en listas *(elección del usuario)*
+
+**Contexto.** Dos correcciones al patrón "i" / descripción de #49-#50:
+
+1. Los días de un tracker con comentario no tenían ninguna señal visual en el
+   calendario — había que tocar el día a ciegas para enterarse de que tenía
+   uno.
+2. Al generalizar el botón "i" a `ListEntryRow` (#49), se sacó el comentario
+   recortado que antes se veía siempre en la fila, dejando solo el botón "i".
+   Para listas, se pidió **mantener las dos cosas**: el comentario recortado
+   en la fila (como antes) y además el botón "i" para verlo completo.
+
+**Decisión.**
+
+- `TrackerDayCell` suma un prop `hasNote?: boolean`: si es `true`, dibuja un
+  punto chico arriba a la derecha (el número del día ya ocupa arriba a la
+  izquierda). Lo calculan `TrackerProgressScreen` y `RoutineTrackerCalendar`
+  mirando `entry?.comment` — no hace falta tocar el domain, el comentario ya
+  viaja en el `TrackerEntry` que ya se estaba leyendo.
+- `ListEntryRow` vuelve a mostrar `entry.comment` recortado a una línea
+  (como antes de #49), y mantiene el botón "i" al lado del nombre para ver el
+  comentario completo (con links tocables). En el momento de este cambio el
+  pedido fue específicamente sobre "la lista" (Listas); un pedido inmediato
+  siguiente pidió lo mismo para `DailyRoutineTaskRow`, así que las tareas de
+  Rutina diaria terminaron con el mismo patrón: título + descripción
+  recortada en la fila + botón "i" para el modal completo.
+
+**Consecuencias.** Ninguna.
+
+---
+
+## 53. Reordenar tareas de Rutina diaria, igual que los ejercicios de gimnasio *(elección del usuario)*
+
+**Contexto.** Se pidió poder reordenar las tareas de Rutina diaria con el
+mismo mecanismo que ya tiene el detalle de una rutina de gimnasio: un botón
+"Ordenar"/"Listo" que cambia la lista a filas con flechas ▲▼.
+
+**Decisión.** Calco directo de `ReorderGymExercises` (#43): nueva
+[`ReorderDailyRoutineTasks`](src/domain/dailyRoutine/usecases/ReorderDailyRoutineTasks.ts)
+que relee las tareas, reescribe `position` según el orden de ids recibido y
+guarda todo con un `DailyRoutineTaskRepository.saveMany` (lectura/escritura
+única del blob, mismo motivo que en Gimnasio: evitar que varias escrituras en
+paralelo se pisen entre sí). `useDailyRoutines.moveTask` reordena el array en
+memoria igual que `useGymRoutineDetail.moveExercise`, y
+[`DailyRoutinesScreen`](src/presentation/screens/daily-routines/DailyRoutinesScreen.tsx)
+reutiliza el mismo [`ReorderRow`](src/presentation/components/ReorderRow.tsx)
+compartido que ya usan Favoritos y el detalle de rutina de gimnasio — tercer
+lugar que lo reusa, confirmando que valió la pena sacarlo a `components/`
+en su momento (#43).
+
+**Alternativas descartadas.** Ninguna — es el mismo patrón ya establecido,
+sin variantes a evaluar.
+
+**Consecuencias.** Ninguna.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
 import { CreateTrackerButton } from '../../tracker/components/CreateTrackerButton';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
@@ -34,7 +35,11 @@ export function TrackersScreen({ navigation, route }: Props) {
           <TrackerCard
             key={tracker.id}
             trackerId={tracker.id}
-            onSeeProgress={() => navigation.navigate('TrackerProgress', { trackerId: tracker.id })}
+            onSeeProgress={() =>
+              tracker.id === ROUTINE_TRACKER_ID
+                ? navigation.navigate('DailyRoutines')
+                : navigation.navigate('TrackerProgress', { trackerId: tracker.id })
+            }
           />
         ))}
 

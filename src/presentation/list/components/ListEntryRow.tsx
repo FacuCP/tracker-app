@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { formatDdMmYyyy } from '../../../core/utils/date';
 import { theme } from '../../../core/theme';
 import { ListEntry, isEntryOverdue } from '../../../domain/list/entities/ListEntry';
 import { Checkbox } from '../../components/Checkbox';
+import { InfoButton } from '../../components/InfoButton';
+import { InfoModal } from '../../components/InfoModal';
 import { formatRating } from '../parseRating';
 
 interface Props {
@@ -21,11 +24,14 @@ interface Props {
 
 /**
  * Fila de una entrada en el detalle:
- *   nº / checkbox | (nombre  ·  DD/MM/AAAA) / comentario recortado | ★/⚑ número
- * Las filas van pegadas una tras otra, a todo el ancho, separadas por una
- * línea fina.
+ *   nº / checkbox | (nombre · botón "i" · DD/MM/AAAA) / comentario recortado | ★/⚑ número
+ * Tocar la fila abre la edición; el botón "i" muestra el comentario completo
+ * en un modal (con links tocables), además de verse recortado en la fila.
+ * Las filas van pegadas una tras otra, separadas por una línea fina.
  */
 export function ListEntryRow({ entry, position, first, isTodo = false, onPress, onToggleDone }: Props) {
+  const [infoOpen, setInfoOpen] = useState(false);
+
   return (
     <TouchableOpacity
       style={[styles.row, !first && styles.border]}
@@ -46,6 +52,7 @@ export function ListEntryRow({ entry, position, first, isTodo = false, onPress, 
           >
             {entry.name}
           </Text>
+          {entry.comment ? <InfoButton onPress={() => setInfoOpen(true)} /> : null}
           {isTodo ? (
             <>
               {entry.date != null ? (
@@ -68,6 +75,15 @@ export function ListEntryRow({ entry, position, first, isTodo = false, onPress, 
         <Text style={styles.rating}>
           {isTodo ? '⚑' : '★'} {formatRating(entry.rating)}
         </Text>
+      ) : null}
+
+      {entry.comment ? (
+        <InfoModal
+          visible={infoOpen}
+          title={entry.name}
+          description={entry.comment}
+          onClose={() => setInfoOpen(false)}
+        />
       ) : null}
     </TouchableOpacity>
   );

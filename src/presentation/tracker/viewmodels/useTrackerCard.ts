@@ -63,7 +63,10 @@ export function useTrackerCard(trackerId: string) {
         trackerId,
         date,
         optionIds: selectedOptionIds,
-        value: entry?.value,
+        // Si el tracker también tiene contador, un día sin número guardado
+        // todavía arranca en 0 (en vez de quedar sin número).
+        value: tracker?.hasCounter ? entry?.value ?? 0 : entry?.value,
+        comment: entry?.comment,
       });
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2500);
@@ -71,7 +74,7 @@ export function useTrackerCard(trackerId: string) {
     } finally {
       setSaving(false);
     }
-  }, [selectedOptionIds, trackerId, date, entry, reload]);
+  }, [selectedOptionIds, trackerId, date, tracker, entry, reload]);
 
   // --- Número (contador) ---
   const setCount = useCallback(
@@ -82,6 +85,7 @@ export function useTrackerCard(trackerId: string) {
         date,
         value,
         optionIds: entry?.optionIds ?? [],
+        comment: entry?.comment,
       });
       await reload();
     },

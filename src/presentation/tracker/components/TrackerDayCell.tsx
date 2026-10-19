@@ -12,6 +12,8 @@ interface Props {
   fills?: string[];
   /** Texto sobre la celda (el número). */
   label?: string;
+  /** Si ese día tiene un comentario guardado: muestra un punto arriba a la derecha. */
+  hasNote?: boolean;
   onPress?: (date: IsoDate) => void;
 }
 
@@ -19,7 +21,7 @@ interface Props {
  * Celda de un día para trackers del usuario: relleno de uno o dos colores
  * (dividido en diagonal) y, opcionalmente, un número encima.
  */
-export function TrackerDayCell({ day, date, size, isToday, fills, label, onPress }: Props) {
+export function TrackerDayCell({ day, date, size, isToday, fills, label, hasNote, onPress }: Props) {
   const colors = fills ?? [];
   const filled = colors.length > 0;
 
@@ -46,6 +48,8 @@ export function TrackerDayCell({ day, date, size, isToday, fills, label, onPress
       <View style={[styles.badge, filled && styles.badgeOnColor]}>
         <Text style={[styles.badgeText, filled && styles.badgeTextOnColor]}>{day}</Text>
       </View>
+
+      {hasNote ? <View style={styles.noteDot} /> : null}
 
       {label != null && size >= 30 ? (
         <View style={styles.labelWrap} pointerEvents="none">
@@ -94,6 +98,17 @@ const styles = StyleSheet.create({
   },
   badgeOnColor: {
     backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  noteDot: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.35)',
   },
   badgeText: {
     fontSize: 11,

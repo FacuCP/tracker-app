@@ -1,20 +1,24 @@
 import { IsoDate } from '../../../core/utils/date';
 import { MAX_OPTIONS_PER_DAY, Tracker, getTrackerOption } from './Tracker';
 
+export const MAX_TRACKER_COMMENT = 300;
+
 /**
  * Registro de un día para un tracker del usuario: hasta dos opciones elegidas
- * (`optionIds`) y/o un número (`value`), según lo que registre el tracker.
+ * (`optionIds`) y/o un número (`value`), según lo que registre el tracker,
+ * más un comentario de texto libre opcional.
  */
 export interface TrackerEntry {
   readonly trackerId: string;
   readonly date: IsoDate;
   readonly optionIds: readonly string[];
   readonly value?: number;
+  readonly comment?: string;
 }
 
 export function createTrackerEntry(
   tracker: Tracker,
-  params: { date: IsoDate; optionIds?: readonly string[]; value?: number },
+  params: { date: IsoDate; optionIds?: readonly string[]; value?: number; comment?: string },
 ): TrackerEntry {
   const seen = new Set<string>();
   const optionIds: string[] = [];
@@ -38,5 +42,10 @@ export function createTrackerEntry(
     throw new Error('Registrá una opción o un número para este día');
   }
 
-  return { trackerId: tracker.id, date: params.date, optionIds, value };
+  const comment = params.comment?.trim() || undefined;
+  if (comment != null && comment.length > MAX_TRACKER_COMMENT) {
+    throw new Error(`El comentario no puede superar los ${MAX_TRACKER_COMMENT} caracteres`);
+  }
+
+  return { trackerId: tracker.id, date: params.date, optionIds, value, comment };
 }

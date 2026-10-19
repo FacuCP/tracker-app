@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { container } from '../../../core/di/container';
+import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { List } from '../../../domain/list/entities/List';
 import { Tracker } from '../../../domain/tracker/entities/Tracker';
 import { ListEntryDraft } from '../../list/components/ListEntryModal';
@@ -53,6 +54,18 @@ export function useFavorites() {
     );
 
     const defaultOrder: FavoriteCard[] = [];
+    // "Seguimiento de Rutina" va primero por defecto (antes que finanzas/mood/
+    // gimnasio): es el que el usuario pidió ver arriba de todo al entrar.
+    const routineTracker = favTrackers.find((t) => t.id === ROUTINE_TRACKER_ID);
+    if (routineTracker) {
+      defaultOrder.push({
+        key: `tracker:${routineTracker.id}`,
+        kind: 'tracker',
+        title: routineTracker.name,
+        typeLabel: 'tracker',
+        tracker: routineTracker,
+      });
+    }
     if (profile?.financeFavorite ?? true) {
       defaultOrder.push({ key: 'finance', kind: 'finance', title: 'Finanzas', typeLabel: 'resumen' });
     }
@@ -63,6 +76,7 @@ export function useFavorites() {
       defaultOrder.push({ key: 'gym', kind: 'gym', title: 'Gimnasio', typeLabel: 'rutina' });
     }
     for (const tracker of favTrackers) {
+      if (tracker.id === ROUTINE_TRACKER_ID) continue;
       defaultOrder.push({
         key: `tracker:${tracker.id}`,
         kind: 'tracker',

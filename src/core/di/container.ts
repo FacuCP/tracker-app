@@ -77,6 +77,18 @@ import { ResetGymRoutineProgress } from '../../domain/gym/usecases/ResetGymRouti
 import { SaveGymExercise } from '../../domain/gym/usecases/SaveGymExercise';
 import { SaveGymSelection } from '../../domain/gym/usecases/SaveGymSelection';
 import { SetGymSetCount } from '../../domain/gym/usecases/SetGymSetCount';
+import { AsyncStorageDailyRoutineTaskLocalDataSource } from '../../data/dailyRoutine/datasources/DailyRoutineTaskLocalDataSource';
+import { AsyncStorageDailyTaskProgressLocalDataSource } from '../../data/dailyRoutine/datasources/DailyTaskProgressLocalDataSource';
+import { DailyRoutineTaskRepositoryImpl } from '../../data/dailyRoutine/repositories/DailyRoutineTaskRepositoryImpl';
+import { DailyTaskProgressRepositoryImpl } from '../../data/dailyRoutine/repositories/DailyTaskProgressRepositoryImpl';
+import { DeleteDailyRoutineTask } from '../../domain/dailyRoutine/usecases/DeleteDailyRoutineTask';
+import { GetDailyRoutineProgress } from '../../domain/dailyRoutine/usecases/GetDailyRoutineProgress';
+import { GetDailyRoutineSession } from '../../domain/dailyRoutine/usecases/GetDailyRoutineSession';
+import { GetDailyRoutineTasks } from '../../domain/dailyRoutine/usecases/GetDailyRoutineTasks';
+import { ReorderDailyRoutineTasks } from '../../domain/dailyRoutine/usecases/ReorderDailyRoutineTasks';
+import { SaveDailyRoutineTask } from '../../domain/dailyRoutine/usecases/SaveDailyRoutineTask';
+import { SetDailyTaskDone } from '../../domain/dailyRoutine/usecases/SetDailyTaskDone';
+import { SyncRoutineTracker } from '../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -125,6 +137,16 @@ const gymSelectionRepository = new GymSelectionRepositoryImpl(
 );
 const getGymExercises = new GetGymExercises(gymExerciseRepository);
 const getGymProgress = new GetGymProgress(gymProgressRepository);
+
+// --- Rutina diaria ---
+const dailyRoutineTaskRepository = new DailyRoutineTaskRepositoryImpl(
+  new AsyncStorageDailyRoutineTaskLocalDataSource(),
+);
+const dailyTaskProgressRepository = new DailyTaskProgressRepositoryImpl(
+  new AsyncStorageDailyTaskProgressLocalDataSource(),
+);
+const getDailyRoutineTasks = new GetDailyRoutineTasks(dailyRoutineTaskRepository);
+const getDailyRoutineProgress = new GetDailyRoutineProgress(dailyTaskProgressRepository);
 
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
@@ -191,6 +213,15 @@ export const container = {
   getGymSession: new GetGymSession(gymRoutineRepository, getGymExercises, getGymProgress),
   getGymSelection: new GetGymSelection(gymSelectionRepository),
   saveGymSelection: new SaveGymSelection(gymSelectionRepository),
+
+  getDailyRoutineTasks,
+  saveDailyRoutineTask: new SaveDailyRoutineTask(dailyRoutineTaskRepository, generateId),
+  reorderDailyRoutineTasks: new ReorderDailyRoutineTasks(dailyRoutineTaskRepository),
+  deleteDailyRoutineTask: new DeleteDailyRoutineTask(dailyRoutineTaskRepository, dailyTaskProgressRepository),
+  getDailyRoutineProgress,
+  setDailyTaskDone: new SetDailyTaskDone(dailyTaskProgressRepository),
+  getDailyRoutineSession: new GetDailyRoutineSession(getDailyRoutineTasks, getDailyRoutineProgress),
+  syncRoutineTracker: new SyncRoutineTracker(trackerRepository, trackerEntryRepository),
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),

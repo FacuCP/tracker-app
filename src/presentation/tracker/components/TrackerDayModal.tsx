@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { capitalize, formatLongDate, IsoDate } from '../../../core/utils/date';
 import { MAX_OPTIONS_PER_DAY, Tracker } from '../../../domain/tracker/entities/Tracker';
-import { TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
+import { MAX_TRACKER_COMMENT, TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
 import { Counter } from './Counter';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   date: IsoDate | null;
   entry: TrackerEntry | null;
   onClose: () => void;
-  onSave: (input: { optionIds?: string[]; value?: number }) => Promise<void> | void;
+  onSave: (input: { optionIds?: string[]; value?: number; comment?: string }) => Promise<void> | void;
   onDelete: () => Promise<void> | void;
 }
 
@@ -19,6 +19,7 @@ interface Props {
 export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelete }: Props) {
   const [optionIds, setOptionIds] = useState<string[]>([]);
   const [count, setCount] = useState(0);
+  const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
 
   const hasOptions = tracker.options.length > 0;
@@ -26,6 +27,7 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
   useEffect(() => {
     setOptionIds([...(entry?.optionIds ?? [])]);
     setCount(entry?.value != null ? Math.max(0, Math.round(entry.value)) : 0);
+    setComment(entry?.comment ?? '');
     setSaving(false);
   }, [date, entry]);
 
@@ -47,6 +49,7 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
       await onSave({
         optionIds: hasOptions ? optionIds : undefined,
         value: tracker.hasCounter ? count : undefined,
+        comment,
       });
     } finally {
       setSaving(false);
@@ -91,6 +94,17 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
                 <Counter value={count} onChange={(next) => setCount(Math.max(0, next))} />
               </View>
             ) : null}
+
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Comentario (opcional)"
+              placeholderTextColor="#9ca3af"
+              value={comment}
+              onChangeText={setComment}
+              maxLength={MAX_TRACKER_COMMENT}
+              multiline
+              textAlignVertical="top"
+            />
           </ScrollView>
 
           <View style={styles.actions}>
@@ -171,6 +185,15 @@ const styles = StyleSheet.create({
   counterWrap: {
     alignItems: 'center',
     paddingVertical: 8,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 12,
+    minHeight: 70,
+    fontSize: 14,
+    color: '#111827',
   },
   actions: {
     flexDirection: 'row',

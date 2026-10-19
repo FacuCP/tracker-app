@@ -15,6 +15,7 @@ export type RootStackParamList = {
   Finances: { add?: 'income' | 'expense' } | undefined;
   Gym: { create?: boolean } | undefined;
   GymRoutineDetail: { routineId: string };
+  DailyRoutines: undefined;
   Settings: undefined;
   MoodProgress: undefined;
   CreateTracker: undefined;

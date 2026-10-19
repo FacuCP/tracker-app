@@ -110,6 +110,13 @@ src/
 │   │   └── usecases/            # CRUD de rutina/ejercicio, GetGymProgress, SetGymSetCount,
 │   │                            # GetGymSession (rutina + ejercicios + progreso + siguiente),
 │   │                            # Get/SaveGymSelection (rutina elegida para hoy)
+│   ├── dailyRoutine/
+│   │   ├── entities/            # DailyRoutineTask (título/descripción/posición),
+│   │   │                        # DailyTaskProgress (day + done) + resolveTaskDone
+│   │   ├── repositories/        # DailyRoutineTaskRepository, DailyTaskProgressRepository
+│   │   └── usecases/            # CRUD de tarea, Get/SetDailyRoutineProgress,
+│   │                            # GetDailyRoutineSession (tareas + progreso + conteo),
+│   │                            # SyncRoutineTracker (↓ única dependencia cruzada con `tracker/`)
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
@@ -120,14 +127,15 @@ src/
 │   ├── finance/                 # dto + AsyncStorage datasources (siembra categorías) + repo impls
 │   ├── favorites/               # FavoritesOrderRepositoryImpl (array JSON de claves)
 │   ├── gym/                     # dto + AsyncStorage datasources + repo impls
+│   ├── dailyRoutine/            # dto + AsyncStorage datasources + repo impls
 │   └── backup/                  # BackupRepositoryImpl (multiGet/multiSet sobre AsyncStorage)
 │
 ├── core/
 │   ├── di/container.ts          # Composition root: arma todas las dependencias
 │   ├── navigation/              # Stack tipado (Onboarding, Favorites, Trackers, Lists,
-│   │                            # ListDetail, Finances, Gym, GymRoutineDetail, Settings,
-│   │                            # MoodProgress, CreateTracker, EditTracker, TrackerProgress)
-│   │                            # + gate de primer arranque
+│   │                            # ListDetail, Finances, Gym, GymRoutineDetail, DailyRoutines,
+│   │                            # Settings, MoodProgress, CreateTracker, EditTracker,
+│   │                            # TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
 │   ├── notifications/           # notifications.ts (agenda/cancela las locales según perfil + datos)
 │   ├── text/textScale.ts        # Escala global de la tipografía (a medio hacer, sin montar)
@@ -140,19 +148,22 @@ src/
     │                            # CalendarViewSwitch, useCalendarPeriod
     ├── navigation/              # HubMenuButton (menú del header), SettingsHeaderButton
     ├── components/              # ComingSoon, KeyboardAvoider, Checkbox, FavoriteStar,
-    │                            # DiagonalSplitSquare (celda de 1-2 colores en diagonal)
+    │                            # DiagonalSplitSquare (celda de 1-2 colores en diagonal),
+    │                            # ReorderRow (modo "Ordenar"), LinkedText (links tocables),
+    │                            # InfoButton + InfoModal (botón "i" + modal de descripción)
     ├── backup/                  # useBackup (exportar/importar el .json)
     ├── user/components/         # UserNameCard, NotificationsCard (Ajustes); FontSizeCard sin montar
     ├── screens/
     │   ├── onboarding/          # OnboardingScreen (elegir el nombre, la 1ª vez)
-    │   ├── favorites/           # FavoritesScreen + useFavorites + CreateChooserModal +
-    │   │                        # FavoriteReorderRow (principal)
+    │   ├── favorites/           # FavoritesScreen (principal) + useFavorites +
+    │   │                        # CreateChooserModal; swipe-izquierda → DailyRoutines
     │   ├── trackers/            # TrackersScreen + useTrackersViewModel
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
     │   ├── finances/            # FinancesScreen + useFinances
     │   ├── gym/                 # GymScreen + useGymScreen (todas las rutinas)
     │   ├── gym-routine-detail/  # GymRoutineDetailScreen (una rutina con sus ejercicios)
+    │   ├── daily-routines/      # DailyRoutinesScreen (tareas diarias + "Seguimiento de Rutina")
     │   ├── settings/            # SettingsScreen (nombre + backup)
     │   ├── mood-progress/       # MoodProgressScreen
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
@@ -179,11 +190,15 @@ src/
     │   │                        # FinanceReportSection
     │   ├── money.ts             # formatMoney / parseAmount / formatAmountInput
     │   └── period.ts            # FinancePeriod + rango del período
-    └── gym/
-        ├── components/          # GymTodayCard (recuadro favoriteable, guiado),
-        │                        # CreateGymRoutineModal, GymRoutineCard,
-        │                        # GymExerciseModal (con botones de peso), GymExerciseRow
-        └── viewmodels/          # useGymTodayCard, useGymScreen, useGymRoutineDetail
+    ├── gym/
+    │   ├── components/          # GymTodayCard (recuadro favoriteable, guiado),
+    │   │                        # CreateGymRoutineModal, GymRoutineCard,
+    │   │                        # GymExerciseModal (con botones de peso), GymExerciseRow
+    │   └── viewmodels/          # useGymTodayCard, useGymScreen, useGymRoutineDetail
+    └── dailyRoutine/
+        ├── components/          # DailyRoutineTaskRow, DailyRoutineTaskModal,
+        │                        # RoutineTrackerCalendar ("Seguimiento de Rutina")
+        └── viewmodels/          # useDailyRoutines
 ```
 
 ### Regla de dependencias
@@ -195,6 +210,10 @@ presentation ─► domain ◄─ data
 
 `domain` no conoce a nadie. `data` y `presentation` dependen de `domain` a
 través de interfaces. `core/di` es el único lugar que instancia clases concretas.
+
+Única excepción: `domain/dailyRoutine` depende de `domain/tracker` (ver
+`SyncRoutineTracker`, sección Rutina diaria) porque "Rutina diaria" necesita
+*ser* un tracker más, no solo parecerse a uno.
 
 ## Primer arranque
 
@@ -232,6 +251,15 @@ es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las cinc
 tienen el botón **"Ajustes"** arriba a la derecha
 (`SettingsHeaderButton`, en `hubOptions`). El resto de pantallas (progreso,
 formularios, ajustes) sí son push con su flecha.
+
+Desde **Favoritos**, deslizar hacia la izquierda navega a **"Rutina diaria"**
+(`DailyRoutines`, ver más abajo) y deslizar hacia la derecha desde ahí vuelve.
+El gesto usa el mismo hook que ya cambiaba de vista en el progreso de un
+tracker ([`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts)),
+que solo reclama el gesto cuando el movimiento es claramente horizontal, así
+no rompe el scroll vertical ni los taps de las cards. Favoritos también tiene
+un link chico "Rutina Diaria ›" al lado del saludo, como pista de que el
+gesto existe.
 
 ### Colores
 
@@ -310,6 +338,8 @@ Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
   (rojo), configurables (nombre y color, de 1 a 6). Con una sola opción funciona
   como un "hecho / no hecho".
 - **Número**: un **contador** por día que se va sumando/restando (nunca baja de 0).
+- **Comentario**: texto libre opcional por día (`TrackerEntry.comment`), se
+  edita desde el día en "Ver progreso" (no desde la card rápida del home).
 
 ### Pantallas
 
@@ -319,9 +349,13 @@ Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
 - **Progreso del tracker** ([`tracker-progress/`](src/presentation/screens/tracker-progress/)):
   el mismo calendario Semana/Mes/Año, con **swipe** para cambiar de vista. Los
   días con dos opciones se pintan **divididos en diagonal** (también en la vista
-  Año); el número va sobre la celda. Abajo, el **resumen**: una card por opción
-  con su conteo y/o **registros / promedio / mín / máx / total** del número.
-  "Editar" en la barra superior abre el formulario.
+  Año); el número va sobre la celda; si el día tiene comentario, aparece un
+  **punto chico arriba a la derecha** (`TrackerDayCell`, prop `hasNote`).
+  Abajo, el **resumen**: una card por opción con su conteo y/o **registros /
+  promedio / mín / máx / total** del número. "Editar" en la barra superior
+  abre el formulario. Tocar un día abre
+  [`TrackerDayModal`](src/presentation/tracker/components/TrackerDayModal.tsx),
+  con un campo de comentario además de las opciones/el número.
 
 ### Card del tracker
 
@@ -366,10 +400,13 @@ crear. Las favoritas aparecen en la pestaña **Favoritos**.
   una tras otra, a todo el ancho**, separadas por una línea fina. Cada fila:
   a la izquierda el **nº** (o un **checkbox** en una to-do list, que tacha el
   nombre al tildarlo); arriba **nombre + fecha (DD/MM/AAAA)**; abajo el
-  **comentario recortado con “…”** si tiene; **★/⚑ rating** a la derecha. Se
-  tocan para abrir el modal y ver el comentario completo / editar los campos (o
-  borrar la entrada). Arriba a la derecha, **＋ Entrada**. Al fondo, **Borrar
-  esta lista** (borra la lista y sus entradas, con confirmación).
+  **comentario recortado con “…”** si tiene (y, al lado del nombre, un botón
+  **”i”** para verlo completo en un modal de solo lectura, con links tocables
+  — ver “Info con botón 'i'” más abajo); **★/⚑ rating** a la derecha. Tocar la
+  fila abre el modal para editar los campos (o borrar la entrada). Arriba a
+  la derecha, **＋ Entrada**.
+  Al fondo, **Borrar esta lista** (borra la lista y sus entradas, con
+  confirmación).
 
 Orden de las entradas (`compareListEntries` en el dominio):
 
@@ -449,10 +486,20 @@ un link a un video, etc.).
   si un ejercicio tiene descripción, aparece un círculo **"i"** al lado de su
   nombre (en el detalle de la rutina y en la Rutina de hoy); tocarlo abre un
   modal de solo lectura con el resumen (series × repeticiones y peso) y la
-  descripción completa. Si la descripción tiene un link (`http(s)://` o
-  `www.`), se muestra subrayado y se puede tocar para abrirlo
-  ([`LinkedText`](src/presentation/components/LinkedText.tsx), reutilizable,
-  parte el texto con un regex y abre el link con `Linking.openURL`).
+  descripción completa.
+
+### Info con botón "i" (patrón compartido)
+
+El círculo **"i"** y su modal de solo lectura son genéricos
+([`InfoButton`](src/presentation/components/InfoButton.tsx) +
+[`InfoModal`](src/presentation/components/InfoModal.tsx)), reutilizados por
+los ejercicios de gimnasio, las **tareas de Rutina diaria** y las
+**entradas de listas** (con comentario): en vez de mostrar la descripción
+recortada en la fila, aparece el botón "i" al lado del nombre solo si hay
+algo que mostrar. Si la descripción tiene un link (`http(s)://` o `www.`), se
+muestra subrayado y se puede tocar para abrirlo
+([`LinkedText`](src/presentation/components/LinkedText.tsx), reutilizable
+también, parte el texto con un regex y abre el link con `Linking.openURL`).
 - **Detalle de la rutina** ([`gym-routine-detail/`](src/presentation/screens/gym-routine-detail/)):
   cada ejercicio muestra cuántas series lleva (`2/4`) con **+/-** para
   sumar/restar sin entrar a editarlo; tocar la fila abre el editor completo.
@@ -489,6 +536,45 @@ como si fueran 0 series hechas (`resolveCompletedSets`) — así "se resetea los
 domingos a la noche" (funcionalmente, en el arranque del lunes) sin tener que
 programar nada; el primer toque de la semana nueva ya escribe con el
 `cycleStart` correcto.
+
+## Rutina diaria
+
+Se llega deslizando hacia la izquierda desde Favoritos (ver más arriba). Son
+**tareas** (`DailyRoutineTask`: título + descripción opcional, como una
+entrada de lista) con un check que se tilda y se resetea solo todos los
+días — mismo patrón de `cycleStart`/`resolveCompletedSets` que el gimnasio,
+pero con el **día** en vez de la semana (`DailyTaskProgress { taskId, day,
+done }`, `resolveTaskDone`).
+
+- Si no se cargó ninguna tarea todavía, dice **"¡No hiciste una lista de
+  tareas diarias aún!"**.
+- **"Agregar Tarea"** arriba a la derecha abre el modal de título + descripción
+  ([`DailyRoutineTaskModal`](src/presentation/dailyRoutine/components/DailyRoutineTaskModal.tsx));
+  tocar una fila la edita, el checkbox la tilda sin abrir nada. Un botón
+  **"Ordenar"/"Listo"** (si hay más de una tarea) cambia la lista a filas con
+  flechas ▲▼ para reordenarlas a mano — mismo [`ReorderRow`](src/presentation/components/ReorderRow.tsx)
+  que ya usan Favoritos y el detalle de una rutina de gimnasio.
+- **"Seguimiento de Rutina"**, abajo de todas las tareas
+  ([`RoutineTrackerCalendar`](src/presentation/dailyRoutine/components/RoutineTrackerCalendar.tsx),
+  solo aparece una vez que existe al menos una tarea): se muestra **igual que
+  el progreso de cualquier otro tracker** — semana/mes/año con navegación
+  (`useCalendarPeriod`, compartido con mood y los trackers del usuario) y,
+  abajo, un contador por color del período
+  ([`TrackerStats`](src/presentation/tracker/components/TrackerStats.tsx),
+  reutilizado). Es **de solo lectura**: cada vez que se tilda o destilda algo
+  se recalcula el % de tareas hechas hoy y se guarda un color para el día de
+  hoy — **verde** 100%, **amarillo** 50-99%, **naranja** 25-49%, **rojo**
+  0-24% — en un tracker real (sí, de los mismos que puede crear el usuario)
+  con id fijo (`daily-routine-tracker`, `SyncRoutineTracker`), reusando las
+  mismas celdas que ya pinta cualquier otro tracker. Sin "cierre de día":
+  como no hay forma de disparar algo a medianoche sin un job en segundo
+  plano, el último cambio del día es el que queda guardado como el color de
+  ese día.
+- Como "Seguimiento de Rutina" es un tracker real, también aparece en la
+  pestaña **Trackers** y se puede favoritear — sale **favorito y primero por
+  defecto** en Favoritos, y "Ver progreso" sobre él (desde ahí o desde
+  Trackers) abre esta misma pantalla de Rutina diaria en vez del progreso
+  genérico de un tracker.
 
 ## Notificaciones
 
@@ -534,6 +620,8 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/gym-exercises/v1` | `{ [routineId]: { [exerciseId]: GymExerciseDto } }` |
 | `@app-celu/gym-progress/v1` | `{ [routineId]: { [exerciseId]: GymProgressDto } }` (series de la semana actual) |
 | `@app-celu/gym-selection/v1` | `{ routineId }` (rutina elegida para hoy) |
+| `@app-celu/daily-routine-tasks/v1` | `{ [taskId]: DailyRoutineTaskDto }` |
+| `@app-celu/daily-task-progress/v1` | `{ [taskId]: DailyTaskProgressDto }` (hecha hoy, por tarea) |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué
 exportar/importar (todo en un solo archivo). Para cambiar a SQLite o a una API basta con escribir otra

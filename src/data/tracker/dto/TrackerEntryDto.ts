@@ -8,6 +8,7 @@ export interface TrackerEntryDto {
   optionId?: string;
   optionIds?: string[];
   value?: number;
+  comment?: string;
 }
 
 export function trackerEntryToDto(entry: TrackerEntry): TrackerEntryDto {
@@ -16,6 +17,7 @@ export function trackerEntryToDto(entry: TrackerEntry): TrackerEntryDto {
     date: entry.date,
     optionIds: entry.optionIds.length > 0 ? [...entry.optionIds] : undefined,
     value: entry.value,
+    comment: entry.comment,
   };
 }
 
@@ -26,5 +28,6 @@ export function trackerEntryFromDto(dto: TrackerEntryDto): TrackerEntry {
     date: dto.date as IsoDate,
     optionIds,
     value: dto.value,
+    comment: dto.comment,
   };
 }

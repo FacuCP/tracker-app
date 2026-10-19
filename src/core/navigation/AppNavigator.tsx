@@ -7,6 +7,7 @@ import { container } from '../di/container';
 import { syncNotifications } from '../notifications/notifications';
 import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
 import { SettingsHeaderButton } from '../../presentation/navigation/SettingsHeaderButton';
+import { DailyRoutinesScreen } from '../../presentation/screens/daily-routines/DailyRoutinesScreen';
 import { FavoritesScreen } from '../../presentation/screens/favorites/FavoritesScreen';
 import { FinancesScreen } from '../../presentation/screens/finances/FinancesScreen';
 import { GymRoutineDetailScreen } from '../../presentation/screens/gym-routine-detail/GymRoutineDetailScreen';
@@ -110,6 +111,11 @@ export function AppNavigator() {
           name="GymRoutineDetail"
           component={GymRoutineDetailScreen}
           options={{ title: 'Rutina' }}
+        />
+        <Stack.Screen
+          name="DailyRoutines"
+          component={DailyRoutinesScreen}
+          options={{ title: 'Rutina diaria' }}
         />
         <Stack.Screen
           name="Settings"

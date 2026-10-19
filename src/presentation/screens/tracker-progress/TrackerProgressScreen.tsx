@@ -68,6 +68,10 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
     return entry?.value != null ? String(entry.value) : undefined;
   }
 
+  function dayHasNote(date: string): boolean {
+    return !!vm.entriesByDate[date]?.comment;
+  }
+
   const renderDay = ({ date, dayOfMonth, isToday, size }: {
     date: string;
     dayOfMonth: number;
@@ -81,6 +85,7 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
       isToday={isToday}
       fills={dayFills(date)}
       label={dayLabel(date)}
+      hasNote={dayHasNote(date)}
       onPress={vm.openDay}
     />
   );

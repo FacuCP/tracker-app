@@ -8,6 +8,7 @@ export interface SaveTrackerEntryInput {
   date: IsoDate;
   optionIds?: readonly string[];
   value?: number;
+  comment?: string;
 }
 
 /**
@@ -30,6 +31,7 @@ export class SaveTrackerEntry {
       date: input.date,
       optionIds: input.optionIds,
       value: input.value,
+      comment: input.comment,
     });
     await this.entries.saveEntry(entry);
     return entry;

@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 
 import { theme } from '../../../core/theme';
 import { FavoriteStar } from '../../components/FavoriteStar';
+import { InfoButton } from '../../components/InfoButton';
 import { useGymTodayCard } from '../viewmodels/useGymTodayCard';
 import { GymExerciseInfoModal } from './GymExerciseInfoModal';
 import { WeightStepRow } from './WeightStepRow';
@@ -109,13 +110,7 @@ export function GymTodayCard({ onFavoriteToggled, onOpenGym, onOpenRoutine }: Pr
           <View style={styles.exerciseNameRow}>
             <Text style={styles.exerciseName}>{vm.displayExercise.exercise.name}</Text>
             {vm.displayExercise.exercise.description ? (
-              <TouchableOpacity
-                style={styles.infoButton}
-                onPress={() => setInfoOpen(true)}
-                hitSlop={8}
-              >
-                <Text style={styles.infoButtonText}>i</Text>
-              </TouchableOpacity>
+              <InfoButton onPress={() => setInfoOpen(true)} size={20} />
             ) : null}
           </View>
           <Text style={styles.exerciseInfo}>
@@ -307,21 +302,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: theme.colors.text,
-  },
-  infoButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: theme.colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoButtonText: {
-    fontSize: 12,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    color: theme.colors.accent,
   },
   exerciseInfo: {
     fontSize: 13,
