@@ -1960,6 +1960,761 @@ igual que los demás modales con texto libre.
 
 ---
 
+## 59. Actualización a Expo SDK 58 *(elección del usuario)*
+
+**Contexto.** El Expo Go instalado en el teléfono se actualizó solo a SDK 58
+y dejó de abrir el proyecto (en SDK 57): "Project is incompatible with this
+version of Expo Go". Como ya no hay vuelta atrás sin desinstalar Expo Go,
+había que actualizar el proyecto para que coincida.
+
+**Decisión.**
+
+- `npx expo install expo@^58.0.0 --fix` es el camino oficial, pero en esta
+  máquina `npm install` interno de la CLI de Expo falla por una restricción
+  del sandbox (`--allow-scripts is not allowed in project-scoped installs`,
+  no es algo del proyecto). Workaround: correr `npm install <paquete>@<versión>`
+  **directo**, con las versiones exactas que la propia CLI de Expo imprime
+  (`npx expo install --fix` y `npx expo install --check` siguen sirviendo
+  para *saber* qué versión corresponde a cada paquete, solo que la instalación
+  en sí hay que hacerla a mano). Mismo workaround que ya hizo falta para
+  instalar `react-native-svg`/`lucide-react-native` en #55.
+- **Versiones nuevas**: `expo` 57→58, `react-native` 0.86→0.88, `react`
+  19.2→19.3, y el resto de los paquetes nativos (`expo-notifications`,
+  `expo-file-system`, `react-native-screens`, `react-native-safe-area-context`,
+  `react-native-svg`, `@react-native-community/datetimepicker`, etc.) a sus
+  versiones compatibles con SDK 58. `npx expo-doctor@latest` corrió los 20
+  checks sin encontrar nada.
+- **Un solo error de compilación por la "Strict TypeScript API"** que trae
+  RN 0.88 por defecto: [`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)
+  tipaba su `ref` del botón como `useRef<View>(null)`, y los nuevos tipos
+  generados desde Flow ya no exponen `measureInWindow` sobre ese tipo (viene
+  de `NativeMethods`, que esta versión de los tipos retiró — ver el changelog
+  de SDK 58). El fix es tipar el ref con `useRef<ComponentRef<typeof View>>(null)`
+  (el `ComponentRef` de React, no `View` directo) — así TypeScript infiere el
+  tipo real del nodo nativo (`ReactNativeElement`), que sí tiene
+  `measureInWindow`.
+- Se revisó el único otro punto de fricción posible con la guía de
+  migración: [`textScale.ts`](src/core/text/textScale.ts) hace
+  `require('react-native/Libraries/Text/Text')` (import profundo, justo lo
+  que la Strict API empieza a marcar como error) — pero como es un
+  `require()` con cast manual (`as { default?: unknown }`), no un `import`
+  estático, no depende de los tipos de ese módulo y sigue compilando limpio.
+- `expo-notifications` ahora muestra notificaciones en foreground por
+  defecto; este proyecto ya lo hacía explícito (`shouldShowBanner: true,
+  shouldShowList: true` en el `setNotificationHandler` de #41), así que el
+  cambio de default no afecta nada acá.
+- Se actualizó la referencia de [`AGENTS.md`](AGENTS.md) de
+  `docs.expo.dev/versions/v57.0.0` a `v58.0.0`.
+
+**Alternativas descartadas.**
+
+- **Esperar a que baje la versión de Expo Go** (instalar una build vieja de
+  Expo Go para SDK 57). Es un parche que solo pospone el problema — Expo Go
+  se actualiza solo, así que hubiera vuelto a pasar.
+
+**Consecuencias.** `npx expo export --platform android` sigue bundleando
+limpio (el conteo de módulos que reporta subió de ~1130 a ~3195: el nuevo
+Metro/RN 0.88 cuenta los módulos distinto, no es una señal de nada roto). No
+hay carpetas `android`/`ios` en el repo ni `AppDelegate.swift` propio, así
+que la migración del ciclo de vida de iOS que pide la guía de SDK 58 no
+aplica — EAS Build las genera de cero en cada build.
+
+---
+
+## 60. Eventos: sexta pestaña, ocurrencias calculadas como en Finanzas *(elección del usuario)*
+
+**Contexto.** Nueva pestaña "Eventos", elegible desde el mismo menú que
+Trackers/Listas/Finanzas/Gimnasio. Al entrar, un calendario como el de
+progreso de un tracker (semana/mes/año) pero con celdas más grandes, porque
+cada evento de un día se pinta como una **franja de color** (no solo un
+punto). "Agregar evento" arriba del calendario abre un modal: nombre, fecha,
+horario, color, y una repetición opcional — cada N días, terminando nunca,
+en una fecha, o después de cierta cantidad de veces. Tocar un día muestra sus
+eventos (con opción de agregar uno para ese día).
+
+**Decisión.**
+
+- **Ocurrencias calculadas, no materializadas** — mismo principio que
+  Finanzas (#39): un evento que se repite se guarda **una vez**
+  (`CalendarEvent` con su `EventRepeat` opcional), y
+  [`eventOccurrencesInRange`](src/domain/event/entities/occurrences.ts)
+  calcula en qué fechas cae dentro de un rango visible, calco directo de
+  `financeOccurrencesInRange`: itera desde la fecha base sumando
+  `intervalDays` por paso (en vez del `addMonthsClamped` de Finanzas, que no
+  hace falta acá — sumar días es aritmética directa), tope de
+  `MAX_OCCURRENCES = 5000` para el caso "nunca termina", y corta antes si hay
+  `endDate` o `count`. Un evento indefinido nunca genera una fila por
+  ocurrencia; el reseteo del rango visible (cambiar de mes, por ejemplo) solo
+  cambia qué ocurrencias se calculan, no qué se guarda.
+- `EventRepeatEndType` son los tres casos pedidos explícitamente:
+  `'never' | 'onDate' | 'afterCount'` — más granular que el de Finanzas
+  (`months: number | null`, dos casos) porque el pedido fue literal: "puede
+  ser indefinido, hasta cierto día, o cierta cantidad de veces".
+- [`GetEventOccurrencesInRange`](src/domain/event/usecases/GetEventOccurrencesInRange.ts)
+  arma, para todo el rango visible, un `Record<fecha, ocurrencias>` en una
+  sola pasada — lo usan tanto las franjas del calendario como el modal de
+  "eventos de este día" (ambos ya tenían los datos, no hace falta pedirlos de
+  nuevo al tocar un día).
+- **Celdas más grandes = más altas, no más anchas**: `EventDayCell` ignora el
+  "cuadrado" que asumían las celdas de trackers/mood y usa
+  `height = size * 1.9` (el ancho sigue siendo el que calcula
+  `CalendarMonth`/`CalendarWeek`, screen-width ÷ 7) — lo que hace falta es
+  alto para apilar una franja por evento, no ancho. `CalendarMonth`/`Week` ya
+  son agnósticos a esto (reparten el ancho en 7 columnas y dejan que cada
+  celda decida su propio alto), así que no hizo falta tocarlos.
+- **Reuso en vez de componentes nuevos**: el selector de color es
+  [`OptionColorPicker`](src/presentation/tracker/components/OptionColorPicker.tsx)
+  (ya existía para las opciones de un tracker), la fecha es
+  [`DateField`](src/presentation/list/components/DateField.tsx) (ya existía
+  en Listas), y el checkbox "Se repite" es el `Checkbox` compartido. Nuevo
+  solo [`TimeField`](src/presentation/event/components/TimeField.tsx) (no
+  había picker de horario en la app) — mismo patrón que `DateField`, con
+  `@react-native-community/datetimepicker` en `mode="time"`.
+- **Tocar un evento desde "eventos de este día" edita directo** (no hay un
+  modal de "ver" intermedio): es una vista de detalle del día, mismo criterio
+  que las filas de gimnasio/listas/rutina diaria (tocar edita; el botón "i"
+  es solo para previews recortadas, y acá no hay preview que recortar).
+
+**Alternativas descartadas.**
+
+- **Materializar una fila por ocurrencia al crear un evento repetido.**
+  Mismo problema que ya se evitó en Finanzas: un evento "cada 1 día,
+  indefinido" generaría filas sin límite real; calcular bajo demanda es
+  gratis en comparación.
+- **Agregar Eventos al `CreateChooserModal` de Favoritos** (como
+  tracker/lista/rutina). No se pidió, y Eventos no tiene un concepto de
+  "favorito" en esta versión.
+
+**Consecuencias.** El modal de "eventos de este día" y las franjas del
+calendario comparten los datos de `occurrencesByDate` (ya cargados para el
+rango visible), pero si el día tocado tiene ocurrencias fuera del rango
+visible actual (no debería pasar, ya que solo se puede tocar un día que se
+esté viendo) no se mostrarían — no es un caso real dado cómo se abre el
+modal, pero vale la nota.
+
+---
+
+## 61. Eventos: borrar una ocurrencia repetida, y semanas completas en la vista de mes *(elección del usuario)*
+
+**Contexto.** Dos ajustes a Eventos (#60): (1) al borrar un evento que se
+repite, antes se borraba la serie entera sin preguntar; ahora hay que poder
+elegir entre borrar solo esa ocurrencia o esa y las que siguen (conservando
+las anteriores). (2) la vista de mes solo mostraba los días del mes exacto,
+con huecos en blanco antes del primer día y después del último; ahora esas
+semanas se completan con los días del mes vecino, pintados en un gris más
+clarito para diferenciarlos, y mostrando sus eventos igual que cualquier
+otro día.
+
+**Decisión.**
+
+- **Borrar una ocurrencia sin materializar la serie**: `CalendarEvent` suma
+  un campo `excludedDates?: readonly IsoDate[]` (fechas puntuales saltadas
+  dentro de una serie que sigue repitiéndose), y
+  [`eventOccurrencesInRange`](src/domain/event/entities/occurrences.ts)
+  filtra esas fechas al calcular ocurrencias. El nuevo caso de uso
+  [`DeleteEventOccurrence`](src/domain/event/usecases/DeleteEventOccurrence.ts)
+  tiene dos modos: `'only'` agrega la fecha a `excludedDates` (la serie
+  sigue); `'thisAndFollowing'` trunca la repetición poniendo
+  `repeat.endType = 'onDate'` con `endDate = fecha - 1 día` — ningún modo
+  materializa una fila por ocurrencia, mismo criterio que #60. Si la fecha
+  borrada es la primera ocurrencia (`date <= event.date`), `'thisAndFollowing'`
+  equivale a borrar el evento entero (no quedaría ninguna ocurrencia previa
+  que conservar).
+- **La ocurrencia puntual viaja junto al evento al editar**: `openEditEvent`
+  ahora recibe `(event, occurrenceDate)` en vez de solo `event` — hace falta
+  saber *qué día* se tocó (no solo *qué evento*) para poder borrar "solo
+  este día" de una serie. `DayEventsModal` pasa esa fecha desde
+  `DayEventOccurrence.date`, que ya traía el dato.
+- **La elección se resuelve con `Alert.alert` de 3 botones** (Cancelar /
+  Solo este día / Este y los que siguen) en vez de un modal propio — es una
+  decisión puntual sin más estado que mantener, y la app no tenía hasta
+  ahora un caso de "confirmar con más de dos opciones" que justificara un
+  componente nuevo. Si el evento no se repite, se borra directo sin
+  preguntar (no hay ocurrencias entre las que elegir).
+- **Semanas completas vía un prop opcional en `CalendarMonth`**, no un
+  cambio de comportamiento global: `showOverflowDays?: boolean` (default
+  `false`) agrega días de relleno con fecha real (en vez de `null`) antes
+  del primer día y después del último, marcados `isOutsideMonth: true` en el
+  `CalendarDay` que recibe cada `renderDay`. Sin el prop, el comportamiento
+  es idéntico al de antes (huecos en blanco) — Mood, Trackers y Gimnasio
+  siguen usando `CalendarMonth` sin tocarlos.
+- **Gris clarito = `theme.colors.background`**, no un color nuevo: ya es el
+  fondo de pantalla (`#e9ebf2`), más oscuro que `card` (`#f8f9fc`, el fondo
+  normal de una celda) pero sin agregar un tono más a la paleta.
+  `EventDayCell` lo aplica cuando `isOutsideMonth` viene en `true`, sin
+  cambiar el resto de la celda (número de día y franjas de eventos se
+  pintan igual).
+- **El rango que se trae de `useEvents` también crece en vista de mes**:
+  antes se pedían ocurrencias solo del mes calendario
+  (`startOfMonth`–`endOfMonth`); ahora, para que los días de relleno
+  muestren sus eventos, se pide el rango de semanas completas
+  (`startOfWeek(startOfMonth)`–`endOfWeek(endOfMonth)`). Las vistas de
+  semana y año no cambian.
+
+**Alternativas descartadas.**
+
+- **Modal propio para elegir el modo de borrado.** `Alert.alert` ya cubre el
+  caso con menos código; se preferirá un modal si en algún momento la
+  elección necesita más contexto que tres botones de texto.
+- **Cambiar el comportamiento de `CalendarMonth` para todos sus usos.** Mood,
+  Trackers y Gimnasio no pidieron semanas completas; un prop opcional
+  evita un cambio visual no pedido en esas pantallas.
+
+**Consecuencias.** Un evento repetido puede terminar con `excludedDates`
+largos si se borran muchas ocurrencias puntuales sueltas en vez de truncar
+la serie — aceptable a la escala de uso personal de la app; si se vuelve un
+problema, se podría compactar fusionando exclusiones consecutivas en un
+recorte de rango.
+
+---
+
+## 62. Swipe para moverse de período en los cuatro calendarios *(elección del usuario)*
+
+**Contexto.** Se pidió que el swipe horizontal mueva el período (anterior/
+siguiente) en **todos** los calendarios — Mood, Progreso de tracker,
+Seguimiento de Rutina (Gimnasio) y Eventos —, igual que ya hacían las
+flechas `‹ ›`. El problema: en Progreso de tracker el swipe ya existía (#33)
+pero con otro significado — cambiar de vista (semana→mes→año) —, lo que
+hacía imposible tener el mismo gesto con dos significados distintos en la
+misma pantalla. Se consultó al usuario: eligió **reemplazar** ese swipe de
+vista por el de período, para que las cuatro pantallas se comporten igual
+(el cambio de vista sigue disponible por el selector `[Semana | Mes | Año]`
+de arriba).
+
+**Decisión.**
+
+- [`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts)
+  (ya existía, de #33) se reutiliza sin cambios — sigue siendo el mismo
+  `PanResponder` que solo reclama el gesto si es claramente horizontal. Lo
+  que cambia es **a qué se conecta**: en las cuatro pantallas
+  (`MoodProgressScreen`, `TrackerProgressScreen`, `RoutineTrackerCalendar`,
+  `EventsScreen`) ahora es `onSwipeLeft: goToNext, onSwipeRight: goToPrevious`
+  — izquierda avanza, derecha retrocede, mismo sentido que las flechas.
+- **Se borraron `zoomInView`/`zoomOutView`** de `useCalendarPeriod` (y el
+  `VIEW_ORDER` que solo usaban ellas): quedaron sin ningún llamador al
+  reemplazar el único swipe que los invocaba, así que no tenía sentido
+  dejarlos vivos.
+- `RoutineTrackerCalendar` vive embebido dentro de `DailyRoutinesScreen`,
+  que ya envuelve toda la pantalla en su propio swipe (derecha → volver a
+  Favoritos, ver #47). Con el nuevo swipe anidado adentro, un gesto que
+  arranca **sobre el calendario** lo resuelve el `PanResponder` interno
+  (mueve el período) y
+  uno que arranca en el resto de la pantalla sigue yendo a Favoritos — el
+  sistema de responders de RN no dispara los dos a la vez, así que no hace
+  falta coordinarlos a mano.
+
+**Alternativas descartadas.**
+
+- **Mantener el swipe de "cambiar de vista" en Progreso de tracker** y dejar
+  las otras tres pantallas con swipe de período. Quedaban inconsistentes
+  entre sí justo lo que se pidió evitar; el usuario confirmó reemplazarlo.
+
+**Consecuencias.** El atajo de swipe para cambiar de vista en Progreso de
+tracker (semana↔mes↔año) ya no existe; para eso queda el selector de
+arriba, que siempre estuvo disponible.
+
+---
+
+## 63. Eventos: celdas más grandes, mes y semana sin scroll *(elección del usuario)*
+
+**Contexto.** Se pidió que los cuadros de los días en Eventos sean más
+grandes y que, de ser posible, la vista de semana y de mes entren enteras en
+pantalla sin tener que scrollear. Antes, el tamaño de celda salía solo del
+ancho (pantalla ÷ 7) y la altura era ese ancho por una relación fija
+(`EVENT_CELL_HEIGHT_RATIO = 1.9`), sin importar cuánto alto quedara
+disponible — con la vista de mes mostrando semanas completas (#61, hasta 6
+filas), eso ya desbordaba la pantalla con bastante frecuencia.
+
+**Decisión.**
+
+- **`CalendarMonth` y `CalendarWeek` suman dos props opcionales**:
+  `fitHeight` y `cellAspectRatio` (ambas por defecto conservan el
+  comportamiento de siempre). Con `fitHeight`, el tamaño de celda final es
+  el **mínimo entre el que sale del ancho y el que sale del alto
+  disponible** (`Math.min(widthBasedSize, heightBasedSize)`) — así la celda
+  es lo más grande posible sin que la grilla desborde. El alto disponible se
+  mide con `onLayout` sobre el contenedor (no sobre el ancho solo, como
+  antes), y requiere que ese contenedor viva en un alto ya fijado por el
+  padre (`flex: 1` dentro de un alto determinado), no dentro de un
+  `ScrollView` cuyo alto depende de su propio contenido — si no, la medición
+  sería circular.
+- **`EventsScreen` deja de envolver toda la pantalla en un `ScrollView`**:
+  los controles de arriba (agregar evento, selector de vista, flechas de
+  período) quedan fijos, y el calendario vive en un `View` con `flex: 1`
+  debajo — ese es el contenedor de alto fijo que necesitan `fitHeight`. Para
+  semana y mes, `EventDayCell`'s `EVENT_CELL_HEIGHT_RATIO` (ahora exportado)
+  se pasa como `cellAspectRatio`, así la celda crece hasta el máximo que
+  entra en el alto real de la pantalla.
+- **El año queda afuera de `fitHeight`**: son 12 mini-calendarios con
+  puntitos, no celdas de día; si no entran en una pantalla chica, se
+  scrollea solo esa vista (`ScrollView` propio, acotado al área que le toca
+  después de los controles de arriba) — no se pidió cambiar esa vista.
+- **Mood, Trackers y Gimnasio no cambian**: `fitHeight`/`cellAspectRatio`
+  son opcionales y nadie más los pasa, así que esas pantallas siguen
+  calculando el tamaño de celda solo por ancho, igual que siempre.
+
+**Alternativas descartadas.**
+
+- **Un tamaño de celda fijo más grande.** No se ajusta a la variedad de
+  anchos de pantalla ni garantiza que entre sin scroll — el pedido explícito
+  era "de ser posible, que entre sin scrollear", no un tamaño fijo.
+- **Forzar siempre 6 filas en la vista de mes** (en vez de las filas reales
+  del mes, 4 a 6) para que el cálculo de alto sea más simple. Se descartó:
+  desperdiciaría espacio en los meses de 4-5 filas, achicando la celda sin
+  necesidad.
+
+**Consecuencias.** En los meses de 6 filas, en pantallas chicas, la celda
+puede terminar algo más chica que el máximo que daría el ancho solo (para
+no desbordar); en la mayoría de los celulares y meses de 4-5 filas, la
+celda llega al máximo de ancho de todas formas. Si en algún dispositivo muy
+bajo de alto el mes de 6 filas igual no entra, el mínimo seguiría dejando
+una celda utilizable (no hay un piso mínimo de tamaño todavía).
+
+---
+
+## 64. Eventos: celda uniforme entre meses, menos espacio y menos chrome arriba *(elección del usuario)*
+
+**Contexto.** Con #63, el alto de celda salía de las filas **reales** de
+cada mes (4 a 6), así que un mes de 4 filas quedaba con celdas más grandes
+que uno de 6 — justo lo que #63 había elegido a propósito (aprovechar el
+espacio en los meses con menos filas). El pedido ahora fue el inverso:
+**todos los meses con el mismo tamaño de celda**, más espacio dedicado a la
+celda achicando el "chrome" de arriba (botón de agregar, selector de vista,
+nombre del período) y el espacio entre celdas.
+
+**Decisión.**
+
+- **`fixedRows` en `CalendarMonth`**: nueva prop opcional — si viene, el
+  cálculo de `fitHeight` usa ese número de filas en vez de
+  `cells.length / 7` (las filas reales del mes mostrado). `EventsScreen` la
+  fija en **6** (el máximo posible), así el tamaño de celda sale siempre de
+  la misma cuenta sin importar qué mes se esté mirando — por diseño, esto
+  revierte la alternativa que #63 había descartado ("forzar siempre 6
+  filas"); ahí el pedido era aprovechar espacio por mes, ahora es
+  consistencia entre meses, y gana el pedido más reciente.
+- **`gap` en `CalendarMonth` y `CalendarWeek`**: nueva prop opcional (antes
+  una constante `GAP` fija por archivo, 6 y 8 respectivamente). Sin la prop
+  se comportan igual que siempre; `EventsScreen` pasa un `CELL_GAP = 3` más
+  chico para ambas vistas, así el espacio que antes era separación entre
+  celdas pasa a ser alto de celda.
+- **`CalendarViewSwitch` suma `compact`** (opcional, por defecto `false`):
+  menos padding y texto más chico en el control `[Semana | Mes | Año]`.
+  Solo `EventsScreen` lo pasa; el resto de las pantallas que lo usan quedan
+  igual.
+- **Botón "＋ Agregar evento" y la fila de navegación de período** (flechas
+  `‹ ›` + título) se achican directo en los estilos de `EventsScreen` (no
+  son componentes compartidos, así que no hizo falta una prop): menos
+  `paddingVertical`, texto más chico. El `gap` entre los bloques de arriba
+  también bajó (14 → 8).
+
+**Alternativas descartadas.**
+
+- **Dejar el tamaño de celda variable por mes** (lo que hacía #63). Se
+  pidió explícitamente lo contrario: consistencia entre meses por sobre
+  aprovechar el espacio de los meses más cortos.
+
+**Consecuencias.** En los meses de 4-5 filas queda espacio vertical sin
+usar debajo de la grilla en vez de que la celda crezca para ocuparlo — es
+el trade-off directo de pedir el mismo tamaño en todos los meses. (Nota:
+el `justifyContent: 'center'` que centraba ese espacio sobrante se sacó en
+#65, a pedido del usuario. El `fixedRows` de esta entrada se sacó en #67:
+el pedido pasó a ser el inverso otra vez — altura variable para que la
+celda siempre estire a ocupar toda la pantalla.)
+
+---
+
+## 65. Eventos: fila de letras (LMMJVSD) siempre a la misma altura y a todo el ancho *(elección del usuario)*
+
+**Contexto.** Con #63/#64, el contenedor de `fitHeight` centraba su
+contenido (`alignItems: 'center'`, `justifyContent: 'center'`) tanto para
+achicar la grilla sin que tocara los bordes como para repartir el espacio
+sobrante arriba y abajo. Efecto no buscado: cuando la celda queda achicada
+por el alto (no por el ancho), la fila de letras `L M M J V S D` y la
+grilla quedaban **angostas y centradas** en vez de ocupar todo el ancho de
+pantalla, y la posición vertical de esa fila variaba según cuánto espacio
+sobrante hubiera (la grilla se centraba como bloque en el alto disponible)
+— no quedaba siempre a la misma altura debajo del título del mes.
+
+**Decisión.**
+
+- **Se sacó `alignItems: 'center'` y `justifyContent: 'center'`** del
+  estilo `fillHeight` de `CalendarMonth` y `CalendarWeek` — vuelven al
+  comportamiento por defecto de un contenedor flex en columna: los hijos
+  **estiran a todo el ancho** (`alignItems: 'stretch'`, el default) y se
+  **anclan arriba** (`justifyContent: 'flex-start'`, el default). Así la
+  fila de letras queda siempre pegada justo debajo de la fila de
+  encabezado (fija, fuera de `CalendarMonth`/`Week`), sin importar cuánto
+  más chica sea la grilla que el alto disponible.
+- **`grid` (la grilla de celdas de `CalendarMonth`) suma
+  `justifyContent: 'space-between'`**, igual que ya tenía `weekHeader`
+  (la fila de letras) y `row` en `CalendarWeek`. Antes no tenía ninguno
+  (`flex-start` por defecto), así que si la celda quedaba más chica que el
+  máximo que daba el ancho, las celdas de cada fila se amontonaban a la
+  izquierda en vez de ocupar todo el ancho. Con `space-between`, el espacio
+  que sobra (si la celda está limitada por el alto, no por el ancho) se
+  reparte **entre** las celdas en vez de quedar afuera de la fila — la fila
+  de letras y la grilla de días siempre terminan ocupando el mismo ancho
+  total y alineadas columna por columna (mismo truco que ya traía
+  `weekHeader`, no era nuevo: solo le faltaba a `grid`).
+- Este cambio es seguro para los demás usos de `CalendarMonth`/`CalendarWeek`
+  (Mood, Trackers, Gimnasio): ahí la celda **siempre** sale exacta del
+  ancho (`cellSize = floor((width - gap·6) / 7)`, sin `fitHeight`), así que
+  no queda espacio sobrante que `space-between` tenga que repartir — el
+  `justifyContent` nuevo no cambia nada visible en esas pantallas.
+
+**Alternativas descartadas.**
+
+- **Mantener el centrado y solo arreglar la posición vertical.** No
+  alcanzaba: el pedido también fue que ocupen todo el ancho, que requería
+  sacar el `alignItems: 'center'` (que achicaba la fila al contenido) además
+  del `justifyContent: 'center'` (que la movía verticalmente).
+
+**Consecuencias.** En los meses de 4-5 filas (celda no limitada por ancho),
+las letras y las celdas de cada fila quedan con más separación entre sí
+(el espacio sobrante se reparte ahí) en vez de como margen afuera de la
+fila — es la combinación que cumple "misma altura siempre" + "todo el
+ancho" a la vez. (Nota: en #66 el ancho de celda deja de achicarse por el
+alto, así que este reparto por `space-between` queda para el resto
+redondeado nada más — ver #66.)
+
+---
+
+## 66. Eventos: ancho y alto de celda desacoplados, celdas pegadas sin espacio *(elección del usuario)*
+
+**Contexto.** Se pidió aumentar el ancho de las celdas de día en Eventos y
+que queden **pegadas, sin espacio entre ellas**. El problema de fondo: desde
+#63, `fitHeight` calculaba un único `cellSize` (ancho = alto ÷
+`cellAspectRatio`) y usaba el **mínimo** entre lo que daba el ancho y lo que
+daba el alto — así que en cuanto el alto mandaba (como pasa casi siempre
+con `fixedRows=6`, #64), la celda se achicaba **también a lo ancho**, y
+encima el `justifyContent: 'space-between'` de #65 rellenaba ese ancho
+perdido con **espacio entre celdas** en vez de dejarlas más anchas. Eso es
+exactamente lo opuesto a lo que se pidió ahora.
+
+**Decisión.**
+
+- **Ancho y alto de celda se calculan por separado.** `cellWidth` sale
+  **siempre** de repartir el ancho disponible en 7 columnas
+  (`floor((width - gap·6) / 7)`) — ya no se achica nunca por falta de alto.
+  `cellHeight` sale de lo natural (`cellWidth × cellAspectRatio`) salvo que
+  no entre en el alto disponible, en cuyo caso se recorta a lo que quepa
+  (`Math.min`) — pero el ancho no se toca. Resultado: la celda puede quedar
+  **menos alta** que su relación "natural" en los meses de 6 filas, pero
+  **nunca más angosta** que el máximo que da la pantalla.
+- **`CalendarDay` (el objeto que recibe cada `renderDay`) suma `height?:
+  number`** junto al `size` que ya existía (que ahora es siempre el
+  ancho). Si no viene, el consumidor asume celda cuadrada (`size` para
+  ambos) — así Mood/Trackers/Gimnasio, que no leen este campo nuevo, siguen
+  exactamente igual.
+- **`EventDayCell` pasa a recibir `height` como prop explícita** (ya no la
+  calcula internamente con `size × EVENT_CELL_HEIGHT_RATIO`) — ese cálculo
+  ahora vive en `CalendarMonth`/`CalendarWeek`, que son quienes saben
+  cuánto alto hay disponible.
+- **`EventsScreen` pasa `gap={0}`** (antes 3): sin espacio entre celdas
+  (ni entre filas, ni entre la fila de letras y la grilla), **y** con el
+  ancho ya desacoplado del alto, ese espacio liberado pasa a ser ancho de
+  celda en vez de quedar como hueco. El `justifyContent: 'space-between'`
+  de #65 queda, pero ahora solo reparte el resto de redondeo (0 a 6px, el
+  resultado de `floor` al repartir el ancho en 7) — ya no tiene que
+  compensar una celda achicada por el alto.
+
+**Alternativas descartadas.**
+
+- **Mantener un solo `cellSize` y solo bajar el `gap`.** No alcanzaba: con
+  `fixedRows=6` el alto sigue siendo casi siempre el límite, así que el
+  ancho se seguiría achicando con la celda cuadrada de antes — el pedido
+  era más ancho, no solo menos separación.
+
+**Consecuencias.** La celda puede dejar de respetar `EVENT_CELL_HEIGHT_RATIO`
+con exactitud en los meses de 6 filas (queda más baja que "ancho × 1.9" si
+no entra) — es el trade-off directo de priorizar que el ancho nunca se
+achique.
+
+---
+
+## 67. Eventos: el alto de celda vuelve a variar por mes, siempre estirado a ocupar toda la pantalla *(elección del usuario)*
+
+**Contexto.** Con #64, `fixedRows={6}` hacía que el alto de celda saliera
+siempre de la misma cuenta (6 filas), fuera cual fuera el mes real —
+así todos los meses quedaban con la misma altura de celda, pero los de 4-5
+filas dejaban espacio vertical sin usar debajo de la grilla (ver la nota en
+#64). Además, `cellHeight` nunca pasaba de lo "natural" (`ancho ×
+EVENT_CELL_HEIGHT_RATIO`): si había más alto disponible que eso, la celda
+no crecía para aprovecharlo, solo se achicaba si hacía falta. El pedido
+ahora es el inverso otra vez: que la celda **siempre** estire a ocupar todo
+el alto disponible, y que varíe de mes a mes según sus filas reales (4 a
+6) en vez de usar siempre el peor caso.
+
+**Decisión.**
+
+- **Se sacó `fixedRows`** de `CalendarMonth` (prop y uso): el cálculo de
+  filas vuelve a ser `cells.length / 7`, las filas reales del mes que se
+  está mostrando — tal como era en #63, antes de #64.
+  `EventsScreen` ya no pasa `fixedRows={6}`.
+  `EventsScreen` también deja de pasar `cellAspectRatio` en el llamado a
+  `CalendarMonth` (sigue existiendo en la prop por si algún consumidor la
+  necesita sin `fitHeight`, pero con `fitHeight` activo ya no se usa para
+  nada: ver el punto siguiente).
+- **`cellHeight` ya no tiene un tope en `Math.min` con el alto "natural"**:
+  con `fitHeight`, pasa a ser directamente `heightPerRow` (el alto
+  disponible ÷ filas reales) — la celda siempre estira para ocupar
+  exactamente el alto que haya, ni más ni menos. Como las filas reales
+  varían de mes a mes (4 a 6), el alto de celda varía con ellas: un mes de
+  4 filas queda con celdas más altas que uno de 6, siempre llenando la
+  pantalla completa en ambos casos.
+- `CalendarWeek` no cambia: sigue con el tope `Math.min(natural,
+  disponible)` sin estirar de más — una sola fila siempre tiene de sobra
+  espacio vertical, y estirarla a ocupar toda la pantalla dejaría una fila
+  de celdas gigante sin sentido. El pedido fue específicamente sobre "los
+  meses".
+
+**Alternativas descartadas.**
+
+- **Mantener `fixedRows` pero permitir que estire por encima de lo
+  "natural" también en el caso de 6 filas.** No tiene sentido: el pedido es
+  justamente que el alto salga de las filas reales, no de un máximo fijo.
+
+**Consecuencias.** Vuelve la inconsistencia de tamaño entre meses que #64
+había eliminado a propósito — es el trade-off esperado: el pedido actual
+prioriza "siempre ocupa toda la pantalla" por sobre "mismo tamaño en todos
+los meses", que son mutuamente excluyentes salvo que todos los meses
+tuvieran la misma cantidad de filas.
+
+---
+
+## 68. Eventos: "Se repite cada" arranca en 7 días, no 1 *(elección del usuario)*
+
+**Contexto.** El campo "Repetir cada (días)" de `EventModal` arrancaba en
+**1** (todos los días) al tildar "Se repite" en un evento nuevo. Se pidió
+que arranque en **7** (semanal) — el caso más común para un evento que se
+repite (cumpleaños, pago mensual aproximado a semanas, clase semanal, etc.).
+
+**Decisión.** Los tres lugares donde `EventModal` usa `'1'` como valor
+inicial de `intervalDays` (el `useState` inicial, el reset al abrir el
+modal para un evento nuevo sin `repeat`, y el `placeholder` del campo)
+pasan a `'7'`. Solo afecta el valor por defecto de un evento **nuevo**: un
+evento existente sigue mostrando su propio `intervalDays` guardado, como
+siempre.
+
+**Alternativas descartadas.** Ninguna — cambio directo de un valor por
+defecto, sin otras opciones en juego.
+
+**Consecuencias.** Ninguna relevante: no cambia la validación (sigue
+pidiendo un entero ≥ 1) ni el formato de guardado. (Nota: en #70 el campo
+`intervalDays` pasa a ser `intervalValue` + `intervalUnit` — el default
+sigue siendo 7 para días, y se agrega 1 como default para meses.)
+
+---
+
+## 69. Eventos: descripción, horario desde/hasta opcional, y modal de detalle con lápiz para editar *(elección del usuario)*
+
+**Contexto.** Tres pedidos juntos sobre Eventos: (1) que un evento pueda
+tener una **descripción**, visible en la lista de "eventos de este día";
+(2) que el horario sea **desde / hasta**, ambos **opcionales** (antes era
+un único `time` obligatorio); (3) que tocar un evento en esa lista abra un
+**modal de solo lectura** con su información, y que el lápiz a la
+**izquierda** de la fila sea lo que abre a editar — esto último revierte lo
+elegido en #60 ("tocar edita directo, sin modal de ver intermedio").
+
+**Decisión.**
+
+- **`CalendarEvent` suma `description?: string`** (mismo patrón que
+  `DailyRoutineTask`: `MAX_EVENT_DESCRIPTION = 300`, `trim()`, `undefined`
+  si queda vacía) y **cambia `time: string` por `timeFrom?: string` /
+  `timeTo?: string`**, los dos opcionales — cada uno se valida con el mismo
+  formato `HH:MM` si viene, pero no hay validación de que `timeFrom` sea
+  anterior a `timeTo` (no se pidió, y un evento "sin orden" simplemente no
+  tiene mucho sentido mostrar distinto a uno con horario raro).
+- **Migración de datos viejos**: `eventFromDto` lee el `time` legado (si
+  existe en el JSON guardado) y lo usa como `timeFrom` cuando el evento no
+  tiene uno propio — así los eventos ya guardados no "pierden" su horario
+  al actualizar la app. El DTO ya no declara `time` en su tipo (type-level,
+  los datos viejos en el blob lo siguen teniendo a nivel JS).
+- **`TimeField` pasa a aceptar `value: string | null`**: sin valor muestra
+  "Sin horario" y al lado aparece una cruz (ícono `X` de `lucide-react-native`)
+  para volver a borrarlo; tocar el campo abre el picker nativo igual que
+  antes (con `09:00` como hora de arranque si no había ninguna). Antes solo
+  la usaba `EventModal`, así que se pudo cambiar su API sin tocar otros
+  consumidores.
+- **`EventModal` suma un `TextInput` multilínea para la descripción**
+  (mismo patrón que `DailyRoutineTaskModal`: `minHeight: 70`,
+  `multiline`, placeholder "Descripción (opcional)") y reemplaza el único
+  `TimeField` por dos, "Desde" y "Hasta".
+- **Nuevo `EventDetailModal`**, de solo lectura: reusa el `InfoModal`
+  genérico (el mismo que ya usan tareas/listas/ejercicios para "i" +
+  descripción, de #49) pasándole `title`/`description` del evento, y le
+  agrega como `children` la fecha de la ocurrencia, el horario
+  (`eventTimeLabel`, nuevo helper con los 4 casos: desde-hasta, solo desde,
+  solo hasta, o nada) y un resumen de la repetición si tiene
+  (`repeatSummary`, texto armado a mano — "Cada 3 días, hasta el
+  01/12/2026", etc.).
+- **`DayEventsModal` separa cada fila en dos zonas tocables**: un botón de
+  lápiz (ícono `Pencil` de `lucide-react-native`) a la izquierda que llama
+  a `onEditEvent` (mismo comportamiento que antes: cierra el modal de día y
+  abre el formulario), y el resto de la fila (punto de color + horario +
+  nombre + descripción en una segunda línea si tiene) que ahora llama a un
+  `onViewEvent` nuevo — abre `EventDetailModal` **sin** cerrar el modal de
+  día debajo (es un "vistazo" rápido, no una navegación; `EventsScreen` ya
+  tenía el mismo patrón de modales apilados con `EventModal`).
+- **`SaveEvent` ahora busca el evento existente antes de crear el
+  reemplazo** (`repository.getById` si hay `id`) para pasarle
+  `excludedDates` a `createCalendarEvent` — bug de paso: antes, guardar la
+  edición de un evento repetido con días puntuales borrados ("solo este
+  día", #61) los hacía desaparecer, porque `SaveEvent` nunca los leía de
+  vuelta. No lo pidió el usuario en este mensaje, pero tocar `SaveEvent`
+  para los campos nuevos sin arreglarlo hubiera dejado un bug más visible
+  (la descripción/horario nuevos hacen que se edite un evento repetido más
+  seguido).
+
+**Alternativas descartadas.**
+
+- **Validar que `timeFrom` sea anterior a `timeTo`.** No se pidió, y un
+  evento nocturno real (22:00 a 02:00) rompería esa regla sin ser un error
+  — mejor no validar que validar mal.
+- **Checkbox "tiene horario" en vez de dos campos nulleables.** Un campo
+  que ya puede mostrar "Sin horario" y tiene su propia cruz para borrarse
+  no necesita un toggle extra: es redundante.
+- **Modal de detalle propio, en vez de reusar `InfoModal`.** Hubiera
+  duplicado exactamente el mismo patrón (sheet + descripción + "Cerrar")
+  que ya existe y usan tareas/listas/ejercicios.
+
+**Consecuencias.** Hay dos acciones distintas en la misma fila de
+"eventos de este día" (tocar = ver, lápiz = editar) en vez de una sola —
+es justo el cambio pedido, pero vale la nota de que ya no es "tocar
+cualquier parte de la fila edita" como en #60.
+
+---
+
+## 70. Eventos: repetir por días o meses, y combo box para el tipo de fin *(elección del usuario)*
+
+**Contexto.** Tres pedidos sobre la repetición de un evento: (1) que se
+pueda elegir repetir **por días o por meses**, con su propia cantidad —
+por defecto **7** en días, **1** en meses; (2) sin marrón en la paleta de
+colores de Eventos; (3) que "Indefinidamente / Hasta una fecha / Cantidad
+de veces" sea un **combo box** (no los tres chips de antes), con el campo
+de cantidad o fecha a la **derecha** del combo en vez de abajo.
+
+**Decisión.**
+
+- **`EventRepeat.intervalDays` pasa a `intervalValue` + `intervalUnit`**
+  (`'days' | 'months'`, nuevo `EventRepeatUnit`). El tope máximo depende de
+  la unidad: `MAX_INTERVAL_DAYS = 3650` para días (como antes),
+  `MAX_INTERVAL_MONTHS = 120` (10 años) para meses — repetir "cada 3650
+  meses" no tiene sentido, así que no comparten el mismo tope.
+- **`addMonthsClamped`** (sumar meses preservando el día, con clamp al
+  último día del mes destino si no existe) **se movió de
+  `domain/finance/entities/occurrences.ts` a `core/utils/date.ts`**: ya no
+  es una lógica específica de Finanzas, la necesitan ambos dominios.
+  `eventOccurrencesInRange` la usa igual que `financeOccurrencesInRange`
+  (`addDays` si `intervalUnit` es `'days'`, `addMonthsClamped` si es
+  `'months'`).
+- **`EventModal` guarda el texto de cantidad por separado para cada
+  unidad** (`intervalDaysText` / `intervalMonthsText`, cada uno con su
+  propio default — 7 y 1) en vez de un solo campo: así cambiar entre
+  "Días" y "Meses" no borra lo que el usuario ya tipeó en la otra unidad,
+  y cada una arranca en su propio default la primera vez.
+- **Nuevo `SelectField`** (`src/presentation/components/`): combo box
+  genérico — toca para abrir una lista de opciones en un modal (mismo
+  patrón visual que el resto de los modales chicos de la app), con un
+  ícono `ChevronDown` (`lucide-react-native`) de pista. Se usa para el
+  tipo de fin de la repetición (reemplaza los tres chips
+  `endTypeChip`/`endTypeRow`, que se borraron) y para la unidad
+  días/meses. Queda en el directorio compartido porque es un combo box
+  genérico, no específico de Eventos — ningún otro formulario lo
+  necesitaba todavía, pero el próximo que necesite elegir entre pocas
+  opciones con texto ya no tiene que reinventar el patrón.
+- **El campo de cantidad/fecha va a la derecha del combo**, en la misma
+  fila (`styles.row`, `flexDirection: 'row'`): el combo ocupa su propio
+  `field` (`flex: 1`) y, al lado, aparece `DateField` si el tipo es "Hasta
+  una fecha" o un `TextInput` si es "Cantidad de veces" — ninguno de los
+  dos si es "Indefinidamente", en cuyo caso el combo ocupa toda la fila
+  solo.
+- **Sin marrón en Eventos**: `EVENT_COLORS` en `EventModal.tsx` filtra
+  `#8B5E3C` de la paleta compartida `OPTION_COLORS`. `OptionColorPicker`
+  (compartido con Trackers y las categorías de Finanzas) suma una prop
+  opcional `colors` — sin ella sigue mostrando la paleta completa, así que
+  Trackers y Finanzas no cambian.
+- **Migración de datos viejos**: `eventFromDto` lee el `intervalDays`
+  legado del DTO de repetición (si existe) y lo usa como `intervalValue`
+  con `intervalUnit: 'days'` cuando el evento no tiene los campos nuevos —
+  mismo criterio que la migración de `time` → `timeFrom` en #69.
+
+**Alternativas descartadas.**
+
+- **Agregar `@react-native-picker/picker`** para el combo box. Es un
+  módulo nativo nuevo que obliga a rehacer el build de desarrollo (como ya
+  pasó con `expo-notifications`); un modal con una lista (`SelectField`)
+  cubre el caso sin dependencia nueva — mismo criterio que #33
+  (`PanResponder` en vez de `react-native-gesture-handler`).
+- **Un solo campo de texto para la cantidad, reseteado al cambiar de
+  unidad.** Se probó mentalmente y resultaba molesto: tipear "15" en días,
+  cambiar a meses por error, y perder el "15" sin querer. Guardar un texto
+  por unidad lo evita.
+- **Quitar el marrón de `OPTION_COLORS` directamente.** Hubiera sacado el
+  marrón también de Trackers y Finanzas, que no lo pidieron.
+
+**Consecuencias.** `EventRepeatDto`/`SaveEventInput` cambiaron de forma
+(no son compatibles con el `intervalDays` viejo a nivel de tipos), pero el
+dato guardado se migra solo al leer (`eventFromDto`), así que no hace
+falta ningún script de migración manual.
+
+---
+
+## 71. Ajustes: elegir la pestaña que se abre al iniciar la app *(elección del usuario)*
+
+**Contexto.** Se pidió poder elegir, desde Ajustes, qué pestaña se muestra
+al abrir la app — Favoritos por defecto, pero también Trackers, Listas,
+Finanzas, Gimnasio o Eventos. Esto ya había existido brevemente como
+"preferencia de pestaña de inicio" y se sacó en #38 cuando apareció
+Favoritos como pantalla principal **fija**; ahora el pedido es explícito,
+así que se reintroduce, pero con Favoritos como default en vez de sin
+default (como era antes de #38).
+
+**Decisión.**
+
+- **`UserProfile` suma `homeTab: HomeTab`** (`'favorites' | 'trackers' |
+  'lists' | 'finances' | 'gym' | 'events'`, nuevo tipo en el dominio;
+  `DEFAULT_HOME_TAB = 'favorites'`). Vive en el dominio de usuario, no en
+  navegación — `HomeTab` no sabe nada de nombres de ruta de
+  `@react-navigation`, eso es un detalle de la capa de presentación.
+- **`AppNavigator` mapea `HomeTab` → nombre de ruta** (`HOME_TAB_ROUTE`,
+  un objeto chico solo ahí) y lo usa como `initialRouteName` del stack en
+  vez de `'Favorites'` fijo — se lee una sola vez al arrancar, junto con
+  el mismo `getUserProfile.execute()` que ya decidía `Onboarding` vs
+  pantalla principal. Como `initialRouteName` de React Navigation es
+  estático (se fija al montar el `Stack.Navigator`), cambiar la
+  preferencia en Ajustes solo se nota en el **próximo** arranque de la
+  app, no al toque — mismo comportamiento que ya tenía el gate de
+  Onboarding.
+- **Nuevo `HomeTabCard`** en Ajustes (mismo patrón que `NotificationsCard`/
+  `UserNameCard`: lee con `getUserProfile.execute()` al montar, escribe con
+  `updateUserProfile.execute({ homeTab })`), con un combo box
+  (`SelectField`, de #70) para las seis opciones.
+- **El menú del header (`HubMenuButton`) no cambia**: sigue mostrando las
+  seis pestañas siempre, sin importar cuál sea la de inicio — esta
+  preferencia solo decide dónde **aterriza** la app al abrirse, no qué
+  pestañas existen ni cómo se navega entre ellas.
+- **Onboarding no cambia**: al elegir el nombre por primera vez sigue
+  yendo a Favoritos (`navigation.reset`) — la preferencia de pestaña de
+  inicio recién se puede elegir después, desde Ajustes, así que no hay
+  nada que respetar todavía en ese momento.
+- **Migración**: un perfil guardado antes de este cambio no tiene
+  `homeTab` en su DTO; `createUserProfile` ya resuelve ese caso con
+  `params.homeTab ?? DEFAULT_HOME_TAB`, igual que cualquier otro campo
+  opcional nuevo del perfil.
+
+**Alternativas descartadas.**
+
+- **Hacer que cambiar la preferencia navegue ahí mismo, sin esperar al
+  próximo arranque.** No se pidió — es una preferencia de "qué pasa al
+  abrir la app", no un acceso directo de navegación inmediata (para eso ya
+  está el menú del header).
+
+**Consecuencias.** Ninguna relevante: el flag es opcional y con default,
+así que no rompe perfiles existentes ni el flujo de onboarding.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

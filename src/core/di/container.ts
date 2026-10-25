@@ -90,6 +90,13 @@ import { ReorderDailyRoutineTasks } from '../../domain/dailyRoutine/usecases/Reo
 import { SaveDailyRoutineTask } from '../../domain/dailyRoutine/usecases/SaveDailyRoutineTask';
 import { SetDailyTaskDone } from '../../domain/dailyRoutine/usecases/SetDailyTaskDone';
 import { SyncRoutineTracker } from '../../domain/dailyRoutine/usecases/SyncRoutineTracker';
+import { AsyncStorageEventLocalDataSource } from '../../data/event/datasources/EventLocalDataSource';
+import { EventRepositoryImpl } from '../../data/event/repositories/EventRepositoryImpl';
+import { DeleteEvent } from '../../domain/event/usecases/DeleteEvent';
+import { DeleteEventOccurrence } from '../../domain/event/usecases/DeleteEventOccurrence';
+import { GetEventOccurrencesInRange } from '../../domain/event/usecases/GetEventOccurrencesInRange';
+import { GetEvents } from '../../domain/event/usecases/GetEvents';
+import { SaveEvent } from '../../domain/event/usecases/SaveEvent';
 
 /**
  * Composición de dependencias (Composition Root). Es el único lugar donde
@@ -148,6 +155,9 @@ const dailyTaskProgressRepository = new DailyTaskProgressRepositoryImpl(
 );
 const getDailyRoutineTasks = new GetDailyRoutineTasks(dailyRoutineTaskRepository);
 const getDailyRoutineProgress = new GetDailyRoutineProgress(dailyTaskProgressRepository);
+
+// --- Eventos ---
+const eventRepository = new EventRepositoryImpl(new AsyncStorageEventLocalDataSource());
 
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
@@ -224,6 +234,12 @@ export const container = {
   setDailyTaskDone: new SetDailyTaskDone(dailyTaskProgressRepository),
   getDailyRoutineSession: new GetDailyRoutineSession(getDailyRoutineTasks, getDailyRoutineProgress),
   syncRoutineTracker: new SyncRoutineTracker(trackerRepository, trackerEntryRepository),
+
+  getEvents: new GetEvents(eventRepository),
+  saveEvent: new SaveEvent(eventRepository, generateId),
+  deleteEvent: new DeleteEvent(eventRepository),
+  deleteEventOccurrence: new DeleteEventOccurrence(eventRepository),
+  getEventOccurrencesInRange: new GetEventOccurrencesInRange(eventRepository),
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),

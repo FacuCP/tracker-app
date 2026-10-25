@@ -1,12 +1,12 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useRef, useState } from 'react';
+import { ComponentRef, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { RootStackParamList } from '../../core/navigation/types';
 import { theme } from '../../core/theme';
 
-export type HubRoute = 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym';
+export type HubRoute = 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym' | 'Events';
 
 const ITEMS: { route: HubRoute; label: string }[] = [
   { route: 'Favorites', label: 'Favoritos' },
@@ -14,6 +14,7 @@ const ITEMS: { route: HubRoute; label: string }[] = [
   { route: 'Lists', label: 'Listas' },
   { route: 'Finances', label: 'Finanzas' },
   { route: 'Gym', label: 'Gimnasio' },
+  { route: 'Events', label: 'Eventos' },
 ];
 
 /**
@@ -25,7 +26,7 @@ export function HubMenuButton({ current }: { current: HubRoute }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ top: 56, left: 12 });
-  const buttonRef = useRef<View>(null);
+  const buttonRef = useRef<ComponentRef<typeof View>>(null);
 
   const currentLabel = ITEMS.find((item) => item.route === current)?.label ?? 'Menú';
 

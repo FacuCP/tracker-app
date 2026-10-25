@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { useBackup } from '../../backup/useBackup';
+import { HomeTabCard } from '../../user/components/HomeTabCard';
 import { NotificationsCard } from '../../user/components/NotificationsCard';
 import { UserNameCard } from '../../user/components/UserNameCard';
 
@@ -16,7 +17,7 @@ export function SettingsScreen({ navigation }: Props) {
   function confirmImport() {
     Alert.alert(
       'Importar backup',
-      'Esto reemplaza TODOS los datos actuales (nombre, mood tracker, trackers, listas, finanzas y gimnasio) por los del archivo. ¿Seguir?',
+      'Esto reemplaza TODOS los datos actuales (nombre, mood tracker, trackers, listas, finanzas, gimnasio, rutina diaria y eventos) por los del archivo. ¿Seguir?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -32,6 +33,8 @@ export function SettingsScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <UserNameCard />
+
+        <HomeTabCard />
 
         <NotificationsCard />
 

@@ -39,6 +39,18 @@ export function addMonths(date: Date, amount: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
 }
 
+/**
+ * Suma meses a una fecha preservando el día. Si el mes destino es más corto
+ * (p. ej. 31 de enero + 1 mes), lo clampa al último día de ese mes.
+ */
+export function addMonthsClamped(date: Date, months: number): Date {
+  const totalMonths = date.getFullYear() * 12 + date.getMonth() + months;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = ((totalMonths % 12) + 12) % 12;
+  const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+  return new Date(targetYear, targetMonth, Math.min(date.getDate(), lastDay));
+}
+
 export function addYears(date: Date, amount: number): Date {
   return new Date(date.getFullYear() + amount, 0, 1);
 }

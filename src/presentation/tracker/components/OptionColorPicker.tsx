@@ -17,13 +17,15 @@ export const OPTION_COLORS: readonly string[] = [
 interface Props {
   value: string;
   onChange: (color: string) => void;
+  /** Paleta a mostrar; por defecto `OPTION_COLORS`. */
+  colors?: readonly string[];
 }
 
 /** Fila de swatches para elegir el color de una opción. */
-export function OptionColorPicker({ value, onChange }: Props) {
+export function OptionColorPicker({ value, onChange, colors = OPTION_COLORS }: Props) {
   return (
     <View style={styles.row}>
-      {OPTION_COLORS.map((color) => (
+      {colors.map((color) => (
         <TouchableOpacity
           key={color}
           onPress={() => onChange(color)}

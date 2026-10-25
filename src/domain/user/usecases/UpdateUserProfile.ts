@@ -1,4 +1,4 @@
-import { UserProfile, createUserProfile } from '../entities/UserProfile';
+import { HomeTab, UserProfile, createUserProfile } from '../entities/UserProfile';
 import { UserRepository } from '../repositories/UserRepository';
 
 export interface UserProfilePatch {
@@ -9,6 +9,7 @@ export interface UserProfilePatch {
   fontScale?: number;
   notifyTrackers?: boolean;
   notifyDueTasks?: boolean;
+  homeTab?: HomeTab;
 }
 
 /**
@@ -28,6 +29,7 @@ export class UpdateUserProfile {
       fontScale: patch.fontScale ?? current?.fontScale,
       notifyTrackers: patch.notifyTrackers ?? current?.notifyTrackers,
       notifyDueTasks: patch.notifyDueTasks ?? current?.notifyDueTasks,
+      homeTab: patch.homeTab ?? current?.homeTab,
     });
     await this.repository.saveProfile(profile);
     return profile;

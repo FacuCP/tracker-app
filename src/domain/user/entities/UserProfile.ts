@@ -1,7 +1,13 @@
+/** Pestaña que se muestra al abrir la app. */
+export type HomeTab = 'favorites' | 'trackers' | 'lists' | 'finances' | 'gym' | 'events';
+
+export const HOME_TABS: readonly HomeTab[] = ['favorites', 'trackers', 'lists', 'finances', 'gym', 'events'];
+export const DEFAULT_HOME_TAB: HomeTab = 'favorites';
+
 /**
  * Perfil del usuario: el nombre (se elige la primera vez), qué "cards
- * especiales" aparecen en Favoritos, el tamaño de la letra (sin usar por ahora)
- * y qué notificaciones están activadas.
+ * especiales" aparecen en Favoritos, el tamaño de la letra (sin usar por ahora),
+ * qué notificaciones están activadas, y qué pestaña se abre por defecto.
  */
 export interface UserProfile {
   readonly name: string;
@@ -14,6 +20,8 @@ export interface UserProfile {
   readonly notifyTrackers: boolean;
   /** Aviso el día antes de que venza una tarea de una to-do list. */
   readonly notifyDueTasks: boolean;
+  /** Pestaña que se abre al iniciar la app. Por defecto, Favoritos. */
+  readonly homeTab: HomeTab;
 }
 
 export const MAX_USER_NAME = 30;
@@ -36,6 +44,7 @@ export function createUserProfile(params: {
   fontScale?: number;
   notifyTrackers?: boolean;
   notifyDueTasks?: boolean;
+  homeTab?: HomeTab;
 }): UserProfile {
   const name = params.name.trim();
   if (name.length === 0) {
@@ -43,6 +52,10 @@ export function createUserProfile(params: {
   }
   if (name.length > MAX_USER_NAME) {
     throw new Error(`El nombre no puede superar los ${MAX_USER_NAME} caracteres`);
+  }
+  const homeTab = params.homeTab ?? DEFAULT_HOME_TAB;
+  if (!HOME_TABS.includes(homeTab)) {
+    throw new Error(`Pestaña de inicio inválida: ${homeTab}`);
   }
   return {
     name,
@@ -52,5 +65,6 @@ export function createUserProfile(params: {
     fontScale: clampFontScale(params.fontScale ?? FONT_SCALE_MIN),
     notifyTrackers: params.notifyTrackers ?? false,
     notifyDueTasks: params.notifyDueTasks ?? false,
+    homeTab,
   };
 }

@@ -1,17 +1,5 @@
-import { IsoDate, fromIsoDate, toIsoDate } from '../../../core/utils/date';
+import { IsoDate, addMonthsClamped, fromIsoDate, toIsoDate } from '../../../core/utils/date';
 import { FinanceTransaction } from './FinanceTransaction';
-
-/**
- * Suma meses a una fecha preservando el día. Si el mes destino es más corto
- * (p. ej. 31 de enero + 1 mes), lo clampa al último día de ese mes.
- */
-export function addMonthsClamped(date: Date, months: number): Date {
-  const totalMonths = date.getFullYear() * 12 + date.getMonth() + months;
-  const targetYear = Math.floor(totalMonths / 12);
-  const targetMonth = ((totalMonths % 12) + 12) % 12;
-  const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
-  return new Date(targetYear, targetMonth, Math.min(date.getDate(), lastDay));
-}
 
 /** Monto vigente del movimiento en la fecha `dateIso` (aplica los ajustes). */
 export function financeAmountOn(tx: FinanceTransaction, dateIso: IsoDate): number {

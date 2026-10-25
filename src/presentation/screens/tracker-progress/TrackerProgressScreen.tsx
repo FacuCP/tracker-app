@@ -31,11 +31,11 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
   const vm = useTrackerProgress(trackerId);
   const tracker = vm.tracker;
 
-  // Swipe horizontal para cambiar de vista (además del control de arriba):
-  // izquierda → alejar (semana → mes → año), derecha → acercar.
+  // Swipe horizontal para moverse de período (además de las flechas):
+  // izquierda → siguiente, derecha → anterior.
   const swipe = useHorizontalSwipe({
-    onSwipeLeft: vm.zoomOutView,
-    onSwipeRight: vm.zoomInView,
+    onSwipeLeft: vm.goToNext,
+    onSwipeRight: vm.goToPrevious,
   });
 
   useLayoutEffect(() => {

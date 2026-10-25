@@ -19,9 +19,6 @@ import {
 
 export type CalendarView = 'week' | 'month' | 'year';
 
-/** De más chico a más grande. Sirve para "acercar / alejar" la vista. */
-const VIEW_ORDER: CalendarView[] = ['week', 'month', 'year'];
-
 export interface CalendarRange {
   startIso: IsoDate;
   endIso: IsoDate;
@@ -74,17 +71,7 @@ export function useCalendarPeriod() {
     setView('month');
   }, []);
 
-  /** Alejar la vista: week → month → year (se queda en year). */
-  const zoomOutView = useCallback(() => {
-    setView((v) => VIEW_ORDER[Math.min(VIEW_ORDER.length - 1, VIEW_ORDER.indexOf(v) + 1)]);
-  }, []);
-
-  /** Acercar la vista: year → month → week (se queda en week). */
-  const zoomInView = useCallback(() => {
-    setView((v) => VIEW_ORDER[Math.max(0, VIEW_ORDER.indexOf(v) - 1)]);
-  }, []);
-
-  return { view, setView, anchor, range, goToPrevious, goToNext, showMonth, zoomInView, zoomOutView };
+  return { view, setView, anchor, range, goToPrevious, goToNext, showMonth };
 }
 
 /** Etiqueta corta del período, para textos como "en el mes". */

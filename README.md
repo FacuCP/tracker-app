@@ -1,10 +1,12 @@
 # app-celu
 
 App personal hecha con **Expo + React Native + TypeScript**, organizada con
-**Clean Architecture**. Tiene cinco áreas, elegibles desde el menú del header:
+**Clean Architecture**. Tiene seis áreas, elegibles desde el menú del header:
 
 - **Favoritos** — pantalla principal. Junta los trackers y listas marcados con la
-  estrella; tiene un botón "＋ Crear" (tracker, lista o rutina).
+  estrella; tiene un botón "＋ Crear" (tracker, lista o rutina). Deslizando
+  hacia la izquierda se llega a **Rutina diaria** (tareas que se resetean
+  solas todos los días).
 - **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
@@ -13,6 +15,8 @@ App personal hecha con **Expo + React Native + TypeScript**, organizada con
   categorías) y su desglose por semana/mes/año.
 - **Gimnasio** — rutinas con ejercicios (series, repeticiones, peso, puesto) y un
   cuadro guiado para ir haciendo la rutina de hoy, con reseteo semanal.
+- **Eventos** — calendario con eventos (nombre, fecha, horario, color), con
+  repetición opcional cada N días.
 
 Todo se guarda local en el teléfono y se puede exportar/importar como un único
 archivo de backup.
@@ -117,6 +121,11 @@ src/
 │   │   └── usecases/            # CRUD de tarea, Get/SetDailyRoutineProgress,
 │   │                            # GetDailyRoutineSession (tareas + progreso + conteo),
 │   │                            # SyncRoutineTracker (↓ única dependencia cruzada con `tracker/`)
+│   ├── event/
+│   │   ├── entities/            # CalendarEvent (nombre, fecha, horario, color, EventRepeat),
+│   │   │                        # occurrences.ts (eventOccurrencesInRange, como Finanzas)
+│   │   ├── repositories/        # EventRepository (puerto)
+│   │   └── usecases/            # CRUD de evento, GetEventOccurrencesInRange (por rango)
 │   └── backup/                  # BackupBundle + BackupRepository + ExportBackup/ImportBackup
 │
 ├── data/                        # Implementa los puertos del dominio
@@ -128,13 +137,14 @@ src/
 │   ├── favorites/               # FavoritesOrderRepositoryImpl (array JSON de claves)
 │   ├── gym/                     # dto + AsyncStorage datasources + repo impls
 │   ├── dailyRoutine/            # dto + AsyncStorage datasources + repo impls
+│   ├── event/                   # dto + AsyncStorage datasource + repo impl
 │   └── backup/                  # BackupRepositoryImpl (multiGet/multiSet sobre AsyncStorage)
 │
 ├── core/
 │   ├── di/container.ts          # Composition root: arma todas las dependencias
 │   ├── navigation/              # Stack tipado (Onboarding, Favorites, Trackers, Lists,
 │   │                            # ListDetail, Finances, Gym, GymRoutineDetail, DailyRoutines,
-│   │                            # Settings, MoodProgress, CreateTracker, EditTracker,
+│   │                            # Events, Settings, MoodProgress, CreateTracker, EditTracker,
 │   │                            # TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
 │   ├── notifications/           # notifications.ts (agenda/cancela las locales según perfil + datos)
@@ -151,9 +161,10 @@ src/
     │                            # DiagonalSplitSquare (celda de 1-2 colores en diagonal),
     │                            # ReorderRow (modo "Ordenar"), LinkedText (links tocables),
     │                            # InfoButton + InfoModal (botón "i" + modal de descripción),
-    │                            # PinButton (ícono Lucide)
+    │                            # PinButton (ícono Lucide), SelectField (combo box genérico)
     ├── backup/                  # useBackup (exportar/importar el .json)
-    ├── user/components/         # UserNameCard, NotificationsCard (Ajustes); FontSizeCard sin montar
+    ├── user/components/         # UserNameCard, HomeTabCard, NotificationsCard (Ajustes);
+    │                            # FontSizeCard sin montar
     ├── screens/
     │   ├── onboarding/          # OnboardingScreen (elegir el nombre, la 1ª vez)
     │   ├── favorites/           # FavoritesScreen (principal) + useFavorites +
@@ -165,6 +176,7 @@ src/
     │   ├── gym/                 # GymScreen + useGymScreen (todas las rutinas)
     │   ├── gym-routine-detail/  # GymRoutineDetailScreen (una rutina con sus ejercicios)
     │   ├── daily-routines/      # DailyRoutinesScreen (tareas diarias + "Seguimiento de Rutina")
+    │   ├── events/               # EventsScreen (calendario de eventos)
     │   ├── settings/            # SettingsScreen (nombre + backup)
     │   ├── mood-progress/       # MoodProgressScreen
     │   ├── tracker-form/        # CreateTrackerScreen, EditTrackerScreen
@@ -197,10 +209,13 @@ src/
     │   │                        # CreateGymRoutineModal, GymRoutineCard,
     │   │                        # GymExerciseModal (con botones de peso), GymExerciseRow
     │   └── viewmodels/          # useGymTodayCard, useGymScreen, useGymRoutineDetail
-    └── dailyRoutine/
-        ├── components/          # DailyRoutineTaskRow, DailyRoutineTaskModal,
-        │                        # RoutineTrackerCalendar ("Seguimiento de Rutina")
-        └── viewmodels/          # useDailyRoutines
+    ├── dailyRoutine/
+    │   ├── components/          # DailyRoutineTaskRow, DailyRoutineTaskModal,
+    │   │                        # RoutineTrackerCalendar ("Seguimiento de Rutina")
+    │   └── viewmodels/          # useDailyRoutines
+    └── event/
+        ├── components/          # EventDayCell, EventModal, DayEventsModal, TimeField
+        └── viewmodels/          # useEvents
 ```
 
 ### Regla de dependencias
@@ -221,12 +236,18 @@ través de interfaces. `core/di` es el único lugar que instancia clases concret
 
 La primera vez que se abre la app, `AppNavigator` mira si hay un **perfil**
 guardado (`UserProfile` = `{ name, moodFavorite, financeFavorite, gymFavorite, fontScale,
-notifyTrackers, notifyDueTasks }`). Si no, arranca en
+notifyTrackers, notifyDueTasks, homeTab }`). Si no, arranca en
 **`OnboardingScreen`**: pide el **nombre**, avisa que se cambia en Ajustes, lo
 guarda y resetea la navegación a Favoritos.
 
-Si ya hay perfil, la app arranca siempre en **Favoritos**. En **Ajustes** se
-cambia el **nombre** (`UserNameCard`); el saludo se actualiza al volver.
+Si ya hay perfil, la app arranca en la **pestaña de inicio** elegida en
+Ajustes (`HomeTabCard`) — **Favoritos** por defecto, o cualquiera de
+Trackers / Listas / Finanzas / Gimnasio / Eventos. `AppNavigator` mapea
+`HomeTab` (del dominio) al nombre de ruta de navegación y lo usa como
+`initialRouteName`; como ese valor se fija una sola vez al montar el stack,
+cambiar la preferencia solo se nota en el próximo arranque, no al toque. En
+**Ajustes** también se cambia el **nombre** (`UserNameCard`); el saludo se
+actualiza al volver.
 
 > El **tamaño de letra** global quedó a medio hacer: `FontSizeCard`,
 > `core/text/textScale.ts` y el campo `fontScale` del perfil están en el repo
@@ -235,7 +256,7 @@ cambia el **nombre** (`UserNameCard`); el saludo se actualiza al volver.
 
 ## Navegación
 
-El título del header de las cinco pantallas principales muestra el **nombre de
+El título del header de las seis pantallas principales muestra el **nombre de
 la pestaña actual** con una flechita ▾
 ([`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)); al tocarlo se
 despliega un menú para moverse entre:
@@ -246,22 +267,23 @@ despliega un menú para moverse entre:
 - **Listas** — las listas del usuario (ver más abajo).
 - **Finanzas** — economía actual + ingresos/gastos (ver más abajo).
 - **Gimnasio** — rutinas del usuario (ver más abajo).
+- **Eventos** — calendario de eventos (ver más abajo).
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
-es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las cinco
+es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las seis
 tienen el botón **"Ajustes"** arriba a la derecha
 (`SettingsHeaderButton`, en `hubOptions`). El resto de pantallas (progreso,
 formularios, ajustes) sí son push con su flecha.
 
 Desde **Favoritos**, deslizar hacia la izquierda navega a **"Rutina diaria"**
 (`DailyRoutines`, ver más abajo) y deslizar hacia la derecha desde ahí vuelve.
-El gesto usa el mismo hook que ya cambiaba de vista en el progreso de un
-tracker ([`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts)),
-que solo reclama el gesto cuando el movimiento es claramente horizontal, así
-no rompe el scroll vertical ni los taps de las cards. Favoritos también tiene
-un link chico "Rutina Diaria ›" al lado del saludo, como pista de que el
-gesto existe.
+El gesto usa [`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts)
+(el mismo hook que mueve de período en los calendarios, ver más abajo), que
+solo reclama el gesto cuando el movimiento es claramente horizontal, así no
+rompe el scroll vertical ni los taps de las cards. Favoritos también tiene un
+link chico "Rutina Diaria ›" al lado del saludo, como pista de que el gesto
+existe.
 
 ### Colores
 
@@ -300,7 +322,8 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
     Una vez guardado → modo lectura; se edita desde "Ver progreso". Tiene una
     **estrella** arriba a la derecha (favorito; arranca marcada).
 - **Progreso de ánimo**: calendario propio (empieza en lunes) con **Semana /
-  Mes / Año**, navegación entre períodos y edición/borrado de cualquier día. En
+  Mes / Año**, navegación entre períodos (flechas `‹ ›` o **swipe** horizontal)
+  y edición/borrado de cualquier día. En
   **Año**, tocar un mes lo abre. Cada día con nota la muestra sobre los colores;
   arriba se ve el **promedio** de las notas del período. Debajo, las
   **Referencias**: una card por color (emoción + contador), **ordenadas por
@@ -349,8 +372,9 @@ Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
   nombre, dos checkboxes (**Opciones** / **Número**) y —si tiene opciones— la
   lista editable. Editar además permite **borrar** el tracker (y sus registros).
 - **Progreso del tracker** ([`tracker-progress/`](src/presentation/screens/tracker-progress/)):
-  el mismo calendario Semana/Mes/Año, con **swipe** para cambiar de vista. Los
-  días con dos opciones se pintan **divididos en diagonal** (también en la vista
+  el mismo calendario Semana/Mes/Año, navegación entre períodos con flechas
+  `‹ ›` o **swipe** horizontal. Los días con dos opciones se pintan
+  **divididos en diagonal** (también en la vista
   Año); el número va sobre la celda; si el día tiene comentario, aparece un
   **punto chico arriba a la derecha** (`TrackerDayCell`, prop `hasNote`).
   Abajo, el **resumen**: una card por opción con su conteo y/o **registros /
@@ -595,6 +619,94 @@ done }`, `resolveTaskDone`).
   Trackers) abre esta misma pantalla de Rutina diaria en vez del progreso
   genérico de un tracker.
 
+## Eventos
+
+Un **evento** (`CalendarEvent`) tiene nombre, **descripción opcional**, fecha,
+**horario desde / hasta** (`HH:MM`, cada uno opcional por separado), color y
+una **repetición opcional** (`EventRepeat`): cada cuántos **días o meses**
+(a elección), y cómo termina — **nunca**, **hasta una fecha**, o **después
+de cierta cantidad de veces**. Igual que los movimientos de Finanzas (ver
+más arriba), un evento repetido se guarda **una sola vez**; las fechas en
+las que cae se calculan al vuelo para el rango que se está mirando
+([`eventOccurrencesInRange`](src/domain/event/entities/occurrences.ts),
+sumando días o meses según la unidad — `addMonthsClamped` es la misma
+función que usa Finanzas, movida a `core/utils/date.ts` por ser de las
+dos), no se materializa una fila por ocurrencia.
+
+- **Calendario** ([`events/`](src/presentation/screens/events/)): semana /
+  mes / año con navegación, igual que el progreso de un tracker. Las celdas
+  son **más altas que anchas** (para que entren franjas de color apiladas,
+  una por evento de ese día — `EventDayCell`); si hay más de 3 eventos un
+  mismo día, se muestra `+N`. Arriba de todo, **"＋ Agregar evento"**.
+- **Semana y mes entran en pantalla sin scroll**: a diferencia de los otros
+  calendarios (que viven en un `ScrollView`), estas dos vistas calculan el
+  tamaño de celda con `CalendarMonth`/`CalendarWeek` en modo `fitHeight` —
+  la celda crece hasta el máximo que entra tanto a lo ancho (pantalla ÷ 7)
+  como a lo alto disponible, sin desbordar. La vista Año (12 mini-calendarios)
+  queda afuera de esto y sigue con su propio scroll si no entra.
+- **El alto de celda estira para ocupar siempre toda la pantalla, y varía
+  de mes a mes**: en la vista de mes, `cellHeight` es directamente el alto
+  disponible ÷ la cantidad de filas real de ese mes (4 a 6) — no un
+  mínimo ni un máximo fijo, así que un mes de 4 filas queda con celdas más
+  altas que uno de 6, pero ambos llenan la pantalla completa. (`CalendarWeek`
+  no estira así: una sola fila ya tiene de sobra alto disponible.) El
+  espacio entre celdas también se achicó (`gap`, prop opcional de
+  `CalendarMonth`/`CalendarWeek`) y el "chrome" de arriba (botón de
+  agregar, selector `[Semana | Mes | Año]` en modo `compact`, flechas y
+  título del período) se hizo más chico — todo eso le deja más alto
+  disponible a la celda.
+- **La fila `L M M J V S D` siempre a la misma altura y a todo el ancho**:
+  el contenedor de `fitHeight` no centra su contenido (ni vertical ni
+  horizontalmente) — la fila de letras queda siempre pegada debajo del
+  título del mes, y tanto ella como la grilla de días usan
+  `justifyContent: 'space-between'` para repartir cualquier resto de
+  redondeo **entre** columnas en vez de dejarlo afuera como margen.
+- **Celdas pegadas, sin espacio entre ellas**: el ancho de celda se calcula
+  **separado** del alto — siempre sale de repartir el ancho de pantalla en
+  7 columnas (nunca se achica por falta de alto, al revés de como era
+  antes), y el alto es el que se ajusta para entrar en la pantalla. Con
+  `gap={0}` en `CalendarMonth`/`CalendarWeek`, no queda espacio entre
+  celdas ni entre filas.
+- **Vista de mes con semanas completas**: cuando el 1° o el último día del
+  mes no cae en lunes/domingo, se completan los huecos con los días del mes
+  vecino (`CalendarMonth` con `showOverflowDays`) en vez de dejarlos en
+  blanco. Esos días "de relleno" se pintan en un gris más clarito
+  (`theme.colors.background`) para diferenciarlos del mes actual, pero
+  muestran sus eventos igual que cualquier otro día — el rango que se
+  carga para la vista de mes también se extiende a esas semanas completas.
+- **Nuevo/editar evento** ([`EventModal`](src/presentation/event/components/EventModal.tsx)):
+  nombre, descripción (opcional, multilínea), fecha
+  ([`DateField`](src/presentation/list/components/DateField.tsx), reutilizado
+  de Listas), horario **desde** y **hasta**
+  ([`TimeField`](src/presentation/event/components/TimeField.tsx), dos
+  instancias — cada una opcional, con una cruz para borrar el horario una
+  vez puesto), color (paleta de
+  [`OptionColorPicker`](src/presentation/tracker/components/OptionColorPicker.tsx),
+  reutilizado de los trackers, **sin el marrón** — prop `colors` opcional,
+  Trackers y Finanzas siguen con la paleta completa) y un checkbox **"Se
+  repite"** que despliega la cantidad y la unidad (**días** o **meses**,
+  cada una con su propio default — 7 y 1 — y su propio tope máximo) y el
+  tipo de fin: un **combo box**
+  ([`SelectField`](src/presentation/components/SelectField.tsx), genérico y
+  compartible) con el campo de cantidad o fecha a la **derecha**, en la
+  misma fila (Nunca → nada / Hasta una fecha → `DateField` / Cantidad de
+  veces → número).
+- **Tocar un día** abre sus eventos en un modal
+  ([`DayEventsModal`](src/presentation/event/components/DayEventsModal.tsx),
+  con **"＋ Agregar evento"** pre-cargando esa fecha). Cada fila tiene dos
+  zonas: un **lápiz** a la izquierda que abre directo a editar, y el resto
+  de la fila (punto de color, horario, nombre y, si tiene, una línea con la
+  descripción) que abre un **modal de detalle de solo lectura**
+  ([`EventDetailModal`](src/presentation/event/components/EventDetailModal.tsx),
+  reutiliza el `InfoModal` genérico de descripciones) sin cerrar la lista
+  de abajo.
+- **Borrar un evento que se repite** pregunta qué borrar: **solo ese día**
+  (se agrega a `excludedDates` y la serie sigue) o **ese día y los que
+  siguen** (trunca la repetición el día anterior; si era la primera
+  ocurrencia, se borra el evento entero). Si el evento no se repite, se
+  borra directo sin preguntar. Caso de uso:
+  [`DeleteEventOccurrence`](src/domain/event/usecases/DeleteEventOccurrence.ts).
+
 ## Notificaciones
 
 Notificaciones **locales programadas** (`expo-notifications`): se le dice al SO
@@ -641,6 +753,7 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/gym-selection/v1` | `{ routineId }` (rutina elegida para hoy) |
 | `@app-celu/daily-routine-tasks/v1` | `{ [taskId]: DailyRoutineTaskDto }` |
 | `@app-celu/daily-task-progress/v1` | `{ [taskId]: DailyTaskProgressDto }` (hecha hoy, por tarea) |
+| `@app-celu/events/v1` | `{ [eventId]: EventDto }` (nombre, fecha, horario, color, repetición) |
 
 Las claves están todas en `core/storage/keys.ts` para que el **backup** sepa qué
 exportar/importar (todo en un solo archivo). Para cambiar a SQLite o a una API basta con escribir otra

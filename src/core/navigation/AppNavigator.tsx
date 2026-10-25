@@ -5,9 +5,11 @@ import { ActivityIndicator, AppState, View } from 'react-native';
 
 import { container } from '../di/container';
 import { syncNotifications } from '../notifications/notifications';
+import { HomeTab } from '../../domain/user/entities/UserProfile';
 import { HubMenuButton } from '../../presentation/navigation/HubMenuButton';
 import { SettingsHeaderButton } from '../../presentation/navigation/SettingsHeaderButton';
 import { DailyRoutinesScreen } from '../../presentation/screens/daily-routines/DailyRoutinesScreen';
+import { EventsScreen } from '../../presentation/screens/events/EventsScreen';
 import { FavoritesScreen } from '../../presentation/screens/favorites/FavoritesScreen';
 import { FinancesScreen } from '../../presentation/screens/finances/FinancesScreen';
 import { GymRoutineDetailScreen } from '../../presentation/screens/gym-routine-detail/GymRoutineDetailScreen';
@@ -43,7 +45,7 @@ const navTheme: Theme = {
  * menú al tocarlo), sin flecha de volver, y el cambio entre pestañas es un
  * fundido suave en vez del deslizamiento del stack.
  */
-const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym') => ({
+const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym' | 'Events') => ({
   headerTitle: () => <HubMenuButton current={current} />,
   headerRight: () => <SettingsHeaderButton />,
   headerTitleAlign: 'left' as const,
@@ -53,13 +55,26 @@ const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | '
 
 type Boot = 'loading' | 'onboarding' | 'ready';
 
+const HOME_TAB_ROUTE: Record<HomeTab, 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym' | 'Events'> = {
+  favorites: 'Favorites',
+  trackers: 'Trackers',
+  lists: 'Lists',
+  finances: 'Finances',
+  gym: 'Gym',
+  events: 'Events',
+};
+
 export function AppNavigator() {
   const [boot, setBoot] = useState<Boot>('loading');
+  const [homeRoute, setHomeRoute] = useState<(typeof HOME_TAB_ROUTE)[HomeTab]>('Favorites');
 
   useEffect(() => {
     container.getUserProfile
       .execute()
-      .then((profile) => setBoot(profile ? 'ready' : 'onboarding'))
+      .then((profile) => {
+        if (profile) setHomeRoute(HOME_TAB_ROUTE[profile.homeTab]);
+        setBoot(profile ? 'ready' : 'onboarding');
+      })
       .catch(() => setBoot('onboarding'));
   }, []);
 
@@ -85,7 +100,7 @@ export function AppNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
-        initialRouteName={boot === 'onboarding' ? 'Onboarding' : 'Favorites'}
+        initialRouteName={boot === 'onboarding' ? 'Onboarding' : homeRoute}
         screenOptions={{
           headerStyle: { backgroundColor: theme.colors.header },
           headerShadowVisible: false,
@@ -117,6 +132,7 @@ export function AppNavigator() {
           component={DailyRoutinesScreen}
           options={{ title: 'Rutina diaria' }}
         />
+        <Stack.Screen name="Events" component={EventsScreen} options={hubOptions('Events')} />
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}

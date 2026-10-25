@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
   gymSelection: '@app-celu/gym-selection/v1',
   dailyRoutineTasks: '@app-celu/daily-routine-tasks/v1',
   dailyTaskProgress: '@app-celu/daily-task-progress/v1',
+  events: '@app-celu/events/v1',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

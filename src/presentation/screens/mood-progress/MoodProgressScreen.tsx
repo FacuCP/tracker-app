@@ -6,6 +6,7 @@ import { CalendarMonth } from '../../calendar/CalendarMonth';
 import { CalendarViewSwitch } from '../../calendar/CalendarViewSwitch';
 import { CalendarWeek } from '../../calendar/CalendarWeek';
 import { CalendarYear } from '../../calendar/CalendarYear';
+import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
 import { periodNoun } from '../../calendar/useCalendarPeriod';
 import { DayCell } from '../../mood/components/DayCell';
 import { MoodDayModal } from '../../mood/components/MoodDayModal';
@@ -14,6 +15,13 @@ import { useMoodProgress } from '../../mood/viewmodels/useMoodProgress';
 
 export function MoodProgressScreen() {
   const vm = useMoodProgress();
+
+  // Swipe horizontal para moverse de período (además de las flechas):
+  // izquierda → siguiente, derecha → anterior.
+  const swipe = useHorizontalSwipe({
+    onSwipeLeft: vm.goToNext,
+    onSwipeRight: vm.goToPrevious,
+  });
 
   const renderDay = ({ date, dayOfMonth, isToday, size }: {
     date: string;
@@ -65,23 +73,27 @@ export function MoodProgressScreen() {
 
         {vm.loading ? (
           <ActivityIndicator style={styles.loader} size="large" />
-        ) : vm.view === 'week' ? (
-          <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
-        ) : vm.view === 'month' ? (
-          <CalendarMonth
-            year={vm.anchor.getFullYear()}
-            month={vm.anchor.getMonth()}
-            renderDay={renderDay}
-          />
         ) : (
-          <CalendarYear
-            year={vm.anchor.getFullYear()}
-            dayColors={(date) => {
-              const entry = vm.entriesByDate[date];
-              return entry ? entry.colors.map((c) => getMoodColorInfo(c).hex) : undefined;
-            }}
-            onSelectMonth={vm.showMonth}
-          />
+          <View {...swipe}>
+            {vm.view === 'week' ? (
+              <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
+            ) : vm.view === 'month' ? (
+              <CalendarMonth
+                year={vm.anchor.getFullYear()}
+                month={vm.anchor.getMonth()}
+                renderDay={renderDay}
+              />
+            ) : (
+              <CalendarYear
+                year={vm.anchor.getFullYear()}
+                dayColors={(date) => {
+                  const entry = vm.entriesByDate[date];
+                  return entry ? entry.colors.map((c) => getMoodColorInfo(c).hex) : undefined;
+                }}
+                onSelectMonth={vm.showMonth}
+              />
+            )}
+          </View>
         )}
 
         <Text style={styles.sectionTitle}>Referencias</Text>

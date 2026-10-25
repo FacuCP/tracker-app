@@ -1,4 +1,4 @@
-import { UserProfile, createUserProfile } from '../../../domain/user/entities/UserProfile';
+import { HomeTab, UserProfile, createUserProfile } from '../../../domain/user/entities/UserProfile';
 
 export interface UserProfileDto {
   name: string;
@@ -8,6 +8,7 @@ export interface UserProfileDto {
   fontScale?: number;
   notifyTrackers?: boolean;
   notifyDueTasks?: boolean;
+  homeTab?: HomeTab;
 }
 
 export function userProfileToDto(profile: UserProfile): UserProfileDto {
@@ -19,6 +20,7 @@ export function userProfileToDto(profile: UserProfile): UserProfileDto {
     fontScale: profile.fontScale,
     notifyTrackers: profile.notifyTrackers,
     notifyDueTasks: profile.notifyDueTasks,
+    homeTab: profile.homeTab,
   };
 }
 
@@ -31,5 +33,6 @@ export function userProfileFromDto(dto: UserProfileDto): UserProfile {
     fontScale: dto.fontScale ?? 1,
     notifyTrackers: dto.notifyTrackers ?? false,
     notifyDueTasks: dto.notifyDueTasks ?? false,
+    homeTab: dto.homeTab,
   });
 }
