@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import { theme } from '../../../core/theme';
 import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { ReorderRow } from '../../components/ReorderRow';
+import { SelectionBar } from '../../components/SelectionBar';
 import { DailyRoutineTaskModal } from '../../dailyRoutine/components/DailyRoutineTaskModal';
 import { DailyRoutineTaskRow } from '../../dailyRoutine/components/DailyRoutineTaskRow';
 import { RoutineTrackerCalendar } from '../../dailyRoutine/components/RoutineTrackerCalendar';
@@ -35,6 +36,18 @@ export function DailyRoutinesScreen({ navigation }: Props) {
     requireToFail: periodSwipe,
   });
 
+  function confirmDeleteSelected() {
+    const n = vm.selectedIds.size;
+    Alert.alert(
+      n === 1 ? 'Borrar tarea' : 'Borrar tareas',
+      n === 1 ? 'Se borrará la tarea seleccionada.' : `Se borrarán las ${n} tareas seleccionadas.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Borrar', style: 'destructive', onPress: vm.deleteSelected },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <GestureDetector gesture={swipe}>
@@ -44,21 +57,25 @@ export function DailyRoutinesScreen({ navigation }: Props) {
           <ActivityIndicator style={styles.loader} size="large" />
         ) : (
           <>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summary}>
-                {vm.total > 0 ? `${vm.doneCount}/${vm.total} tareas hechas hoy` : ''}
-              </Text>
-              <View style={styles.headerActions}>
-                {/* Única forma de volver a agregar "Rutina diaria" a Favoritos si
-                    se sacó de ahí — ver `useDailyRoutines.toggleFavorite`. */}
-                <FavoriteStar favorite={vm.favorite} onToggle={vm.toggleFavorite} />
-                {vm.total > 1 ? (
-                  <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
-                    <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
-                  </TouchableOpacity>
-                ) : null}
+            {vm.selectionMode ? (
+              <SelectionBar count={vm.selectedIds.size} onCancel={vm.clearSelection} onDelete={confirmDeleteSelected} />
+            ) : (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summary}>
+                  {vm.total > 0 ? `${vm.doneCount}/${vm.total} tareas hechas hoy` : ''}
+                </Text>
+                <View style={styles.headerActions}>
+                  {/* Única forma de volver a agregar "Rutina diaria" a Favoritos si
+                      se sacó de ahí — ver `useDailyRoutines.toggleFavorite`. */}
+                  <FavoriteStar favorite={vm.favorite} onToggle={vm.toggleFavorite} />
+                  {vm.total > 1 ? (
+                    <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
+                      <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
-            </View>
+            )}
 
             {vm.total === 0 ? (
               <View style={styles.empty}>
@@ -66,7 +83,7 @@ export function DailyRoutinesScreen({ navigation }: Props) {
               </View>
             ) : (
               <>
-                {vm.reorderMode ? (
+                {vm.reorderMode && !vm.selectionMode ? (
                   <View style={styles.reorderList}>
                     {vm.tasks.map((item, index) => (
                       <ReorderRow
@@ -89,6 +106,10 @@ export function DailyRoutinesScreen({ navigation }: Props) {
                         first={index === 0}
                         onPress={() => vm.openEditTask(item)}
                         onToggleDone={() => vm.toggleTask(item)}
+                        onLongPress={() => vm.startSelection(item.task.id)}
+                        selectionMode={vm.selectionMode}
+                        selected={vm.selectedIds.has(item.task.id)}
+                        onToggleSelected={() => vm.toggleSelected(item.task.id)}
                       />
                     ))}
                   </View>
@@ -96,9 +117,11 @@ export function DailyRoutinesScreen({ navigation }: Props) {
               </>
             )}
 
-            <TouchableOpacity style={styles.addButton} onPress={vm.openNewTask} activeOpacity={0.8}>
-              <Text style={styles.addButtonText}>＋ Agregar tarea</Text>
-            </TouchableOpacity>
+            {!vm.selectionMode ? (
+              <TouchableOpacity style={styles.addButton} onPress={vm.openNewTask} activeOpacity={0.8}>
+                <Text style={styles.addButtonText}>＋ Agregar tarea</Text>
+              </TouchableOpacity>
+            ) : null}
 
             {vm.tracker ? (
               <RoutineTrackerCalendar

@@ -20,12 +20,17 @@ interface Props {
 
 function renderTaskRow(item: DailyRoutineTaskStatus, onToggleTask: (item: DailyRoutineTaskStatus) => void) {
   return (
-    <View key={item.task.id} style={styles.taskRow}>
+    <TouchableOpacity
+      key={item.task.id}
+      style={styles.taskRow}
+      onPress={() => onToggleTask(item)}
+      activeOpacity={0.6}
+    >
       <Checkbox checked={item.done} onToggle={() => onToggleTask(item)} />
       <Text style={[styles.taskTitle, item.done && styles.taskTitleDone]} numberOfLines={1}>
         {item.task.title}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 

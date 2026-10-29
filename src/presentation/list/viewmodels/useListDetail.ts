@@ -21,6 +21,10 @@ export function useListDetail(listId: string) {
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<ListEntry | null>(null);
+  // Selección múltiple (mantener presionado un ítem) para borrar varios de
+  // una — ver `selectedIds`. Nombre distinto de `selected` (el ítem abierto
+  // para editar) para no confundirlos.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const sort: ListSort = sortOverride ?? (list?.isTodo ? 'rating' : 'date');
 
@@ -83,6 +87,35 @@ export function useListDetail(listId: string) {
     await container.deleteList.execute(listId);
   }, [listId]);
 
+  const startSelection = useCallback((entryId: string) => {
+    setSelectedIds(new Set([entryId]));
+  }, []);
+
+  const toggleSelected = useCallback((entryId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryId)) next.delete(entryId);
+      else next.add(entryId);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const deleteSelected = useCallback(async () => {
+    // Uno por vez, no `Promise.all`: `deleteEntry` hace lectura-modificación-
+    // escritura sobre el mismo blob de AsyncStorage — en paralelo, dos
+    // borrados pisan el storage entre sí (el segundo persiste a partir de un
+    // estado leído antes de que el primero escribiera, así que "revive" la
+    // entrada que el primero acababa de borrar) y termina borrándose solo
+    // una de las dos.
+    for (const id of selectedIds) {
+      await container.deleteListEntry.execute(listId, id);
+    }
+    setSelectedIds(new Set());
+    await reload();
+  }, [selectedIds, listId, reload]);
+
   return {
     list,
     entries,
@@ -99,5 +132,11 @@ export function useListDetail(listId: string) {
     toggleDone,
     deleteEntry,
     deleteList,
+    selectedIds,
+    selectionMode: selectedIds.size > 0,
+    startSelection,
+    toggleSelected,
+    clearSelection,
+    deleteSelected,
   };
 }

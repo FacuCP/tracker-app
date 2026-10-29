@@ -3671,6 +3671,214 @@ fila).
 
 ---
 
+## 87. Tocar un ítem en to-do lists y Rutina diaria tilda/destilda; editar pasa a un lápiz aparte *(elección del usuario)*
+
+**Contexto.** En to-do lists y en Rutina diaria, tocar la fila abría el
+modal de edición (nombre/fecha/comentario/rating, o título/descripción)
+y solo el checkbox, un blanco chico, tildaba/destildaba. Se pidió que
+tocar la fila tilde/destilde directamente — es la acción que más se
+usa en una to-do list — dándole toda la fila como blanco en vez de
+depender del checkbox. Antes de tocar el código se le preguntó al
+usuario cómo seguir editando una entrada una vez que tocar la fila ya
+no abre el modal; eligió un ícono de lápiz en la fila.
+
+**Decisión.**
+
+- **Nuevo [`EditButton`](src/presentation/components/EditButton.tsx)**
+  (ícono `Pencil` de `lucide-react-native`, mismo que ya usaba
+  `DayEventsModal` para editar un evento) — reutilizable, mismo patrón
+  que `InfoButton`/`PinButton`.
+- **`ListEntryRow`** ([list](src/presentation/list/components/ListEntryRow.tsx)):
+  para `isTodo`, la fila deja de ser un solo `TouchableOpacity` — pasa a
+  ser un `View` con dos blancos **hermanos** (no anidados, mismo patrón
+  que ya usa `DayEventsModal` para su lápiz, evita necesitar
+  `stopPropagation`): el área principal (checkbox + nombre + rating),
+  que tilda/destilda al tocar cualquier parte, y el `EditButton` aparte,
+  que abre el modal de edición (antes disparado por `onPress` de toda la
+  fila). El checkbox sigue ahí y sigue tildando igual — queda redundante
+  con tocar el resto de la fila, pero no estorba. **Las listas normales
+  (no to-do) quedan sin cambios**: tocar la fila sigue abriendo la
+  edición, como siempre — no tienen concepto de "hecho" que tildar, así
+  que no aplica el pedido.
+- **`DailyRoutineTaskRow`** ([dailyRoutine](src/presentation/dailyRoutine/components/DailyRoutineTaskRow.tsx)):
+  mismo cambio — siempre es una lista de tareas (no hay variante "no
+  to-do" acá), así que el patrón de arriba se aplica sin condicional.
+- **La card de Rutina diaria en Favoritos** (`DailyRoutineSummaryCard`)
+  queda sin tocar: ahí la fila de cada tarea nunca abrió edición (es un
+  resumen de solo lectura salvo el checkbox), así que no había nada que
+  cambiar. (Nota: la vista desplegada de una lista en Favoritos —
+  `ListCard` — sí tenía el mismo problema que `ListEntryRow`, solo que
+  abriendo el modal de **info** en vez del de edición; se corrigió en
+  #88. Nota 2: el pedido llegaba igual acá, aunque no hubiera modal con
+  el que chocar — tocar la fila simplemente no hacía nada, igual de
+  incómodo que depender del checkbox chico; se corrigió en #89.)
+
+**Alternativas descartadas.** Las otras dos opciones ofrecidas al
+usuario (mantener presionado para editar; sacar la edición de estas
+pantallas del todo) — ver la pregunta hecha antes de implementar.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 88. Mismo tocar-para-tildar en la vista desplegada de una lista en Favoritos *(elección del usuario)*
+
+**Contexto.** #87 cambió `ListEntryRow` (el detalle de una lista) para
+que tocar una fila tilde/destilde en vez de abrir un modal. Se pidió
+lo mismo para la **vista desplegada** de una to-do list dentro de
+Favoritos (`ListCard`, el acordeón que se abre con el triángulo o que
+queda siempre abierto con `alwaysExpanded`) — ahí tocar una fila
+abría `ListEntryInfoModal` (de solo lectura: fecha/comentario/rating),
+no el modal de edición, pero el problema de fondo era el mismo: el
+checkbox era el único blanco que tildaba.
+
+**Decisión.** `ListCard.renderEntryRow`, para `list.isTodo`, sigue el
+mismo patrón que #87 dejó en `ListEntryRow`: dos blancos hermanos (no
+anidados) — el área principal (checkbox + nombre) tilda/destilda al
+tocar cualquier parte, y un `InfoButton` ("i") aparte abre
+`ListEntryInfoModal`, mostrado solo si la entrada tiene algo que
+mostrar (`hasInfo`: comentario, fecha o rating), igual que ya hace
+`ListEntryRow`. Se usó `InfoButton` en vez de `EditButton` (el lápiz
+de #87) porque acá la fila nunca abrió edición — abría una vista de
+**solo lectura**; `EditButton` hubiera prometido algo que esta card no
+hace (no se puede editar una entrada desde Favoritos, hay que entrar a
+la lista). Las listas normales (no to-do) quedan sin cambios: tocar la
+fila sigue abriendo `ListEntryInfoModal` directo, sin botón aparte —
+no tienen "hecho" que tildar, así que no hay conflicto de blancos que
+resolver.
+
+**Alternativas descartadas.**
+
+- **Usar `EditButton` acá también**, por consistencia visual con
+  #87. Se descartó: hubiera sido un lápiz que no abre edición, lo que
+  es confuso — `InfoButton` describe mejor lo que de verdad hace
+  (`ListEntryInfoModal` es de solo lectura).
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 89. Mismo tocar-para-tildar en la preview de Rutina diaria en Favoritos *(elección del usuario)*
+
+**Contexto.** Última pieza suelta de #87/#88: la propia card de "Rutina
+diaria" en Favoritos (`DailyRoutineSummaryCard`) también mostraba cada
+tarea en una fila donde tocarla no hacía nada — solo el checkbox
+tildaba. A diferencia de `ListCard`, acá no hay modal (ni de edición ni
+de info) con el que pisarse: cada fila es solo checkbox + título, sin
+fecha/comentario/rating que mostrar.
+
+**Decisión.** `renderTaskRow` pasa de `View` a `TouchableOpacity`, con
+`onPress` llamando a `onToggleTask` — tocar cualquier parte de la fila
+tilda/destilda, igual que el checkbox (que se deja, redundante pero
+inofensivo, mismo criterio que #87/#88).
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 90. Selección múltiple con mantener presionado, para borrar varios ítems de una — listas (to-do y normales) y Rutina diaria *(elección del usuario)*
+
+**Contexto.** Se pidió poder mantener presionado un ítem (en el detalle
+de una lista, to-do o normal, y en "Rutina diaria") para seleccionarlo,
+seguir seleccionando más tocando otros, y borrarlos todos juntos con un
+ícono de tacho. No existía ningún patrón de `onLongPress` en la app
+todavía.
+
+**Decisión.**
+
+- **Nuevo [`SelectionBar`](src/presentation/components/SelectionBar.tsx)**:
+  reemplaza el encabezado normal de la lista de ítems mientras hay una
+  selección activa — "N seleccionadas" en el medio, una "✕" a la
+  izquierda para cancelar sin borrar, y un tacho (`Trash` de
+  `lucide-react-native`) a la derecha para borrar (quien la usa
+  confirma antes con `Alert.alert`, mismo patrón que ya usaba
+  `confirmDeleteList`).
+- **`useListDetail`** suma `selectedIds` (`Set<string>`), derivando
+  `selectionMode` de si tiene algo adentro, y `startSelection` /
+  `toggleSelected` / `clearSelection` / `deleteSelected` (este último
+  dispara `deleteListEntry` para cada id en paralelo — no hay un
+  caso de uso de borrado en lote, no hacía falta crear uno para esto).
+  **`useDailyRoutines`** suma exactamente lo mismo, apuntando a
+  `deleteDailyRoutineTask`. (Nota: "en paralelo" resultó ser un bug —
+  se corrigió a secuencial en #91.)
+- **`ListEntryRow`** y **`DailyRoutineTaskRow`** suman un tercer modo de
+  render (antes del de to-do/normal): si `selectionMode` está activo,
+  toda la fila es un solo blanco con un `Checkbox` mostrando
+  seleccionado/no en vez del checkbox de "hecho" o el número/bullet —
+  tocar selecciona, **mantener presionado cualquier fila** (en
+  cualquiera de los tres modos: normal, to-do, ya seleccionando) llama
+  a `onLongPress`, que en la pantalla arranca o agranda la selección.
+  La selección es **el mismo concepto para to-do y listas normales** —
+  no depende de `isTodo`, así que no hace falta un checkbox "de hecho"
+  para poder seleccionar algo.
+- **`ListDetailScreen`** y **`DailyRoutinesScreen`**: mientras
+  `selectionMode` está activo, `SelectionBar` reemplaza el selector de
+  orden / fila de resumen+estrella+Ordenar, y se esconden las acciones
+  que no tienen sentido en el medio de una selección ("Borrar esta
+  lista", "＋ Agregar tarea", el modo reordenar) para no superponer
+  acciones destructivas o confusas.
+
+**Alternativas descartadas.**
+
+- **Un caso de uso de borrado en lote** (`DeleteListEntries`,
+  `DeleteDailyRoutineTasks`) en vez de `Promise.all` sobre el existente
+  de a uno. Para esta escala (listas personales, no cientos de ítems)
+  no vale la complejidad extra; si hiciera falta optimizar borrado
+  masivo más adelante, ahí sí se justificaría.
+
+**Consecuencias.** Si se agrega selección múltiple a algún otro lugar
+de la app (p. ej. las cards de Favoritos), conviene reusar
+`SelectionBar` y el mismo patrón de `selectedIds`/`onLongPress` en vez
+de inventar uno nuevo. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 91. Fix: borrar varios ítems seleccionados borraba solo uno *(fix)*
+
+**Contexto.** Se reportó que, al seleccionar dos (o más) ítems y tocar
+el tacho, solo se borraba uno. Causa: `deleteSelected` (#90) llamaba a
+`deleteListEntry`/`deleteDailyRoutineTask` para cada id con
+`Promise.all` — en **paralelo**. Las dos fuentes de datos locales
+(`AsyncStorageListEntryLocalDataSource.remove`,
+`DailyRoutineTaskLocalDataSource`'s equivalente) hacen
+lectura-modificación-escritura sobre el **mismo blob** de AsyncStorage
+(`readAll()` → modificar en memoria → `setItem` con todo de vuelta) —
+no son operaciones atómicas. Con dos borrados en paralelo, ambos leen
+el blob **antes** de que cualquiera de los dos escriba; el que termina
+de escribir último persiste una versión armada a partir de ese blob
+viejo, que todavía tiene la entrada que el otro borrado ya había
+sacado — en los hechos, "revive" esa entrada y la deja puesta, como si
+nunca se hubiera borrado.
+
+**Decisión.** `deleteSelected` (en ambos viewmodels) pasa de
+`Promise.all(ids.map(...))` a un `for...of` con `await` adentro — un
+borrado a la vez, cada uno completando su ciclo lectura-modificación-
+escritura (incluida la escritura) antes de que arranque el siguiente.
+Sin tocar la capa de datos.
+
+**Alternativas descartadas.**
+
+- **Hacer atómico el borrado en la fuente de datos** (p. ej. un método
+  nuevo `removeMany(listId, entryIds[])` que lea una vez, saque varias
+  entradas del objeto en memoria, y escriba una vez). Es la solución
+  más "correcta" en general (una sola lectura/escritura en vez de N),
+  pero para esta escala (borrar unos pocos ítems seleccionados a mano)
+  el costo de N escrituras secuenciales es imperceptible; se prefirió
+  el fix más chico y acotado al bug reportado.
+
+**Consecuencias.** Borrar muchos ítems seleccionados de una tarda un
+poco más (N escrituras a AsyncStorage en vez de 1), imperceptible a
+esta escala. Si en algún momento se permite seleccionar cientos de
+ítems, ahí sí conviene la alternativa descartada. `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

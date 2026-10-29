@@ -31,6 +31,8 @@ export function useDailyRoutines() {
   const [editing, setEditing] = useState<DailyRoutineTaskStatus | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [favorite, setFavorite] = useState(true);
+  // Selección múltiple (mantener presionada una tarea) para borrar varias de una.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { startIso, endIso } = period.range;
 
@@ -125,6 +127,33 @@ export function useDailyRoutines() {
     [reload],
   );
 
+  const startSelection = useCallback((taskId: string) => {
+    setSelectedIds(new Set([taskId]));
+  }, []);
+
+  const toggleSelected = useCallback((taskId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const deleteSelected = useCallback(async () => {
+    // Uno por vez, no `Promise.all`: igual que en `useListDetail`, el borrado
+    // hace lectura-modificación-escritura sobre el mismo blob de
+    // AsyncStorage — en paralelo, un borrado pisa al otro y termina
+    // borrándose solo uno de los seleccionados.
+    for (const id of selectedIds) {
+      await container.deleteDailyRoutineTask.execute(id);
+    }
+    setSelectedIds(new Set());
+    await reload();
+  }, [selectedIds, reload]);
+
   return {
     tasks: session.tasks,
     doneCount: session.doneCount,
@@ -156,5 +185,11 @@ export function useDailyRoutines() {
     moveTask,
     favorite,
     toggleFavorite,
+    selectedIds,
+    selectionMode: selectedIds.size > 0,
+    startSelection,
+    toggleSelected,
+    clearSelection,
+    deleteSelected,
   };
 }

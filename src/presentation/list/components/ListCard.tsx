@@ -7,6 +7,7 @@ import { List } from '../../../domain/list/entities/List';
 import { ListEntry } from '../../../domain/list/entities/ListEntry';
 import { Checkbox } from '../../components/Checkbox';
 import { FavoriteStar } from '../../components/FavoriteStar';
+import { InfoButton } from '../../components/InfoButton';
 import { PinButton } from '../../components/PinButton';
 import { ListCounts } from '../viewmodels/useLists';
 import { ListEntryInfoModal } from './ListEntryInfoModal';
@@ -42,12 +43,16 @@ function subtitle(list: List, counts: ListCounts): string {
 
 /**
  * Card de una lista. Tocar el encabezado entra a la lista; el botón ＋ agrega
- * una entrada rápida; el triángulo despliega/colapsa una vista de **solo
- * lectura** de los ítems (tildar en to-do lists; para editar o ver más hay
- * que entrar a la lista como siempre; con más de 15 entradas, esa vista
- * scrollea en vez de crecer sin límite). En Favoritos, el pin hace que quede
- * desplegada por defecto la próxima vez; con `alwaysExpanded` (también solo
- * en Favoritos) queda siempre desplegada y no hay triángulo para colapsarla.
+ * una entrada rápida; el triángulo despliega/colapsa una vista de los
+ * ítems — en to-do lists, tocar una fila tilda/destilda (igual que en el
+ * detalle de la lista, ver `ListEntryRow`), con el botón "i" aparte para ver
+ * fecha/comentario/rating si tiene; en listas normales, tocar la fila
+ * muestra esa misma info (no hay "hecho" que tildar). Para editar o borrar
+ * una entrada hay que entrar a la lista como siempre. Con más de 15
+ * entradas, esa vista scrollea en vez de crecer sin límite. En Favoritos, el
+ * pin hace que quede desplegada por defecto la próxima vez; con
+ * `alwaysExpanded` (también solo en Favoritos) queda siempre desplegada y no
+ * hay triángulo para colapsarla.
  */
 export function ListCard({
   list,
@@ -99,6 +104,29 @@ export function ListCard({
   }
 
   function renderEntryRow(entry: ListEntry) {
+    const hasInfo = !!entry.comment || entry.date != null || entry.rating != null;
+
+    if (list.isTodo) {
+      // Tocar la fila tilda/destilda (lo mismo que el checkbox) — es la
+      // acción que más se usa acá; ver la info (fecha/comentario/rating) se
+      // mueve al botón "i" aparte, mismo patrón que `ListEntryRow`.
+      return (
+        <View key={entry.id} style={styles.entryRow}>
+          <TouchableOpacity
+            style={styles.entryMain}
+            onPress={() => toggleEntryDone(entry)}
+            activeOpacity={0.6}
+          >
+            <Checkbox checked={entry.done} onToggle={() => toggleEntryDone(entry)} />
+            <Text style={[styles.entryName, entry.done && styles.entryNameDone]} numberOfLines={1}>
+              {entry.name}
+            </Text>
+          </TouchableOpacity>
+          {hasInfo ? <InfoButton onPress={() => setViewingEntry(entry)} /> : null}
+        </View>
+      );
+    }
+
     return (
       <TouchableOpacity
         key={entry.id}
@@ -106,12 +134,8 @@ export function ListCard({
         onPress={() => setViewingEntry(entry)}
         activeOpacity={0.6}
       >
-        {list.isTodo ? (
-          <Checkbox checked={entry.done} onToggle={() => toggleEntryDone(entry)} />
-        ) : (
-          <View style={styles.bullet} />
-        )}
-        <Text style={[styles.entryName, list.isTodo && entry.done && styles.entryNameDone]} numberOfLines={1}>
+        <View style={styles.bullet} />
+        <Text style={styles.entryName} numberOfLines={1}>
           {entry.name}
         </Text>
       </TouchableOpacity>
@@ -249,6 +273,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  entryMain: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

@@ -336,9 +336,10 @@ más los **trackers** y **listas** favoritos (flag `favorite` en cada entidad,
 cards y no hay una colección de "favoritos" aparte.
 
 - **Rutina diaria va primero por defecto.** `DailyRoutineSummaryCard`
-  muestra la lista de tareas de hoy (se tildan sin salir de Favoritos,
-  mismo `setDailyTaskDone` que usa la pantalla "Rutina diaria", y
-  re-sincroniza el tracker interno de seguimiento) y un indicador de
+  muestra la lista de tareas de hoy — tocar cualquier parte de una fila la
+  tilda/destilda, sin salir de Favoritos (mismo `setDailyTaskDone` que usa
+  la pantalla "Rutina diaria", y re-sincroniza el tracker interno de
+  seguimiento) — y un indicador de
   cuánto se completó (`X/Y` + barra de progreso). Reemplaza a
   "Seguimiento de Rutina", que antes era el tracker que se adelantaba acá
   — ese tracker ahora es de uso **interno nomás** (ver "Rutina diaria"
@@ -457,11 +458,15 @@ crear. Las favoritas aparecen en la pestaña **Favoritos**.
 
 En **Listas**, cada card tiene un botón con un **triángulo** (▸/▾) que
 despliega/colapsa una vista **de solo lectura** de sus ítems — nombre
-nomás, con **checkbox** en to-do lists. Tocar un ítem ahí abre un modal
-mostrando **toda su info** (fecha, prioridad/rating, estado, comentario —
-[`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx));
-tildar el checkbox no abre nada. Para editar, o borrar, hay que entrar a la
-lista como siempre. Hay también un botón de **pin**
+nomás, con **checkbox** en to-do lists. En una to-do list, tocar la fila
+tilda/destilda (lo mismo que el checkbox — toda la fila es blanco); si la
+entrada tiene fecha, comentario o rating, aparece además un botón **"i"**
+que abre un modal mostrando **toda su info**
+([`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx)).
+En una lista normal (sin checkbox, sin "hecho" que tildar), tocar la fila
+sigue abriendo ese mismo modal directo, como siempre. Para editar, o
+borrar, una entrada hay que entrar a la lista. Hay también un botón de
+**pin**
 ([`PinButton`](src/presentation/components/PinButton.tsx), ícono de
 [Lucide](https://lucide.dev)): al pinear, la lista queda desplegada por
 defecto la próxima vez (`List.pinnedExpanded`, mismo patrón que `favorite`).
@@ -491,10 +496,21 @@ crecer sin límite.
   **”i”** que aparece si hay fecha, rating o comentario — abre
   [`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx),
   de solo lectura, con toda la info de la entrada y links tocables en el
-  comentario); **★/⚑ rating** a la derecha. Tocar la fila abre el modal para
-  editar los campos (o borrar la entrada). Arriba a la derecha, **＋ Entrada**.
+  comentario); **★/⚑ rating** a la derecha. En una to-do list, tocar la fila
+  tilda/destilda (lo mismo que el checkbox — toda la fila es blanco, no solo
+  el cuadradito); editar los campos (o borrar la entrada) se abre con el
+  ícono de **lápiz** aparte ([`EditButton`](src/presentation/components/EditButton.tsx)).
+  En una lista normal (sin checkbox), que no tiene "hecho" para tildar, tocar
+  la fila sigue abriendo directamente ese modal, como siempre. Arriba a la
+  derecha, **＋ Entrada**.
   Al fondo, **Borrar esta lista** (borra la lista y sus entradas, con
   confirmación).
+- **Selección múltiple**: en cualquier lista (to-do o normal), **mantener
+  presionada** una fila la selecciona y activa este modo; tocar otras filas
+  suma/saca de la selección (en vez de su acción normal). Mientras está
+  activo, [`SelectionBar`](src/presentation/components/SelectionBar.tsx)
+  reemplaza el selector de orden: cuenta cuántas hay, una **✕** cancela sin
+  borrar, y un **tacho** borra las seleccionadas (con confirmación).
 
 Orden de las entradas (`compareListEntries` en el dominio):
 
@@ -641,7 +657,10 @@ done }`, `resolveTaskDone`).
   tareas diarias aún!"**.
 - **"Agregar Tarea"** arriba a la derecha abre el modal de título + descripción
   ([`DailyRoutineTaskModal`](src/presentation/dailyRoutine/components/DailyRoutineTaskModal.tsx));
-  tocar una fila la edita, el checkbox la tilda sin abrir nada. Un botón
+  tocar una fila la tilda/destilda (lo mismo que el checkbox), editar título o
+  descripción se abre con el lápiz aparte; **mantener presionada** una fila la
+  selecciona (mismo `SelectionBar` que en las listas, para borrar varias
+  tareas de una — ver "Card desplegable" más arriba). Un botón
   **"Ordenar"/"Listo"** (si hay más de una tarea) cambia la lista a filas con
   flechas ▲▼ para reordenarlas a mano — mismo [`ReorderRow`](src/presentation/components/ReorderRow.tsx)
   que ya usan Favoritos y el detalle de una rutina de gimnasio. Al lado de

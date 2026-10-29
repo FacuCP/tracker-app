@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { SelectionBar } from '../../components/SelectionBar';
 import { ListEntryModal } from '../../list/components/ListEntryModal';
 import { ListEntryRow } from '../../list/components/ListEntryRow';
 import { ListSortSelector } from '../../list/components/ListSortSelector';
@@ -53,6 +54,18 @@ export function ListDetailScreen({ route, navigation }: Props) {
     ]);
   }
 
+  function confirmDeleteSelected() {
+    const n = vm.selectedIds.size;
+    Alert.alert(
+      n === 1 ? 'Borrar entrada' : 'Borrar entradas',
+      n === 1 ? 'Se borrará la entrada seleccionada.' : `Se borrarán las ${n} entradas seleccionadas.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Borrar', style: 'destructive', onPress: vm.deleteSelected },
+      ],
+    );
+  }
+
   if (!vm.loading && !list) {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -68,10 +81,14 @@ export function ListDetailScreen({ route, navigation }: Props) {
           <ActivityIndicator style={styles.loader} size="large" />
         ) : (
           <>
-            <View style={styles.sortBar}>
-              <Text style={styles.sortLabel}>Ordenar por</Text>
-              <ListSortSelector value={vm.sort} onChange={vm.setSort} isTodo={list.isTodo} />
-            </View>
+            {vm.selectionMode ? (
+              <SelectionBar count={vm.selectedIds.size} onCancel={vm.clearSelection} onDelete={confirmDeleteSelected} />
+            ) : (
+              <View style={styles.sortBar}>
+                <Text style={styles.sortLabel}>Ordenar por</Text>
+                <ListSortSelector value={vm.sort} onChange={vm.setSort} isTodo={list.isTodo} />
+              </View>
+            )}
 
             {vm.entries.length === 0 ? (
               <View style={styles.empty}>
@@ -90,14 +107,20 @@ export function ListDetailScreen({ route, navigation }: Props) {
                     isTodo={list.isTodo}
                     onPress={() => vm.openEntry(entry)}
                     onToggleDone={() => vm.toggleDone(entry)}
+                    onLongPress={() => vm.startSelection(entry.id)}
+                    selectionMode={vm.selectionMode}
+                    selected={vm.selectedIds.has(entry.id)}
+                    onToggleSelected={() => vm.toggleSelected(entry.id)}
                   />
                 ))}
               </View>
             )}
 
-            <TouchableOpacity style={styles.deleteList} onPress={confirmDeleteList}>
-              <Text style={styles.deleteListText}>Borrar esta lista</Text>
-            </TouchableOpacity>
+            {!vm.selectionMode ? (
+              <TouchableOpacity style={styles.deleteList} onPress={confirmDeleteList}>
+                <Text style={styles.deleteListText}>Borrar esta lista</Text>
+              </TouchableOpacity>
+            ) : null}
           </>
         )}
       </ScrollView>
