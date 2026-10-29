@@ -1,4 +1,5 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureDetector, PanGesture } from 'react-native-gesture-handler';
 
 import { theme } from '../../../core/theme';
 import { ROUTINE_TRACKER_OPTIONS } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
@@ -9,7 +10,6 @@ import { CalendarViewSwitch } from '../../calendar/CalendarViewSwitch';
 import { CalendarWeek } from '../../calendar/CalendarWeek';
 import { CalendarYear } from '../../calendar/CalendarYear';
 import { useCalendarPeriod } from '../../calendar/useCalendarPeriod';
-import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
 import { TrackerDayCell } from '../../tracker/components/TrackerDayCell';
 import { TrackerStats } from '../../tracker/components/TrackerStats';
 
@@ -20,6 +20,8 @@ interface Props {
   entriesByDate: Record<string, TrackerEntry>;
   optionCounts: Record<string, number>;
   period: ReturnType<typeof useCalendarPeriod>;
+  /** Gesto de swipe de período — creado en la pantalla, ver `DailyRoutinesScreen`. */
+  swipeGesture: PanGesture;
 }
 
 /**
@@ -28,14 +30,7 @@ interface Props {
  * período. Es de solo lectura (el color de cada día lo pone `SyncRoutineTracker`
  * solo, no se edita a mano).
  */
-export function RoutineTrackerCalendar({ tracker, entriesByDate, optionCounts, period }: Props) {
-  // Swipe horizontal para moverse de período (además de las flechas):
-  // izquierda → siguiente, derecha → anterior.
-  const swipe = useHorizontalSwipe({
-    onSwipeLeft: period.goToNext,
-    onSwipeRight: period.goToPrevious,
-  });
-
+export function RoutineTrackerCalendar({ tracker, entriesByDate, optionCounts, period, swipeGesture }: Props) {
   function dayFills(date: string): string[] | undefined {
     const entry = entriesByDate[date];
     if (!entry) return undefined;
@@ -82,15 +77,17 @@ export function RoutineTrackerCalendar({ tracker, entriesByDate, optionCounts, p
         </TouchableOpacity>
       </View>
 
-      <View {...swipe}>
-        {period.view === 'week' ? (
-          <CalendarWeek anchor={period.anchor} renderDay={renderDay} />
-        ) : period.view === 'month' ? (
-          <CalendarMonth year={period.anchor.getFullYear()} month={period.anchor.getMonth()} renderDay={renderDay} />
-        ) : (
-          <CalendarYear year={period.anchor.getFullYear()} dayColors={dayFills} onSelectMonth={period.showMonth} />
-        )}
-      </View>
+      <GestureDetector gesture={swipeGesture}>
+        <View>
+          {period.view === 'week' ? (
+            <CalendarWeek anchor={period.anchor} renderDay={renderDay} />
+          ) : period.view === 'month' ? (
+            <CalendarMonth year={period.anchor.getFullYear()} month={period.anchor.getMonth()} renderDay={renderDay} />
+          ) : (
+            <CalendarYear year={period.anchor.getFullYear()} dayColors={dayFills} onSelectMonth={period.showMonth} />
+          )}
+        </View>
+      </GestureDetector>
 
       <TrackerStats tracker={tracker} optionCounts={optionCounts} numberStats={EMPTY_NUMBER_STATS} />
 

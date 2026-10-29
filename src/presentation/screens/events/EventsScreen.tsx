@@ -1,5 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
@@ -103,26 +104,28 @@ export function EventsScreen(_props: Props) {
             <CalendarYear year={vm.anchor.getFullYear()} dayColors={dayColors} onSelectMonth={vm.showMonth} />
           </ScrollView>
         ) : (
-          <View style={styles.calendarBody} {...swipe}>
-            {vm.view === 'week' ? (
-              <CalendarWeek
-                anchor={vm.anchor}
-                renderDay={renderDay}
-                fitHeight
-                cellAspectRatio={EVENT_CELL_HEIGHT_RATIO}
-                gap={CELL_GAP}
-              />
-            ) : (
-              <CalendarMonth
-                year={vm.anchor.getFullYear()}
-                month={vm.anchor.getMonth()}
-                renderDay={renderDay}
-                showOverflowDays
-                fitHeight
-                gap={CELL_GAP}
-              />
-            )}
-          </View>
+          <GestureDetector gesture={swipe}>
+            <View style={styles.calendarBody}>
+              {vm.view === 'week' ? (
+                <CalendarWeek
+                  anchor={vm.anchor}
+                  renderDay={renderDay}
+                  fitHeight
+                  cellAspectRatio={EVENT_CELL_HEIGHT_RATIO}
+                  gap={CELL_GAP}
+                />
+              ) : (
+                <CalendarMonth
+                  year={vm.anchor.getFullYear()}
+                  month={vm.anchor.getMonth()}
+                  renderDay={renderDay}
+                  showOverflowDays
+                  fitHeight
+                  gap={CELL_GAP}
+                />
+              )}
+            </View>
+          </GestureDetector>
         )}
       </View>
 

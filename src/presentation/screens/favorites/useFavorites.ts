@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { container } from '../../../core/di/container';
+import { DailyRoutineTaskStatus } from '../../../domain/dailyRoutine/usecases/GetDailyRoutineSession';
 import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { List } from '../../../domain/list/entities/List';
 import { Tracker } from '../../../domain/tracker/entities/Tracker';
@@ -10,16 +11,33 @@ import { parseRating } from '../../list/parseRating';
 import { ListCounts } from '../../list/viewmodels/useLists';
 
 export type FavoriteCard =
+  | {
+      key: 'dailyRoutine';
+      kind: 'dailyRoutine';
+      title: string;
+      typeLabel: string;
+      tasks: DailyRoutineTaskStatus[];
+      doneCount: number;
+      total: number;
+    }
   | { key: 'finance'; kind: 'finance'; title: string; typeLabel: string }
   | { key: 'mood'; kind: 'mood'; title: string; typeLabel: string }
   | { key: 'gym'; kind: 'gym'; title: string; typeLabel: string }
-  | { key: string; kind: 'tracker'; title: string; typeLabel: string; tracker: Tracker }
-  | { key: string; kind: 'list'; title: string; typeLabel: string; list: List; counts: ListCounts };
+  | { key: 'trackers'; kind: 'trackers'; title: string; typeLabel: string; trackers: Tracker[] }
+  | {
+      key: 'lists';
+      kind: 'lists';
+      title: string;
+      typeLabel: string;
+      lists: List[];
+      counts: Record<string, ListCounts>;
+    };
 
 /**
- * ViewModel de la pestaña Favoritos: arma la lista de "cards" (resumen de
- * finanzas, mood tracker, trackers y listas favoritos) en el **orden manual**
- * que guardó el usuario, y expone el modo de reordenar (flechas ▲▼).
+ * ViewModel de la pestaña Favoritos: arma la lista de "cards" (rutina diaria,
+ * resumen de finanzas, mood tracker, trackers y listas favoritos) en el
+ * **orden manual** que guardó el usuario, y expone el modo de reordenar
+ * (flechas ▲▼).
  */
 export function useFavorites() {
   const [greeting, setGreeting] = useState('');
@@ -30,16 +48,20 @@ export function useFavorites() {
   const [reorderMode, setReorderMode] = useState(false);
 
   const reload = useCallback(async () => {
-    const [message, profile, allTrackers, allLists, bal, savedOrder] = await Promise.all([
+    const [message, profile, allTrackers, allLists, bal, savedOrder, dailyRoutineSession] = await Promise.all([
       container.getWelcomeMessage.execute(),
       container.getUserProfile.execute(),
       container.getTrackers.execute(),
       container.getLists.execute(),
       container.getCurrentBalance.execute(),
       container.getFavoritesOrder.execute(),
+      container.getDailyRoutineSession.execute(),
     ]);
 
-    const favTrackers = allTrackers.filter((t) => t.favorite);
+    // "Seguimiento de Rutina" es de uso interno (solo lo lee el calendario de
+    // Rutina diaria) — no aparece acá como tracker más, lo reemplaza la card
+    // de "dailyRoutine" de abajo (lista de tareas + % completado).
+    const favTrackers = allTrackers.filter((t) => t.favorite && t.id !== ROUTINE_TRACKER_ID);
     const favLists = allLists.filter((l) => l.favorite);
 
     const entryCounts: Record<string, ListCounts> = {};
@@ -53,19 +75,47 @@ export function useFavorites() {
       }),
     );
 
+    // Todos los trackers favoritos van juntos en una sola card con swipe
+    // (igual las listas).
+    const trackersCard: FavoriteCard | null =
+      favTrackers.length > 0
+        ? {
+            key: 'trackers',
+            kind: 'trackers',
+            title: 'Trackers',
+            typeLabel: `${favTrackers.length} ${favTrackers.length === 1 ? 'tracker' : 'trackers'}`,
+            trackers: favTrackers,
+          }
+        : null;
+    const listsCard: FavoriteCard | null =
+      favLists.length > 0
+        ? {
+            key: 'lists',
+            kind: 'lists',
+            title: 'Listas',
+            typeLabel: `${favLists.length} ${favLists.length === 1 ? 'lista' : 'listas'}`,
+            lists: favLists,
+            counts: entryCounts,
+          }
+        : null;
+    const dailyRoutineCard: FavoriteCard = {
+      key: 'dailyRoutine',
+      kind: 'dailyRoutine',
+      title: 'Rutina diaria',
+      typeLabel:
+        dailyRoutineSession.total === 0
+          ? 'sin tareas'
+          : `${dailyRoutineSession.doneCount}/${dailyRoutineSession.total} hechas`,
+      tasks: dailyRoutineSession.tasks,
+      doneCount: dailyRoutineSession.doneCount,
+      total: dailyRoutineSession.total,
+    };
+
     const defaultOrder: FavoriteCard[] = [];
-    // "Seguimiento de Rutina" va primero por defecto (antes que finanzas/mood/
-    // gimnasio): es el que el usuario pidió ver arriba de todo al entrar.
-    const routineTracker = favTrackers.find((t) => t.id === ROUTINE_TRACKER_ID);
-    if (routineTracker) {
-      defaultOrder.push({
-        key: `tracker:${routineTracker.id}`,
-        kind: 'tracker',
-        title: routineTracker.name,
-        typeLabel: 'tracker',
-        tracker: routineTracker,
-      });
-    }
+    // La card de Rutina diaria va primero por defecto: es la que el usuario
+    // pidió ver arriba de todo al entrar (antes era el tracker "Seguimiento
+    // de Rutina" el que se adelantaba con el mismo criterio).
+    if (profile?.dailyRoutineFavorite ?? true) defaultOrder.push(dailyRoutineCard);
     if (profile?.financeFavorite ?? true) {
       defaultOrder.push({ key: 'finance', kind: 'finance', title: 'Finanzas', typeLabel: 'resumen' });
     }
@@ -75,28 +125,10 @@ export function useFavorites() {
     if (profile?.gymFavorite ?? true) {
       defaultOrder.push({ key: 'gym', kind: 'gym', title: 'Gimnasio', typeLabel: 'rutina' });
     }
-    for (const tracker of favTrackers) {
-      if (tracker.id === ROUTINE_TRACKER_ID) continue;
-      defaultOrder.push({
-        key: `tracker:${tracker.id}`,
-        kind: 'tracker',
-        title: tracker.name,
-        typeLabel: 'tracker',
-        tracker,
-      });
-    }
-    for (const list of favLists) {
-      defaultOrder.push({
-        key: `list:${list.id}`,
-        kind: 'list',
-        title: list.name,
-        typeLabel: 'lista',
-        list,
-        counts: entryCounts[list.id] ?? { total: 0, done: 0 },
-      });
-    }
+    if (trackersCard) defaultOrder.push(trackersCard);
+    if (listsCard) defaultOrder.push(listsCard);
 
-    const byKey = new Map(defaultOrder.map((c) => [c.key, c]));
+    const byKey = new Map<string, FavoriteCard>(defaultOrder.map((c) => [c.key, c]));
     const ordered: FavoriteCard[] = [];
     const used = new Set<string>();
     for (const key of savedOrder) {
@@ -165,6 +197,24 @@ export function useFavorites() {
     await reload();
   }, [cards, reload]);
 
+  const toggleDailyRoutineFavorite = useCallback(async () => {
+    const shown = cards.some((c) => c.kind === 'dailyRoutine');
+    await container.updateUserProfile.execute({ dailyRoutineFavorite: !shown });
+    await reload();
+  }, [cards, reload]);
+
+  const toggleDailyRoutineTask = useCallback(
+    async (item: DailyRoutineTaskStatus) => {
+      await container.setDailyTaskDone.execute(item.task.id, !item.done);
+      // Mismo resync que hace useDailyRoutines al recargar: mantiene al día
+      // el color de "Seguimiento de Rutina" aunque se tilde desde acá.
+      const freshSession = await container.getDailyRoutineSession.execute();
+      await container.syncRoutineTracker.execute(freshSession.doneCount, freshSession.total);
+      await reload();
+    },
+    [reload],
+  );
+
   const saveEntry = useCallback(
     async (draft: ListEntryDraft) => {
       if (!entryTarget) return;
@@ -197,6 +247,8 @@ export function useFavorites() {
     toggleListFavorite,
     toggleListPinnedExpanded,
     toggleFinanceFavorite,
+    toggleDailyRoutineFavorite,
+    toggleDailyRoutineTask,
     reload,
   };
 }

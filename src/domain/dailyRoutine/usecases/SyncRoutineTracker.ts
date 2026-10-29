@@ -52,8 +52,10 @@ export class SyncRoutineTracker {
         name: ROUTINE_TRACKER_NAME,
         options: ROUTINE_TRACKER_OPTIONS,
         createdAt: todayIso(),
-        // Favorito por defecto, y useFavorites lo ordena primero por defecto.
-        favorite: true,
+        // No favorito: este tracker es de uso interno (solo lo lee el
+        // calendario de "Rutina diaria") — ni Trackers ni Favoritos lo
+        // muestran, sin importar este flag (ver `useFavorites`).
+        favorite: false,
       });
       await this.trackers.save(tracker);
     }

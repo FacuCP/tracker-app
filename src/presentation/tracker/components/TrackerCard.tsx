@@ -137,11 +137,6 @@ const styles = StyleSheet.create({
     gap: 14,
     borderWidth: 1,
     borderColor: '#eef0f2',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   header: {
     flexDirection: 'row',

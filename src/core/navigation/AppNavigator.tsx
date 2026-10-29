@@ -45,7 +45,9 @@ const navTheme: Theme = {
  * menú al tocarlo), sin flecha de volver, y el cambio entre pestañas es un
  * fundido suave en vez del deslizamiento del stack.
  */
-const hubOptions = (current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym' | 'Events') => ({
+const hubOptions = (
+  current: 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym' | 'Events' | 'DailyRoutines',
+) => ({
   headerTitle: () => <HubMenuButton current={current} />,
   headerRight: () => <SettingsHeaderButton />,
   headerTitleAlign: 'left' as const,
@@ -130,7 +132,7 @@ export function AppNavigator() {
         <Stack.Screen
           name="DailyRoutines"
           component={DailyRoutinesScreen}
-          options={{ title: 'Rutina diaria' }}
+          options={hubOptions('DailyRoutines')}
         />
         <Stack.Screen name="Events" component={EventsScreen} options={hubOptions('Events')} />
         <Stack.Screen

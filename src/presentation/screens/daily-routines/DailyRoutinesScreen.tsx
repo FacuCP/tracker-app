@@ -1,10 +1,12 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
 import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
+import { FavoriteStar } from '../../components/FavoriteStar';
 import { ReorderRow } from '../../components/ReorderRow';
 import { DailyRoutineTaskModal } from '../../dailyRoutine/components/DailyRoutineTaskModal';
 import { DailyRoutineTaskRow } from '../../dailyRoutine/components/DailyRoutineTaskRow';
@@ -16,82 +18,102 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DailyRoutines'>;
 /** Tareas que se tildan y se resetean solas todos los días, con su seguimiento abajo. */
 export function DailyRoutinesScreen({ navigation }: Props) {
   const vm = useDailyRoutines();
+  // El gesto de período se crea acá (no adentro de `RoutineTrackerCalendar`)
+  // para que el swipe de pantalla completa pueda esperar a que falle
+  // (`requireToFail`) antes de activarse — así el calendario se queda con
+  // el gesto cuando arranca encima suyo, igual que los carruseles en
+  // Favoritos.
+  const periodSwipe = useHorizontalSwipe({
+    onSwipeLeft: vm.period.goToNext,
+    onSwipeRight: vm.period.goToPrevious,
+  });
+  // Deslizar hacia la derecha en cualquier lado que no sea el calendario
+  // vuelve a Favoritos.
   const swipe = useHorizontalSwipe({
     onSwipeLeft: () => {},
-    onSwipeRight: () => navigation.goBack(),
+    onSwipeRight: () => navigation.navigate('Favorites'),
+    requireToFail: periodSwipe,
   });
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <View style={styles.swipeArea} {...swipe}>
-        <ScrollView contentContainerStyle={styles.content}>
-          {vm.loading ? (
-            <ActivityIndicator style={styles.loader} size="large" />
-          ) : (
-            <>
-              {vm.total > 0 ? (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summary}>{vm.doneCount}/{vm.total} tareas hechas hoy</Text>
-                  {vm.total > 1 ? (
-                    <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
-                      <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              ) : null}
+      <GestureDetector gesture={swipe}>
+      <View style={styles.swipeArea}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {vm.loading ? (
+          <ActivityIndicator style={styles.loader} size="large" />
+        ) : (
+          <>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summary}>
+                {vm.total > 0 ? `${vm.doneCount}/${vm.total} tareas hechas hoy` : ''}
+              </Text>
+              <View style={styles.headerActions}>
+                {/* Única forma de volver a agregar "Rutina diaria" a Favoritos si
+                    se sacó de ahí — ver `useDailyRoutines.toggleFavorite`. */}
+                <FavoriteStar favorite={vm.favorite} onToggle={vm.toggleFavorite} />
+                {vm.total > 1 ? (
+                  <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
+                    <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
 
-              {vm.total === 0 ? (
-                <View style={styles.empty}>
-                  <Text style={styles.emptyText}>¡No hiciste una lista de tareas diarias aún!</Text>
-                </View>
-              ) : (
-                <>
-                  {vm.reorderMode ? (
-                    <View style={styles.reorderList}>
-                      {vm.tasks.map((item, index) => (
-                        <ReorderRow
-                          key={item.task.id}
-                          title={item.task.title}
-                          typeLabel={item.done ? 'hecha hoy' : 'pendiente'}
-                          isFirst={index === 0}
-                          isLast={index === vm.tasks.length - 1}
-                          onUp={() => vm.moveTask(item.task.id, 'up')}
-                          onDown={() => vm.moveTask(item.task.id, 'down')}
-                        />
-                      ))}
-                    </View>
-                  ) : (
-                    <View style={styles.tasks}>
-                      {vm.tasks.map((item, index) => (
-                        <DailyRoutineTaskRow
-                          key={item.task.id}
-                          item={item}
-                          first={index === 0}
-                          onPress={() => vm.openEditTask(item)}
-                          onToggleDone={() => vm.toggleTask(item)}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </>
-              )}
+            {vm.total === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>¡No hiciste una lista de tareas diarias aún!</Text>
+              </View>
+            ) : (
+              <>
+                {vm.reorderMode ? (
+                  <View style={styles.reorderList}>
+                    {vm.tasks.map((item, index) => (
+                      <ReorderRow
+                        key={item.task.id}
+                        title={item.task.title}
+                        typeLabel={item.done ? 'hecha hoy' : 'pendiente'}
+                        isFirst={index === 0}
+                        isLast={index === vm.tasks.length - 1}
+                        onUp={() => vm.moveTask(item.task.id, 'up')}
+                        onDown={() => vm.moveTask(item.task.id, 'down')}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.tasks}>
+                    {vm.tasks.map((item, index) => (
+                      <DailyRoutineTaskRow
+                        key={item.task.id}
+                        item={item}
+                        first={index === 0}
+                        onPress={() => vm.openEditTask(item)}
+                        onToggleDone={() => vm.toggleTask(item)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
 
-              <TouchableOpacity style={styles.addButton} onPress={vm.openNewTask} activeOpacity={0.8}>
-                <Text style={styles.addButtonText}>＋ Agregar tarea</Text>
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.addButton} onPress={vm.openNewTask} activeOpacity={0.8}>
+              <Text style={styles.addButtonText}>＋ Agregar tarea</Text>
+            </TouchableOpacity>
 
-              {vm.tracker ? (
-                <RoutineTrackerCalendar
-                  tracker={vm.tracker}
-                  entriesByDate={vm.entriesByDate}
-                  optionCounts={vm.optionCounts}
-                  period={vm.period}
-                />
-              ) : null}
-            </>
-          )}
-        </ScrollView>
+            {vm.tracker ? (
+              <RoutineTrackerCalendar
+                tracker={vm.tracker}
+                entriesByDate={vm.entriesByDate}
+                optionCounts={vm.optionCounts}
+                period={vm.period}
+                swipeGesture={periodSwipe}
+              />
+            ) : null}
+          </>
+        )}
+      </ScrollView>
       </View>
+      </GestureDetector>
 
       <DailyRoutineTaskModal
         visible={vm.formOpen}
@@ -128,6 +150,11 @@ const styles = StyleSheet.create({
   summary: {
     fontSize: 14,
     color: theme.colors.textMuted,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   empty: {
     paddingVertical: 24,

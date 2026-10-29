@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
@@ -123,23 +124,25 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
           <ActivityIndicator style={styles.loader} size="large" />
         ) : (
           <>
-            <View {...swipe}>
-              {vm.view === 'week' ? (
-                <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
-              ) : vm.view === 'month' ? (
-                <CalendarMonth
-                  year={vm.anchor.getFullYear()}
-                  month={vm.anchor.getMonth()}
-                  renderDay={renderDay}
-                />
-              ) : (
-                <CalendarYear
-                  year={vm.anchor.getFullYear()}
-                  dayColors={dayFills}
-                  onSelectMonth={vm.showMonth}
-                />
-              )}
-            </View>
+            <GestureDetector gesture={swipe}>
+              <View>
+                {vm.view === 'week' ? (
+                  <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
+                ) : vm.view === 'month' ? (
+                  <CalendarMonth
+                    year={vm.anchor.getFullYear()}
+                    month={vm.anchor.getMonth()}
+                    renderDay={renderDay}
+                  />
+                ) : (
+                  <CalendarYear
+                    year={vm.anchor.getFullYear()}
+                    dayColors={dayFills}
+                    onSelectMonth={vm.showMonth}
+                  />
+                )}
+              </View>
+            </GestureDetector>
 
             <Text style={styles.sectionTitle}>Resumen</Text>
             <TrackerStats

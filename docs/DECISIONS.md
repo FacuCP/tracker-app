@@ -2201,7 +2201,11 @@ de arriba).
   (mueve el período) y
   uno que arranca en el resto de la pantalla sigue yendo a Favoritos — el
   sistema de responders de RN no dispara los dos a la vez, así que no hace
-  falta coordinarlos a mano.
+  falta coordinarlos a mano. (Nota: en la práctica esto no se arbitraba
+  bien — el swipe de pantalla se quedaba con el gesto incluso arrancando
+  sobre el calendario/carrusel; #81 reemplazó `PanResponder` por
+  `react-native-gesture-handler` con una relación `requireToFail` explícita
+  para que el anidado de verdad priorice al interno.)
 
 **Alternativas descartadas.**
 
@@ -2712,6 +2716,958 @@ default (como era antes de #38).
 
 **Consecuencias.** Ninguna relevante: el flag es opcional y con default,
 así que no rompe perfiles existentes ni el flujo de onboarding.
+
+---
+
+## 72. Favoritos: trackers y listas agrupados en una sola card con swipe *(elección del usuario)*
+
+**Contexto.** En Favoritos, cada tracker favorito y cada lista favorita
+tenía su propia card suelta en la lista reordenable (#38). Se pidió
+agruparlos: todos los trackers favoritos en **un solo lugar**, todas las
+listas favoritas en **otro solo lugar** (separados entre sí), mostrando
+uno a la vez y pudiendo **deslizar** para cambiar cuál se ve.
+
+**Decisión.**
+
+- **`FavoriteCard` pasa de una variante por tracker/lista a una sola
+  variante `'trackers'` (con `trackers: Tracker[]`) y una sola `'lists'`
+  (con `lists: List[]` + `counts: Record<string, ListCounts>`)** —
+  finanzas, mood y gimnasio siguen siendo cards individuales, sin cambios.
+  `useFavorites.reload()` arma como mucho **un** `FavoriteCard` de cada
+  grupo (si hay favoritos de ese tipo) en vez de uno por ítem.
+- **"Seguimiento de Rutina" sigue primero por defecto** (#51): la lógica
+  que antes sacaba ese tracker aparte y lo empujaba antes de
+  finanzas/mood/gimnasio ahora decide dónde va la card **completa** de
+  `'trackers'` — si el grupo incluye ese tracker, la card entera va
+  primero; si no, va después de gimnasio (su lugar de siempre). Dentro del
+  grupo, ese tracker es igual el primero de la lista.
+- **Nuevo `FavoritesCarousel`** (genérico, `T extends { id: string }`):
+  muestra un ítem a la vez con un encabezado chico (título + `‹ 2/3 ›`) y
+  cambia de ítem con las flechas **o** deslizando — reusa
+  [`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts)
+  (de #33), el mismo hook que ya usan los calendarios y el propio
+  `FavoritesScreen` para volver de "Rutina diaria". El índice es estado
+  local del carrusel (no se persiste): no se pidió recordar cuál se vio
+  último, y clampear contra la longitud actual alcanza si un ítem deja de
+  ser favorito mientras se lo está mirando. (Nota: en #74 se reemplazó
+  `useHorizontalSwipe` por un `PanResponder` + `Animated` propio, para que
+  el deslizo se vea en vivo — ver esa entrada.)
+- **El swipe del carrusel queda anidado dentro del swipe de toda la
+  pantalla** (que `FavoritesScreen` usaba para ir a "Rutina diaria") —
+  mismo criterio que #62 (`RoutineTrackerCalendar` dentro de
+  `DailyRoutinesScreen`): el sistema de responders de RN solo dispara uno
+  por gesto, así que deslizar sobre la card de trackers/listas cambia de
+  ítem, y deslizar en el resto de la pantalla sigue yendo a "Rutina
+  diaria". (Nota: en #73 ese swipe de pantalla se sacó por completo —
+  "Rutina diaria" pasó a ser una pestaña del menú — así que esta
+  convivencia ya no hace falta, aunque el patrón de nesting en sí sigue
+  vigente en otras pantallas. Nota 2: esa convivencia por `PanResponder`
+  anidado nunca se arbitró bien en la práctica — ver #81.)
+- **El modo "Ordenar" (`ReorderRow`) ahora reordena los grupos como
+  bloque**, no los ítems de adentro — "Trackers" y "Listas" son una fila
+  más entre finanzas/mood/gimnasio, con flechas ▲▼ igual que antes. No se
+  agregó una forma de reordenar a mano **dentro** de un grupo (qué tracker
+  o lista aparece primero en el carrusel); no se pidió, y el orden natural
+  (con "Seguimiento de Rutina" primero) ya resuelve el caso que importaba.
+
+**Alternativas descartadas.**
+
+- **Agregar reordenamiento manual dentro de cada grupo.** No se pidió —
+  agrupar y poder deslizar ya resuelve "verlos en un solo lugar"; el orden
+  interno (rutina primero, después el resto como venga de `getTrackers`/
+  `getLists`) no generó necesidad de ajustarlo a mano todavía.
+- **Carrusel con loop infinito** (de la última página volver a la
+  primera). Se descartó por simplicidad y porque los demás controles de
+  período/vista de la app (calendarios) tampoco hacen loop — las flechas
+  se deshabilitan en los extremos, consistente con eso. (Nota: se pidió
+  explícitamente lo contrario en #74: el carrusel pasó a ser circular.)
+
+**Consecuencias.** Un usuario que ya había reordenado trackers o listas
+individuales a mano (claves `tracker:<id>` / `list:<id>` en
+`favoritesOrder`) pierde ese orden fino al actualizar: esas claves ya no
+coinciden con ningún `FavoriteCard` y el merge existente las ignora (mismo
+comportamiento ya documentado en #38 para claves que dejan de existir); la
+card de grupo nueva cae en su posición por defecto la primera vez.
+
+---
+
+## 73. "Rutina diaria" pasa a ser una pestaña más del menú, no un swipe escondido *(elección del usuario)*
+
+**Contexto.** Dos pedidos juntos: (1) que el swipe sobre un tracker o una
+lista en el carrusel de Favoritos (#72) mueva de forma confiable al
+siguiente; (2) que "Rutina diaria" deje de ser un gesto escondido
+(deslizar desde Favoritos, #47) y pase a ser **una opción más** en el
+menú del header, como Favoritos/Trackers/Listas/Finanzas/Gimnasio/Eventos.
+Las dos cosas están relacionadas: el swipe de "ir a Rutina diaria" vivía
+en toda la pantalla de Favoritos, **anidado por fuera** del swipe nuevo
+del carrusel (#72) — sacarlo de en medio simplifica la cadena de gestos
+en vez de solo confiar en que el anidamiento se resuelva solo.
+
+**Decisión.**
+
+- **`HubRoute` suma `'DailyRoutines'`** y `HubMenuButton.ITEMS` agrega
+  `{ route: 'DailyRoutines', label: 'Rutina diaria' }` — aparece en el
+  menú desplegable de todas las pantallas hub, igual que las otras seis.
+- **`DailyRoutines` pasa a usar `hubOptions('DailyRoutines')`** en
+  `AppNavigator` en vez de `{ title: 'Rutina diaria' }`: mismo header con
+  menú desplegable, sin flecha de volver, transición fundido — ya no es
+  una pantalla "pusheada" aparte, es una pestaña hub más.
+- **Se sacó el swipe de `FavoritesScreen`** (`onSwipeLeft` → navegar a
+  `DailyRoutines`) y el link chico "Rutina Diaria ›" al lado del saludo:
+  ya no hacen falta, la pestaña está en el menú como cualquier otra. Esto
+  también destraba el pedido (1): el swipe del `FavoritesCarousel` (#72)
+  ya no convive anidado con ningún otro swipe de pantalla, así que
+  deslizar sobre la card de un tracker o una lista cambia de ítem sin
+  competir con nada.
+- **Se sacó el swipe de `DailyRoutinesScreen`** (`onSwipeRight` →
+  `navigation.goBack()`), por la misma razón y para ser consistente: las
+  otras seis pantallas hub no tienen gesto de swipe para "salir" — se
+  navega por el menú. El swipe de período dentro de
+  `RoutineTrackerCalendar` (de #62) tampoco queda ya anidado dentro de
+  otro swipe de pantalla.
+
+**Alternativas descartadas.**
+
+- **Mantener el swipe de Favoritos→Rutina diaria además del ítem de
+  menú.** El pedido fue explícito ("pase a ser una opción más"), y
+  mantener las dos formas de llegar sumaba un gesto que ya no resolvía
+  nada que el menú no resolviera, además de ser la causa directa del
+  anidamiento que había que destrabar.
+
+**Consecuencias.** `DailyRoutinesScreen` ya no tiene forma de "volver"
+explícita (como las otras pantallas hub): se cambia de pestaña por el
+menú. Si en algún momento se agregan más pantallas hub, conviene agregar
+la ruta tanto a `HubRoute`/`ITEMS` como al tipo que acepta `hubOptions` en
+`AppNavigator` — quedó repetido en los dos lugares porque son de módulos
+distintos (navegación de presentación vs. configuración del stack) y no
+se armó un tipo compartido para una lista de 7 rutas. *(Nota: en #79 el
+swipe de `FavoritesScreen` volvió, pero acotado a "fuera de los
+carruseles" — ver esa entrada; el resto de esta decisión sigue vigente.)*
+
+---
+
+## 74. `FavoritesCarousel`: el deslizo se ve en vivo, y el carrusel es circular *(elección del usuario)*
+
+**Contexto.** Dos ajustes al carrusel de trackers/listas de Favoritos
+(#72): (1) que deslizar se **vea** mientras pasa — hasta ahora el cambio
+de ítem era instantáneo al soltar, sin ningún movimiento visible durante
+el gesto; (2) que el carrusel sea **circular**: desde el último ítem,
+seguir deslizando para adelante lleva al primero, y viceversa — lo
+opuesto a lo que #72 había elegido a propósito ("se descartó por
+simplicidad").
+
+**Decisión.**
+
+- **Se reemplazó `useHorizontalSwipe` por un `PanResponder` +
+  `Animated.Value` propios**, solo dentro de `FavoritesCarousel` (el hook
+  compartido no se tocó: calendarios y el resto de la app lo siguen
+  usando igual). Hacía falta seguir el dedo en vivo
+  (`onPanResponderMove` → `translateX.setValue(gesture.dx)`), algo que
+  `useHorizontalSwipe` no ofrece a propósito (solo dispara un callback al
+  soltar, de #33) — ningún otro uso en la app necesitaba esto todavía.
+- **Ventana deslizante de 3 paneles** (anterior / actual / siguiente,
+  cada uno del ancho del carrusel), dentro de un `Animated.View` que se
+  desplaza con `translateX`: en reposo muestra el panel del medio
+  (`transform: translateX(Animated.add(translateX, -width))`); al
+  arrastrar, los tres se mueven juntos con el dedo, dejando ver el
+  siguiente o el anterior entrando desde el costado. Al soltar: si el
+  arrastre pasó los 45px (mismo umbral que `useHorizontalSwipe`), una
+  animación (`Animated.timing`, 220ms) termina el recorrido hasta mostrar
+  ese vecino completo y recién ahí cambia el índice (`setIndex`) y
+  resetea `translateX` a 0 — invisible porque pasa en el mismo instante
+  en que el panel del medio vuelve a ser, numéricamente, el mismo
+  contenido que se acababa de terminar de mostrar. Si no llegó al umbral,
+  `Animated.spring` lo devuelve a 0 (rebote).
+- **Círculo de verdad**: `prevIndex`/`nextIndex` se calculan con módulo
+  (`(current - 1 + count) % count` / `(current + 1) % count`), así que
+  siempre hay un vecino para cada lado — el panel "siguiente" desde el
+  último ítem ya es el primero, y viceversa. Las flechas `‹ ›` ya no se
+  deshabilitan en los extremos (ya no hay extremos).
+- **Cada panel lleva `key={item.id}`** (antes no hacía falta, había un
+  solo panel): con tres paneles reusando las mismas posiciones al
+  desplazarse, sin `key` por ítem React podía reutilizar la instancia de
+  `ListCard`/`TrackerCard` de un panel para un ítem distinto al avanzar,
+  arrastrando estado interno que no correspondía (p. ej. el `expanded` de
+  `ListCard`, pensado para una lista, quedando pegado a otra). Con la key
+  puesta, React en realidad hace algo mejor que remontar todo: como el
+  panel "siguiente" ya estaba montado durante el arrastre, al confirmarse
+  el cambio de índice React lo reconoce por key y lo reutiliza como el
+  nuevo panel "actual" sin remontarlo — solo se monta contenido
+  realmente nuevo y se desmonta el que quedó afuera de la ventana. (Bug
+  de esta misma cuenta: con exactamente 2 ítems, "anterior" y "siguiente"
+  son el mismo ítem — dos paneles con la misma key. Arreglado en #75.)
+- **Un solo ítem (`count === 1`) no usa la ventana de 3 paneles**: se
+  renderiza directo, sin `PanResponder` ni paneles de más — evita
+  montar tres copias del mismo tracker/lista (cada una con su propio
+  fetch) cuando no hay nada entre qué deslizar.
+
+**Alternativas descartadas.**
+
+- **Mantener `useHorizontalSwipe` y animar solo la transición final**
+  (sin seguir el dedo durante el arrastre). No cumplía el pedido: "que se
+  vea cuando se desliza" es justamente ver el movimiento *durante* el
+  gesto, no solo una animación después de soltar.
+- **`react-native-reanimated` / `react-native-gesture-handler`** para el
+  arrastre. Mismo criterio que #33/#70: `PanResponder` + `Animated` (del
+  core de RN) alcanzan para este caso, sin sumar una dependencia nativa
+  nueva que obligue a rehacer el build de desarrollo.
+
+**Consecuencias.** Montar tres `TrackerCard`/`ListCard` a la vez (cuando
+hay más de un favorito) triplica sus fetches propios por cada uno —
+aceptable a la escala de favoritos personales (pocos ítems), mismo
+criterio de "bien a escala personal" que ya se aceptó en otros lados
+(`useLists`, por ejemplo).
+
+---
+
+## 75. Fix: key duplicada con 2 favoritos, y listas siempre desplegadas en Favoritos *(fix + elección del usuario)*
+
+**Contexto.** Dos cosas: (1) con exactamente **2** trackers o **2** listas
+favoritas, React tiraba `Encountered two children with the same key` —
+bug de #74: con solo 2 ítems, el panel "anterior" y el panel "siguiente"
+del carrusel son matemáticamente el mismo ítem (`prevIndex === nextIndex`
+cuando `count === 2`), y ambos usaban `key={item.id}`. (2) Se pidió que
+las listas en Favoritos queden **siempre desplegadas** (sin triángulo
+para colapsarlas), y que si tienen más de 15 entradas, la vista
+desplegada scrollee en vez de crecer sin límite.
+
+**Decisión.**
+
+- **Fix de la key duplicada**: si `prevIndex === nextIndex` (solo pasa
+  con `count === 2`), la key del panel "siguiente" se desambigua
+  agregándole un sufijo (`` `${item.id}-next` ``) en vez de usar el id
+  pelado. El panel "anterior" y el "actual" siguen con `key={item.id}`
+  tal cual — siguen pudiendo reusarse sin remontar entre sí al cambiar de
+  índice (que es el caso que sí importa visualmente); solo el panel
+  "siguiente" (el que no se está mirando) pierde esa continuidad en este
+  caso puntual de 2 ítems.
+- **`ListCard` suma `alwaysExpanded?: boolean`** (opcional, default
+  `false`; sin la prop, `ListsScreen` sigue exactamente igual que antes).
+  Con `alwaysExpanded`, la vista desplegada se muestra siempre
+  (`isExpanded = alwaysExpanded || expanded`) y **no se renderiza el
+  triángulo** ▸/▾: no hay nada que colapsar, así que no tiene sentido un
+  botón para hacerlo. El botón de pin (`showPin`/`onTogglePin`) se deja
+  **sin tocar** — se consultó explícitamente y se eligió no borrarlo
+  aunque, con las listas siempre desplegadas, ya no cambia nada visible
+  en Favoritos; queda por si se reutiliza en otra pantalla más adelante.
+  `FavoritesScreen` pasa `alwaysExpanded` además del `showPin` que ya
+  tenía.
+- **Más de 15 entradas → `ScrollView` con `maxHeight: 480` en vez de una
+  lista que crece sin límite** (`MAX_VISIBLE_ENTRIES = 15`, constante del
+  componente). Con 15 o menos, se sigue mapeando directo como antes (sin
+  el costo de un `ScrollView` cuando no hace falta). `nestedScrollEnabled`
+  porque esta lista vive anidada dentro del `ScrollView` de
+  `FavoritesScreen` y, a su vez, dentro del `Animated.View` con
+  `PanResponder` de `FavoritesCarousel` — el gesto de scroll vertical no
+  compite con el del carrusel porque este último solo reclama arrastres
+  claramente horizontales (mismo principio ya usado en toda la app, de
+  #33).
+- Se extrajo `renderEntryRow` (antes el `TouchableOpacity` de cada
+  entrada estaba repetido inline) porque ahora hay dos lugares que lo
+  necesitan: la lista directa y el contenido del `ScrollView`.
+
+**Alternativas descartadas.**
+
+- **Borrar `pinnedExpanded`/`PinButton`/`SetListPinnedExpanded`** al
+  quedar sin efecto visible en Favoritos. Se consultó explícitamente;
+  el usuario eligió dejarlo en el código tal cual, sin usarlo desde
+  ningún lado nuevo.
+- **Un solo panel en vez de 3 cuando `count === 2`** (ya que "anterior" y
+  "siguiente" son el mismo ítem). Se descartó por simplicidad: la
+  desambiguación de key alcanza, y mantener la estructura de 3 paneles
+  pareja para todos los `count >= 2` evita un caso especial de layout.
+
+**Consecuencias.** Ninguna relevante: el fix de la key es invisible para
+el usuario, y las listas en Favoritos ahora siempre muestran sus
+entradas (sin paso intermedio de "tocar para desplegar").
+
+---
+
+## 76. Favoritos: más espacio entre cards, todas del mismo alto, y se sacó el título de los carruseles *(elección del usuario)*
+
+**Contexto.** Tres ajustes a Favoritos: (1) más espacio entre las cards
+apiladas; (2) que todas las cards queden del **mismo alto**, rellenando
+con el propio fondo (blanco/card) las que sean más cortas en vez de
+dejarlas con distinto tamaño; (3) sacar el título "TRACKERS"/"LISTAS" que
+`FavoritesCarousel` (#72) mostraba arriba de cada carrusel, dejando solo
+el agrupamiento (las flechas `‹ N/M ›`, sin texto). (Nota: el punto (2) se
+entendió mal la primera vez — igualaba el alto de **todas** las cards de
+Favoritos entre sí; se corrigió en #77 para que sea por grupo, no
+general.)
+
+**Decisión.**
+
+- **`gap` de `FavoritesScreen` pasa de 12 a 22** — más separación entre
+  finanzas/mood/gimnasio/trackers/listas.
+- **Se sacó el título de `FavoritesCarousel`**: la prop `title` se borró
+  de la interfaz (y de los dos llamados en `FavoritesScreen`) — ya no
+  hacía falta en ningún otro lado. El encabezado del carrusel ahora solo
+  tiene las flechas `‹ N/M ›` (alineadas a la derecha, antes competían
+  por espacio con el título vía `space-between`); si hay un solo ítem, no
+  se renderiza encabezado en absoluto (nada que mostrar).
+- **Alto igualado con medición + `minHeight`, no con un valor fijo
+  inventado**: `TrackerCard` y `ListCard` suman una prop
+  `style?: StyleProp<ViewStyle>` que se mergea en su `View` raíz
+  (`[styles.card, style]`) — así quien las usa puede empujarles un
+  `minHeight` desde afuera sin que el componente sepa nada de "igualar
+  alto". *(Esta primera versión también se lo agregó a
+  `FinanceSummaryCard`/`MoodTrackerCard`/`GymTodayCard` y medía el máximo
+  entre **todas** las cards de Favoritos a la vez — eso se revirtió en
+  #77: ver esa entrada para el diseño final, por grupo.)*
+
+**Alternativas descartadas.**
+
+- **Un alto fijo en píxeles, estimado a mano.** Cualquier número fijo se
+  desactualiza en cuanto cambia el contenido de una card (un tracker con
+  más opciones, una lista con más entradas visibles, etc.); medir de
+  verdad con `onLayout` se ajusta solo.
+- **Envolver cada card en un contenedor externo con su propio fondo**, en
+  vez de pasarle `minHeight` a la card real. Hubiera generado una card
+  dentro de otra (doble fondo, borde solo alrededor del contenido
+  original) — visualmente partido en dos en vez de una sola caja pareja.
+
+**Consecuencias.** Las cards tardan un render extra (natural → medir →
+reaplicar `minHeight`) antes de quedar todas igualadas; en la práctica no
+se nota porque pasa antes de que termine de cargar la pantalla.
+
+---
+
+## 77. Fix: el alto igualado era entre todos los favoritos, tenía que ser por grupo *(fix)*
+
+**Contexto.** #76 igualaba el alto de **todas** las cards de Favoritos
+entre sí (finanzas, mood, gimnasio, el tracker actual del carrusel, la
+lista actual del carrusel) contra la más alta de **todo el conjunto**. Se
+corrigió: el relleno tiene que ser contra la más alta **de su propio
+grupo** — el carrusel de trackers se iguala contra el tracker favorito
+más alto (no contra una lista ni contra el cuadro de gimnasio), y el
+carrusel de listas contra la lista favorita más alta. Finanzas, mood y
+gimnasio son grupos de un solo ítem cada uno, así que no hay nada contra
+qué igualarlos — quedan en su alto natural.
+
+**Decisión.**
+
+- **La medición y el `minHeight` se movieron de `FavoritesScreen` a
+  `FavoritesCarousel`**: cada instancia del carrusel (una para trackers,
+  otra para listas) mide el alto de **sus propios** ítems nomás —
+  `maxItemHeight`, con el mismo patrón de #76 (`onLayout` por ítem,
+  `Math.max` que nunca decrece, reinicio si cambia el conjunto de ítems
+  de *ese* carrusel — ahora comparando `items.map(i => i.id).join('|')`,
+  no las claves de todas las cards de Favoritos).
+- **`renderItem` pasa a recibir el `minHeight` como segundo argumento**
+  (`(item: T, minHeight: number) => ReactNode`) en vez de que
+  `FavoritesScreen` se lo inyecte desde afuera — el carrusel calcula su
+  propio máximo y se lo entrega a quien arma cada `TrackerCard`/`ListCard`,
+  que lo aplica con la prop `style` (de #76) tal cual.
+- **Se sacó la prop `style` de `FinanceSummaryCard`, `MoodTrackerCard` y
+  `GymTodayCard`**: con el alto por grupo, esas tres cards (grupos de 1)
+  no tienen contra qué igualarse, así que la prop quedaba sin ningún
+  llamador — se borró en vez de dejarla sin usar. `TrackerCard` y
+  `ListCard` la conservan, porque sí la sigue usando el carrusel.
+- **`FavoritesScreen` vuelve a renderizar finanzas/mood/gimnasio
+  directo**, sin el `View` envolvente con `onLayout` que tenían en #76
+  (ya no hace falta medirlas).
+
+**Alternativas descartadas.**
+
+- **Igualar por "tipo de card" pero calculado afuera, en `FavoritesScreen`**
+  (dos máximos en vez de uno: uno para trackers, otro para listas). Es
+  estrictamente más código que dejar que cada `FavoritesCarousel` mida lo
+  suyo — el carrusel ya tiene los `items` de ese grupo nomás, no hace
+  falta que el padre vuelva a separarlos por tipo.
+
+**Consecuencias.** Ninguna relevante — es una corrección de alcance sobre
+#76, no cambia nada del resto de la interacción (swipe circular, flechas,
+etc.). *(Nota: en #78 se sacó el relleno por completo — ni global ni por
+grupo — a pedido explícito del usuario; ver esa entrada para el diseño
+final.)*
+
+---
+
+## 78. Carrusel sin relleno: cada ítem en su tamaño natural, y lo de abajo se acomoda solo *(elección del usuario)*
+
+**Contexto.** Se pidió deshacer el relleno de #76/#77 por completo: cada
+tracker/lista tiene que verse en su **tamaño natural**, sin estirarlo para
+igualarlo a ningún otro. Como consecuencia, si al deslizar aparece un
+ítem más alto o más bajo que el anterior, lo que sigue debajo en
+Favoritos (el resto de las cards apiladas) tiene que subir o bajar para
+acomodarse — sin eso, un ítem más chico que su vecino (montado al costado
+para la animación de deslizar) dejaba ver el borde gris de abajo del
+vecino más alto asomando debajo de la card actual (el síntoma de "bordes
+grises abajo del carrusel de trackers"). También se pidió más separación
+entre el encabezado `‹ N/M ›` y la card dentro de cada carrusel.
+
+**Decisión.**
+
+- **Se sacó el relleno por completo**: `TrackerCard` y `ListCard`
+  vuelven a no tener prop `style` (la agregaron #76/#77, ya sin ningún
+  llamador). `renderItem` vuelve a su firma original,
+  `(item: T) => ReactNode`, sin el segundo argumento de alto.
+- **La causa real de los "bordes grises"**: con los 3 paneles (anterior/
+  actual/siguiente) montados a la vez en una fila (`flexDirection: 'row'`)
+  para la animación de deslizar, el alto de esa fila sale del panel **más
+  alto de los tres** aunque los otros dos estén tapados — así que si el
+  vecino de al lado era más alto que el actual, su borde de abajo
+  asomaba por debajo de la card que se estaba mirando. La solución no es
+  "igualar todos los paneles" (eso es el relleno que se pidió sacar): es
+  **recortar el carrusel al alto del panel actual nomás**.
+- **`FavoritesCarousel` mide el alto de cada ítem por separado** (un
+  `Record<string, number>` por `id`, no un máximo global ni por grupo) y
+  le pone al contenedor (`viewport`, que ya tenía `overflow: 'hidden'`)
+  un `height` explícito igual al alto del ítem **actual** — los paneles
+  vecinos, que siguen montados de costado para poder deslizar, quedan
+  recortados por ese `overflow: 'hidden'` en vez de estirar el
+  contenedor. Como cada `id` guarda su propio alto (no un máximo que
+  nunca decrece), no hace falta ningún reinicio al cambiar el conjunto de
+  ítems — si el contenido de un ítem cambia, su `onLayout` vuelve a
+  disparar y el valor se actualiza solo.
+- **`LayoutAnimation.configureNext()` justo antes de cambiar de ítem**
+  (en el mismo lugar donde ya cambiaba el índice, al terminar la
+  animación de deslizar): así, cuando el alto del carrusel cambia porque
+  el ítem actual es más alto o más bajo que el anterior, React Native
+  anima esa transición de layout — lo que sigue debajo en Favoritos sube
+  o baja con una animación en vez de saltar de golpe. En Android hace
+  falta habilitarlo una vez con
+  `UIManager.setLayoutAnimationEnabledExperimental(true)` (con chequeo de
+  que exista, por si la Nueva Arquitectura ya no lo necesita o no lo
+  expone).
+- **Más separación dentro de cada carrusel**: el `gap` entre el
+  encabezado `‹ N/M ›` y la card pasó de 8 a 16. *(Nota: en #79 esto se
+  reemplazó por completo — el contador deja de tener una fila propia y
+  pasa a flotar en el espacio entre cards, ver esa entrada.)*
+
+**Alternativas descartadas.**
+
+- **Interpolar el alto en vivo durante el arrastre** (que el carrusel ya
+  vaya cambiando de alto mientras se desliza, no solo al soltar). Mucho
+  más complejo (requeriría un `Animated.Value` de alto atado al progreso
+  del gesto) para una mejora que solo se nota en el instante del
+  arrastre; el salto de alto al **soltar** (ya animado con
+  `LayoutAnimation`) cubre el pedido sin esa complejidad.
+
+**Consecuencias.** Durante el arrastre, si el panel vecino es más alto
+que el actual, su contenido de más abajo queda recortado mientras se
+desliza (no se ve completo hasta que termina la transición y el alto se
+actualiza) — es el costo directo de no rellenar: el contenedor se ajusta
+recién cuando ese ítem pasa a ser el actual.
+
+---
+
+## 79. Favoritos: "Ordenar" a la altura del saludo, swipe fuera de los carruseles, contador flotando en el espacio entre cards, transición más suave y fix de la sombra cortada *(elección del usuario + fix)*
+
+**Contexto.** Cinco ajustes a Favoritos: (1) que "Ordenar" quede a la
+misma altura que el saludo "Hola {nombre}!", no debajo; (2) que deslizar
+en cualquier parte de la pantalla que **no** sea un carrusel navegue a
+"Rutina diaria" — #73 había sacado ese swipe de pantalla entera al
+convertir "Rutina diaria" en pestaña de menú, pero se pidió de vuelta,
+acotado; (3) que el espacio entre una card suelta y un carrusel sea
+igual al espacio entre dos cards sueltas, poniendo el contador `‹ N/M ›`
+**en ese mismo espacio** en vez de sumar uno propio; (4) que la
+transición entre ítems del carrusel sea más suave; (5) en el carrusel de
+trackers se veían líneas grises y un margen oscuro de más, cortados por
+debajo — la sombra de `TrackerCard` quedando recortada por el
+`overflow: 'hidden'` del carrusel (de #78).
+
+**Decisión.**
+
+- **"Ordenar" al lado del saludo**: `FavoritesScreen` vuelve a tener una
+  fila (`headerRow`, como antes de que se sacara el link de "Rutina
+  Diaria ›" en #73) con el saludo y "Ordenar" en los extremos
+  (`justifyContent: 'space-between'`), arriba del subtítulo "Tus
+  favoritos" — ya no es una fila propia debajo, alineada a la derecha.
+- **Swipe de vuelta, acotado a "fuera de los carruseles"**: `FavoritesScreen`
+  vuelve a envolver todo en `useHorizontalSwipe` (`onSwipeLeft` → navegar
+  a `DailyRoutines`, igual que antes de #73). No hace falta coordinarlo a
+  mano con el swipe de `FavoritesCarousel`: el sistema de responders de
+  React Native le da el gesto al `PanResponder` más específico donde
+  arranca el toque — si arranca sobre una card de un carrusel, gana el
+  carrusel (cambia de ítem); si arranca en cualquier otro lado de la
+  pantalla, gana este swipe de pantalla (mismo principio ya usado varias
+  veces en la app, de #62). (Nota: en la práctica esto no se arbitraba
+  así — ver #81.)
+- **El contador deja de tener fila propia**: se sacó el `gap` interno de
+  `FavoritesCarousel` (el de #78) y el contador pasa a ser un overlay
+  **absolutamente posicionado**, anclado arriba a la derecha del
+  carrusel, con `top: -FAVORITES_CARD_GAP` y `height: FAVORITES_CARD_GAP`
+  (centrado adentro con `justifyContent: 'center'`) — así ocupa
+  exactamente el espacio que ya separaba esta card de la anterior
+  (`FAVORITES_CARD_GAP`, nueva constante exportada de
+  `FavoritesCarousel.tsx`, **22**, el mismo valor que usa
+  `FavoritesScreen` para el `gap` entre cards) en vez de agregar una
+  fila con su propio espacio. Al no agregar altura propia, el espacio
+  antes de un carrusel queda igual al que hay entre dos cards sueltas.
+- **Transición más suave**: la animación de deslizar pasa de 220ms
+  lineal-ish a 320ms con `Easing.out(Easing.cubic)` (desacelera al
+  llegar, en vez de la curva por defecto de `Animated.timing`).
+- **Fix de la sombra cortada**: `FavoritesCarousel` suma una prop
+  `extraHeight?: number` (por defecto 0) que se le suma al `height` del
+  `viewport` además del alto del ítem actual — le da margen a la sombra
+  de la card para que el `overflow: 'hidden'` no la corte de golpe (lo
+  que se veía como una línea/margen gris). `FavoritesScreen` le pasa
+  `extraHeight={16}` solo al carrusel de **trackers** (`TrackerCard`
+  tiene sombra — `shadowRadius: 12`, `elevation: 2`); el de listas no lo
+  necesita (`ListCard` no tiene sombra, y agregarlo ahí hubiera dejado un
+  hueco vacío sin motivo, rompiendo el pedido (3) de espacio exacto).
+
+**Alternativas descartadas.**
+
+- **Sacarle la sombra a `TrackerCard`** en vez de darle margen al
+  recorte. `TrackerCard` se usa también en la pestaña Trackers (fuera de
+  cualquier carrusel), donde la sombra sí se ve bien; sacarla ahí para
+  arreglar un problema solo de Favoritos hubiera sido un cambio visual
+  no pedido en otra pantalla.
+- **Coordinar a mano el swipe de pantalla con el del carrusel** (por
+  ejemplo, deshabilitar el de pantalla mientras el dedo está sobre un
+  carrusel). No hace falta: el sistema de responders de RN ya resuelve
+  esto solo según dónde arranca el gesto, como ya se documentó en #62.
+  (Nota: esto resultó ser falso — ver #81.)
+
+**Consecuencias.** `FAVORITES_CARD_GAP` queda duplicado conceptualmente
+entre el `gap` de `FavoritesScreen.content` y el `top`/`height` del
+overlay en `FavoritesCarousel` — se resolvió importando la misma
+constante en los dos lugares en vez de dos números sueltos, pero si se
+cambia el espaciado de Favoritos hay que tocar ese valor en
+`FavoritesCarousel.tsx` (de donde se exporta), no en `FavoritesScreen.tsx`.
+
+---
+
+## 80. Fix de dependencias desalineadas, limpieza del no-op de `LayoutAnimation` y swipe-derecha de Rutina diaria a Favoritos *(fix + elección del usuario)*
+
+**Contexto.** Tres problemas reportados juntos: (1) la consola mostraba
+`WARN setLayoutAnimationEnabledExperimental is currently a no-op in the
+New Architecture` — la llamada de setup que #79 (vía un fix anterior)
+había dejado protegida con try/catch por las dudas, ahora confirmada
+como ruido inofensivo y no una causa de crash; (2) `ERROR [Error:
+Cannot find native module 'ExpoTopicSubscriptionModule']`, sin ningún
+uso directo de ese módulo en el código (`core/notifications/notifications.ts`
+solo importa `expo-notifications` de forma perezosa); (3) la
+especificación completa de swipes de la app quedó incompleta: en
+Rutina diaria, deslizar hacia la derecha en cualquier lugar que no sea
+el calendario debía volver a Favoritos, simétrico al swipe
+izquierda→Rutina diaria de Favoritos (#79) y al swipe de período del
+calendario (#62) — ese tercer gesto nunca se había agregado.
+
+**Decisión.**
+
+- **Dependencias**: `npx expo install --check` encontró a `expo`,
+  `expo-file-system`, `expo-notifications`, `expo-sharing`,
+  `expo-updates` y `react-native` desalineados con lo que pide el SDK
+  58 instalado — ese desajuste entre la versión de `expo-notifications`
+  y el set de módulos nativos que trae Expo Go es la causa más probable
+  de `ExpoTopicSubscriptionModule` no encontrado. `npx expo install
+  <paquete>@<versión>` falló en este entorno con `npm error code
+  EALLOWSCRIPTS` (`--allow-scripts is not allowed in project-scoped
+  installs`); se instaló en cambio directo con `npm install
+  expo@58.0.21 expo-file-system@58.0.13 expo-notifications@58.1.7
+  expo-sharing@58.0.21 expo-updates@58.0.19 react-native@0.88.1`, y
+  luego se corrigieron a mano los prefijos `^` que `npm install` deja
+  por defecto de vuelta a `~` (convención de los sub-paquetes `expo-*`
+  en este proyecto) para `expo-file-system`, `expo-notifications`,
+  `expo-sharing` y `expo-updates`. `npx expo install --check` confirma
+  "Dependencies are up to date" después.
+- **Limpieza del no-op**: se sacó por completo el bloque de
+  `UIManager.setLayoutAnimationEnabledExperimental(true)` (y los
+  imports de `UIManager`/`Platform` que solo servían para eso) de
+  `FavoritesCarousel.tsx` — en la Nueva Arquitectura no hace nada, así
+  que protegerlo con try/catch solo evitaba un warning con otro
+  warning. La llamada a `LayoutAnimation.configureNext(...)` en sí
+  (la que sí hace algo, acomodando lo que sigue debajo cuando un ítem
+  cambia de alto) queda intacta.
+- **Swipe derecha en Rutina diaria**: `DailyRoutinesScreen` ahora
+  también usa `useHorizontalSwipe` (`onSwipeRight` → navegar a
+  `Favorites`; `onSwipeLeft` sin acción, no hay a dónde ir desde la
+  última pantalla), envolviendo el `ScrollView` en un `View` con ese
+  handler. El swipe de período de `RoutineTrackerCalendar` (#62) queda
+  anidado adentro sin tocarlo: mismo principio de resolución de
+  `PanResponder`s por especificidad ya usado en #62 y #79 — si el
+  gesto arranca sobre el calendario, se lo lleva el calendario; si
+  arranca en cualquier otro lado de la pantalla, se lo lleva este
+  swipe nuevo. Con esto la especificación completa de swipes queda:
+  carrusel de Favoritos cambia de ítem; fuera de los carruseles en
+  Favoritos, swipe izquierda abre Rutina diaria; calendario de Rutina
+  diaria cambia de período; fuera del calendario en Rutina diaria,
+  swipe derecha vuelve a Favoritos.
+
+**Alternativas descartadas.**
+
+- **Dejar el try/catch** alrededor de `setLayoutAnimationEnabledExperimental`
+  en vez de sacarlo. No tiene sentido mantener código que no hace nada
+  en la Nueva Arquitectura (que es la única que usa este proyecto) solo
+  para no "perder" una línea; sacarlo es más simple y elimina el warning
+  de raíz.
+- **Investigar un import directo de `expo-notifications` como causa**
+  del error de módulo nativo. Se descartó tras grepear el código: el
+  único uso es el wrapper perezoso en `core/notifications/notifications.ts`
+  y la entrada en `app.json`; el desajuste de versiones explicaba mejor
+  el síntoma (y `expo install --check` lo confirmó directamente).
+
+**Consecuencias.** Ninguna nueva — `npx tsc --noEmit` y `npx expo
+export --platform android --output-dir dist-check` (seguido de borrar
+esa carpeta) corrieron limpios después de los tres cambios.
+
+---
+
+## 81. Fix: los swipes anidados no se arbitraban bien — se reemplazó `PanResponder` por `react-native-gesture-handler` *(fix)*
+
+**Contexto.** Se reportó que ni el swipe de los ítems del carrusel de
+Favoritos ni el swipe de período del calendario de Rutina diaria
+funcionaban. La hipótesis de #62/#72/#79/#80 — que el sistema de
+responders de React Native le da el gesto al `PanResponder` **más
+específico** de dónde arranca el toque, sin necesidad de coordinar nada
+a mano — resultó falsa en la práctica: el swipe de pantalla completa
+(más externo) se quedaba con el gesto aunque arrancara sobre un
+carrusel o un calendario, así que el interno nunca llegaba a activarse.
+Esto es un problema conocido de `PanResponder` anidado en React Native,
+agravado en la Nueva Arquitectura (Fabric, la única que corre esta app
+desde SDK 58): la negociación de responders no es fiable para este
+patrón, y la alternativa documentada por la comunidad es
+`react-native-gesture-handler`, que sí tiene una forma explícita de
+declarar prioridad entre gestos anidados.
+
+**Decisión.**
+
+- **Nueva dependencia**: `react-native-gesture-handler` (`~3.3.0`, la
+  versión que `expo install --check` marca compatible con el SDK 58
+  instalado) — ya viene incluida en Expo Go para este SDK, así que no
+  hace falta un development build para probarla. Esto **revierte**,
+  solo para este subsistema de gestos, la preferencia de #33/#70/#74 de
+  no agregar dependencias nativas nuevas: se consultó al usuario
+  explícitamente antes de instalarla (la alternativa sin dependencias
+  nuevas era re-escribir la arbitración a mano, midiendo los límites de
+  cada carrusel/calendario) y eligió agregarla.
+- **Toda la app queda envuelta en `GestureHandlerRootView`** (`App.tsx`,
+  lo más cerca posible de la raíz, como pide la librería).
+- **`useHorizontalSwipe` deja de devolver `panHandlers`** (de un
+  `PanResponder`) **y pasa a devolver un `PanGesture`** (de
+  `usePanGesture`), para usar con `<GestureDetector gesture={...}>` en
+  vez de `<View {...swipe}>`. Los umbrales quedan iguales en espíritu:
+  `activeOffsetX: [-18, 18]` (antes `CLAIM_THRESHOLD`) y
+  `failOffsetY: [-10, 10]` (antes el ratio 1.8), con el commit
+  (`MIN_DISTANCE = 45`) decidido en `onDeactivate` contra
+  `translationX`. Suma un parámetro opcional **`requireToFail`**: el
+  gesto (o los gestos) que tienen que fallar antes de que éste se
+  active — la pieza que faltaba para que el anidado funcione de verdad.
+- **El gesto de cada carrusel/calendario se crea en la pantalla, no en
+  el componente hijo**, porque `requireToFail` necesita el objeto
+  `PanGesture` del hijo en el momento en que se crea el del padre, y los
+  hooks del hijo todavía no corrieron en ese punto del render. Por eso:
+  - `FavoritesCarousel.tsx` exporta `useCarouselSwipe(itemCount)`, que
+    devuelve `{ gesture, translateX, index, go, setWidth }` — toda la
+    lógica de arrastre que antes vivía adentro del componente
+    (`completeTransition`, `cancelDrag`, el índice, el `Animated.Value`)
+    se movió a este hook. `FavoritesScreen` lo llama una vez para
+    trackers y otra para listas (siempre, sean o no la cantidad de
+    ítems 0 — son hooks, no pueden ser condicionales) y le pasa el
+    resultado a `FavoritesCarousel` por la prop `swipe`; el propio
+    `FavoritesCarousel` queda como componente "tonto" que solo mide
+    layout (anchos, altos por ítem) y renderiza con lo que le pasaron.
+  - `RoutineTrackerCalendar` recibe el gesto de período por la prop
+    `swipeGesture` en vez de crearlo — `DailyRoutinesScreen` lo crea con
+    `useHorizontalSwipe` y se lo pasa, igual que ya le pasaba `period`
+    (el período ya vivía en el view-model del padre; el gesto ahora
+    sigue el mismo patrón).
+  - Con eso, `FavoritesScreen.swipe` y `DailyRoutinesScreen.swipe` (los
+    de pantalla completa) declaran `requireToFail` apuntando a esos
+    gestos internos.
+- **Los otros cuatro usos de `useHorizontalSwipe`** (`EventsScreen`,
+  `MoodProgressScreen`, `TrackerProgressScreen` — swipe de período, sin
+  anidado — y los dos de Favoritos/Rutina diaria de arriba) se
+  actualizaron del patrón `<View {...swipe}>` a
+  `<GestureDetector gesture={swipe}><View>...</View></GestureDetector>`;
+  no necesitaban `requireToFail` porque no tienen otro gesto adentro.
+
+**Alternativas descartadas.**
+
+- **Arbitrar a mano con un solo `PanResponder` por pantalla**, midiendo
+  los límites del carrusel/calendario (`onLayout`) y decidiendo en el
+  gesto de inicio si el toque arrancó adentro o afuera. Sin dependencias
+  nuevas, pero mucho más código y casos borde (medir después de scroll,
+  después de reflow por `LayoutAnimation`, etc.) para resolver algo que
+  `react-native-gesture-handler` ya resuelve de forma declarativa y
+  probada. Se le presentó la opción al usuario junto con la de agregar
+  la librería; eligió la librería.
+- **Seguir con `PanResponder` pero sin anidar** (por ejemplo, un solo
+  gesto de pantalla que delegue al carrusel/calendario mediante un ref
+  imperativo). Mismo problema de fondo que la alternativa anterior:
+  es la reimplementación a mano de lo que ya hace `requireToFail`.
+
+**Consecuencias.** La lógica de arrastre del carrusel (antes encerrada
+en `FavoritesCarousel.tsx`) ahora está repartida entre el hook
+`useCarouselSwipe` (en el mismo archivo, exportado) y `FavoritesScreen`
+(que lo invoca); hay que tenerlo en cuenta si se agrega un tercer tipo
+de carrusel a Favoritos — necesita su propio `useCarouselSwipe(...)` en
+la pantalla, igual que trackers y listas. `npx tsc --noEmit` y `npx expo
+export --platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 82. Fix: flash del ítem anterior al cambiar de ítem en el carrusel de Favoritos *(fix)*
+
+**Contexto.** Al terminar la transición de un ítem del carrusel al
+siguiente/anterior, se veía por un instante el ítem **anterior** antes
+de asentarse en el nuevo. La pregunta de si "todos los ítems de
+Favoritos quedan separados por el mismo espacio, y el que sigue debajo
+de un carrusel sube/baja para acomodarse" (ya resuelto por #78/#79 con
+`LayoutAnimation` + el `gap` del contenedor) seguía cumpliéndose en los
+hechos — no había una regresión ahí —, pero el flash hacía que la
+transición se viera rota de punta a punta.
+
+**Decisión.** `completeTransition` (adentro de `useCarouselSwipe`,
+`FavoritesCarousel.tsx`) reseteaba `translateX` a 0 **antes** de llamar
+a `setIndex`. El problema: `translateX.setValue(0)` es un cambio nativo
+que toma efecto en el frame siguiente, pero `setIndex` dispara un
+re-render de React que tarda un tick más en llegar a pantalla — en ese
+hueco, el carrusel mostraba el ítem **viejo** en la posición de reposo
+(porque `translateX` ya estaba en 0 pero el índice todavía no había
+cambiado). Se movió el reseteo de `translateX` a un `useLayoutEffect`
+atado a `index`: así se aplica en el mismo paso visual que el re-render
+con el índice nuevo, nunca por separado. La animación de arrastre en sí
+(`Animated.timing` hasta el ancho completo) y el orden de
+`LayoutAnimation.configureNext()` antes de `setIndex` quedan iguales.
+
+**Alternativas descartadas.**
+
+- **Resetear `translateX` directamente en el callback de `setIndex`**
+  (como un segundo `setState` o con `InteractionManager`). Innecesario:
+  `useLayoutEffect` ya es la herramienta de React pensada exactamente
+  para esto (sincronizar un efecto imperativo con un cambio de estado
+  antes de que se pinte), sin inventar un mecanismo propio.
+
+**Consecuencias.** Ninguna — es un cambio de orden/timing puro, sin
+tocar la geometría del carrusel. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 83. Fix: gap enorme entre dos carruseles seguidos en Favoritos, y seguir reduciendo el flash *(fix)*
+
+**Contexto.** Se reportó un espacio mucho más grande de lo normal entre
+el carrusel de trackers y el de listas (cuando los dos están presentes,
+uno seguido del otro) — rompía el pedido de #78/#79 de que todas las
+cards de Favoritos queden separadas por el mismo espacio. También se
+reportó que el flash del ítem anterior (#82) seguía pasando, aunque más
+chico.
+
+**Decisión.**
+
+- **Causa del gap**: `track` (la fila con los 3 paneles prev/current/next
+  del carrusel) no fijaba `alignItems`, así que usaba el default de
+  Yoga para una fila: `stretch` — estira los hijos a la altura del más
+  alto de los tres. Si alguno de los paneles **no visibles** (prev o
+  next) era bastante más alto que el panel actual, ese alto de más se
+  colaba en el cálculo del recorte (`viewport`) en ciertos momentos
+  (por ejemplo, el primer render de un alto nuevo, antes de que el
+  `height` explícito del recorte tomara efecto), dejando un hueco
+  transparente debajo de la card visible, **dentro de la caja del
+  carrusel** — no se veía como "contenido cortado", se veía como
+  espacio de más antes del siguiente carrusel. Se fijó `alignItems:
+  'flex-start'` en `track`: cada panel mide su propio alto nomás, nunca
+  se estira al de un vecino que ni se ve.
+- **Se reemplazó `LayoutAnimation` por un `Animated.Value` propio** para
+  el alto del recorte (`viewportHeightAnim`, en `FavoritesCarousel`):
+  en vez de depender de la detección automática de `LayoutAnimation`
+  (que además de la causa de arriba, es conocida por no ser confiable
+  en Android con la Nueva Arquitectura — puede dejar un alto
+  intermedio trabado si una animación se interrumpe por la siguiente
+  antes de asentarse), ahora el alto del recorte se anima explícitamente
+  con `Animated.timing` (`useNativeDriver: false`, porque `height` no
+  lo soporta) cada vez que cambia el alto del ítem actual — mismo
+  patrón ya usado para el `translateX` horizontal, pero para el alto.
+  La primera vez que se mide un carrusel, el alto se fija de una (sin
+  animar desde 0).
+- **Flash, reducido más pero sin garantía de estar 100% eliminado**: al
+  sacar el snap instantáneo de alto (antes ocurría en el mismo render
+  que el cambio de ítem, vía `LayoutAnimation`) y reemplazarlo por una
+  transición suave, se achica una fuente más de salto visual junto al
+  cambio de ítem. Pero el flash en sí (#82) depende de que un
+  `Animated.Value` con `useNativeDriver: true` (que cambia en el hilo
+  nativo) y un cambio de estado de React (que cambia en el hilo de JS,
+  vía Fabric) aterricen en el mismo frame — `useLayoutEffect` ayuda
+  pero no lo garantiza al 100% bajo la Nueva Arquitectura con render
+  concurrente (React 19). Si sigue viéndose, el próximo paso sería
+  dejar de armar el carrusel a mano (3 paneles + reset de índice) y
+  pasarlo a un `ScrollView` horizontal con `pagingEnabled` (de
+  `react-native-gesture-handler`, que expone su propio `ScrollView`
+  componible con `requireToFail` vía `useNativeGesture`) — un
+  carrusel nativo no tiene este problema porque la posición visual
+  **es** la fuente de verdad, no hay "reset" que sincronizar.
+
+**Alternativas descartadas.**
+
+- **Reescribir el carrusel ya mismo con `ScrollView` + `pagingEnabled`**
+  para eliminar el flash de raíz. Es un cambio bastante más grande
+  (hay que resolver el wrap circular y la medición de alto por ítem de
+  nuevo); se prefirió primero agotar los fixes acotados (que además
+  resuelven el bug del gap, confirmado) y confirmar con el usuario si
+  el flash remanente sigue siendo molesto antes de encarar la reescritura.
+
+**Consecuencias.** Queda pendiente confirmar si el flash remanente
+desaparece con este cambio o si hace falta la reescritura a
+`ScrollView` nativo mencionada arriba. `npx tsc --noEmit` y `npx expo
+export --platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 84. "Seguimiento de Rutina" pasa a ser de uso interno; Favoritos muestra la lista de tareas + % completado en su lugar *(elección del usuario)*
+
+**Contexto.** Se pidió que el tracker "Seguimiento de Rutina" deje de
+verse en cualquier lado que no sea la propia pantalla "Rutina diaria"
+(donde pinta el calendario de seguimiento) — hasta ahora también
+aparecía en la pestaña **Trackers** y en el carrusel de trackers de
+Favoritos, como un tracker más, lo cual no tenía mucho sentido: es de
+**solo lectura** (lo completa `SyncRoutineTracker` solo, no se carga a
+mano) y mostrarlo junto a trackers reales invitaba a tocarlo como si
+fuera uno. En su lugar, se pidió que Favoritos muestre la lista de
+tareas de "Rutina diaria" con un indicador de cuánto se completó.
+
+**Decisión.**
+
+- **El tracker se excluye explícitamente por id**, sin importar su flag
+  `favorite`, en los dos únicos lugares que antes lo mostraban:
+  `useTrackersViewModel` (pestaña Trackers) y `useFavorites` (carrusel
+  de trackers). De paso, `SyncRoutineTracker` ya no lo crea con
+  `favorite: true` (quedó sin efecto en ningún lado, así que se puso en
+  `false` para que el campo no mienta). También se excluye de
+  `syncTrackerReminder` (`core/notifications/notifications.ts`): antes
+  contaba como "tracker sin cargar" para el recordatorio de las 23:00
+  aunque el usuario nunca lo carga a mano, lo que iba a generar avisos
+  falsos.
+- **Nueva card `DailyRoutineSummaryCard`** en Favoritos (reemplaza al
+  tracker en esa posición): la lista de tareas de hoy, con checkbox —
+  se tildan sin salir de Favoritos, mismo `setDailyTaskDone` que usa la
+  pantalla "Rutina diaria" (y re-sincroniza el tracker interno después,
+  igual que hace `useDailyRoutines.reload` — así el calendario de
+  "Rutina diaria" no queda desactualizado si se tilda desde acá) — y un
+  indicador de cuánto se completó (`X/Y` + barra de progreso simple,
+  sin librería nueva). Si no hay tareas todavía, un mensaje + el mismo
+  link de abajo ("Ver rutina diaria →") para ir a crear una.
+- **Nuevo flag `dailyRoutineFavorite` en `UserProfile`** (default
+  `true`, igual patrón que `financeFavorite`/`moodFavorite`/`gymFavorite`):
+  la card tiene su propia estrella (`FavoriteStar`) para sacarla de
+  Favoritos si no se la quiere ver. Se sumó a `UserProfilePatch`,
+  `createUserProfile` y, importante, a `UserProfileDto`
+  (`userProfileToDto`/`userProfileFromDto`) — sin tocar el DTO el flag
+  no se iba a persistir entre reinicios de la app, quedaba siempre en
+  el default.
+- **Posición por defecto**: la card de Rutina diaria va **primera**
+  (antes que finanzas/mood/gimnasio), el mismo lugar que antes ocupaba
+  el tracker cuando estaba entre los favoritos — mismo criterio ("lo
+  primero que se quiere ver al entrar"), ahora sin depender de que el
+  tracker esté marcado favorito.
+- **Trackers y Favoritos simplificados**: con el tracker afuera, se
+  sacó toda la lógica de reordenarlo primero dentro del carrusel
+  (`orderedTrackers`/`hasRoutineTracker` en `useFavorites`) y el
+  redirect especial a "Rutina diaria" en el `onSeeProgress` de
+  `TrackerCard` (`TrackersScreen` y `FavoritesScreen`) — ya no hace
+  falta, el tracker nunca se renderiza en esos lugares.
+
+**Alternativas descartadas.**
+
+- **Dejar el tracker visible pero de solo lectura** (sin check-in) en
+  Trackers/Favoritos, en vez de sacarlo del todo. No era lo que se
+  pidió, y seguía siendo confuso tener un tracker que no se puede
+  cargar mezclado con los que sí.
+- **Un componente nuevo para la barra de progreso** (librería de
+  gráficos). Dos `View` (pista + relleno con `width` en %) alcanzan
+  para esto; no se agregó una dependencia nueva para un indicador tan
+  simple.
+
+**Consecuencias.** Un usuario que ya tenía el tracker real guardado con
+`favorite: true` (de antes de este cambio) lo sigue teniendo así en el
+storage — no se migró ese dato — pero no importa: el filtro por id lo
+excluye igual, sin mirar el flag. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 85. Fix: líneas/bordes grises en `TrackerCard` dentro del carrusel de Favoritos *(fix)*
+
+**Contexto.** Se reportó un borde/línea gris visible alrededor de
+`TrackerCard` **solo** dentro del carrusel de trackers de Favoritos —
+no pasaba con `ListCard` en el carrusel de listas, ni con `TrackerCard`
+en la pestaña Trackers (fuera de cualquier carrusel). Esto venía de
+antes (#78/#79 ya habían tocado un síntoma parecido) y seguía
+apareciendo pese al `extraHeight`/`TRACKER_SHADOW_ALLOWANCE` agregado
+en #79.
+
+**Decisión.** La causa de fondo: `TrackerCard` tiene sombra
+(`shadowColor`/`shadowOpacity`/`shadowRadius`/`shadowOffset` +
+`elevation` para Android) y el carrusel **necesita** recortar
+horizontalmente (`overflow: 'hidden'`, para esconder los paneles
+vecinos mientras no se están mostrando) — esa combinación corta la
+sombra de forma pareja en dos lados (donde hay más carrusel) y abrupta
+en los otros, dejando un borde/línea con pinta de "sombra mal cortada"
+en vez del degradé suave que se ve cuando la card está suelta (sin
+nada recortándola). El `extraHeight` de #79 solo le daba margen
+**vertical** al recorte — nunca pudo arreglar el recorte horizontal,
+que es estructural al carrusel (siempre hace falta para tapar los
+paneles vecinos). Se sacó la sombra de `TrackerCard` directamente
+(`shadowColor`/`shadowOpacity`/`shadowRadius`/`shadowOffset`/`elevation`),
+dejando solo el borde fino que ya tenía (`borderWidth: 1, borderColor:
+'#eef0f2'`) — mismo tratamiento que ya usan `GymTodayCard` y
+`FinanceSummaryCard` (borde, sin sombra). Con la sombra afuera, el
+`extraHeight`/`TRACKER_SHADOW_ALLOWANCE` que la protegía del recorte
+vertical ya no hacía falta — se sacó entero (la prop `extraHeight` de
+`FavoritesCarousel`, el único lugar que la usaba).
+
+**Alternativas descartadas.**
+
+- **Agrandar el margen vertical** (`extraHeight`) para que alcance.
+  No resuelve nada: el problema principal es el recorte **horizontal**
+  (constante, no un margen que se pueda agrandar sin mostrar de
+  vuelta los paneles vecinos).
+- **Sacar la sombra solo de la variante usada en el carrusel** (una
+  prop nueva en `TrackerCard`, p. ej. `elevated?: boolean`). Se
+  descartó: `TrackerCard` ya se ve igual en la pestaña Trackers que en
+  Favoritos salvo por esto, y mantener esa diferencia solo para
+  conservar una sombra que de cualquier forma es sutil (`shadowOpacity:
+  0.06`) no valía la complejidad de una variante nueva.
+
+**Consecuencias.** `TrackerCard` se ve un poco más "plano" (sin sombra)
+también en la pestaña Trackers, no solo en Favoritos — cambio menor,
+en línea con el resto de las cards de Favoritos (ninguna otra tiene
+sombra). `npx tsc --noEmit` y `npx expo export --platform android
+--output-dir dist-check` corrieron limpios.
+
+---
+
+## 86. Estrella para volver a agregar "Rutina diaria" a Favoritos, al lado de su propio "Ordenar" *(elección del usuario)*
+
+**Contexto.** De #84 en adelante, la única forma de sacar "Rutina
+diaria" de Favoritos es la estrella de su propia card
+(`DailyRoutineSummaryCard`) — pero una vez sacada, esa card ya no se
+renderiza, así que esa estrella desaparece con ella. A diferencia de
+trackers/listas (que tienen su propia pantalla — Trackers, una lista —
+donde favoritear de nuevo) o de finanzas/mood/gimnasio (cuya estrella
+vive en una pantalla aparte: Finanzas, Trackers, Gimnasio), "Rutina
+diaria" no tenía ningún otro lugar con una estrella — quedaba sin forma
+de volver a agregarla sin editar el storage a mano. Primer intento:
+ponerla en el header de Favoritos, al lado de **ese** "Ordenar" — el
+usuario pidió corregirlo a la pantalla "Rutina diaria", al lado de
+**su propio** "Ordenar" (el de reordenar tareas), que es el patrón que
+siguen las demás (estrella en la pantalla propia del ítem, no en
+Favoritos).
+
+**Decisión.** `useDailyRoutines` suma `favorite` (lee
+`profile.dailyRoutineFavorite` en cada `reload`, junto con la sesión —
+antes `reload` solo pedía la sesión) y `toggleFavorite` (actualiza el
+perfil y recarga). `DailyRoutinesScreen` pone una `FavoriteStar` en
+`summaryRow`, a la izquierda de su botón **"Ordenar"** — esa fila pasa
+a renderizarse siempre (antes solo aparecía con `vm.total > 0`, ya que
+sin tareas no había nada que mostrar ahí; ahora la estrella tiene que
+verse igual aunque no haya tareas todavía, así que el texto "X/Y
+tareas hechas hoy" queda vacío en ese caso en vez de ocultar toda la
+fila).
+
+**Alternativas descartadas.**
+
+- **Estrella en el header de Favoritos** (intento anterior,
+  revertido). Funcionaba, pero quedaba una estrella suelta sin
+  relación visual directa con "Rutina diaria" — el usuario prefirió
+  que siga el mismo patrón que el resto (estrella en la pantalla
+  propia del ítem).
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
 
 ---
 

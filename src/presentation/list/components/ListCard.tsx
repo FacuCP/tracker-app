@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { container } from '../../../core/di/container';
 import { theme } from '../../../core/theme';
@@ -22,7 +22,12 @@ interface Props {
   onTogglePin?: () => void;
   /** Se llama después de tildar/destildar un ítem desde la vista desplegada. */
   onEntryToggled?: () => void;
+  /** Solo en Favoritos: siempre desplegada, sin triángulo para colapsarla. */
+  alwaysExpanded?: boolean;
 }
+
+/** A partir de esta cantidad de entradas, la vista desplegada scrollea en vez de crecer sin límite. */
+const MAX_VISIBLE_ENTRIES = 15;
 
 function subtitle(list: List, counts: ListCounts): string {
   if (list.isTodo) {
@@ -39,8 +44,10 @@ function subtitle(list: List, counts: ListCounts): string {
  * Card de una lista. Tocar el encabezado entra a la lista; el botón ＋ agrega
  * una entrada rápida; el triángulo despliega/colapsa una vista de **solo
  * lectura** de los ítems (tildar en to-do lists; para editar o ver más hay
- * que entrar a la lista como siempre). En Favoritos, el pin hace que quede
- * desplegada por defecto la próxima vez.
+ * que entrar a la lista como siempre; con más de 15 entradas, esa vista
+ * scrollea en vez de crecer sin límite). En Favoritos, el pin hace que quede
+ * desplegada por defecto la próxima vez; con `alwaysExpanded` (también solo
+ * en Favoritos) queda siempre desplegada y no hay triángulo para colapsarla.
  */
 export function ListCard({
   list,
@@ -51,11 +58,13 @@ export function ListCard({
   showPin = false,
   onTogglePin,
   onEntryToggled,
+  alwaysExpanded = false,
 }: Props) {
   const [expanded, setExpanded] = useState(list.pinnedExpanded);
   const [entries, setEntries] = useState<ListEntry[] | null>(null);
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ListEntry | null>(null);
+  const isExpanded = alwaysExpanded || expanded;
 
   // Si se pinea desde otra parte (o al recargar), queda desplegada; nunca se
   // fuerza el colapso solo porque se despineó.
@@ -68,7 +77,7 @@ export function ListCard({
   // etc.), así que entra en las dependencias para no tener que cerrar y
   // volver a abrir la vista desplegada para que se actualice.
   useEffect(() => {
-    if (!expanded) return;
+    if (!isExpanded) return;
     let active = true;
     setLoadingEntries(true);
     container.getListEntries.execute(list.id).then((result) => {
@@ -80,13 +89,33 @@ export function ListCard({
     return () => {
       active = false;
     };
-  }, [expanded, list.id, counts.total, counts.done]);
+  }, [isExpanded, list.id, counts.total, counts.done]);
 
   async function toggleEntryDone(entry: ListEntry) {
     const next = !entry.done;
     setEntries((prev) => prev?.map((e) => (e.id === entry.id ? { ...e, done: next } : e)) ?? prev);
     await container.setListEntryDone.execute(list.id, entry.id, next);
     onEntryToggled?.();
+  }
+
+  function renderEntryRow(entry: ListEntry) {
+    return (
+      <TouchableOpacity
+        key={entry.id}
+        style={styles.entryRow}
+        onPress={() => setViewingEntry(entry)}
+        activeOpacity={0.6}
+      >
+        {list.isTodo ? (
+          <Checkbox checked={entry.done} onToggle={() => toggleEntryDone(entry)} />
+        ) : (
+          <View style={styles.bullet} />
+        )}
+        <Text style={[styles.entryName, list.isTodo && entry.done && styles.entryNameDone]} numberOfLines={1}>
+          {entry.name}
+        </Text>
+      </TouchableOpacity>
+    );
   }
 
   return (
@@ -111,42 +140,33 @@ export function ListCard({
           />
         ) : null}
 
-        <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
-          <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>
-        </TouchableOpacity>
+        {alwaysExpanded ? null : (
+          <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
+            <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity style={styles.addButton} onPress={onAddEntry} activeOpacity={0.7}>
           <Text style={styles.addSign}>＋</Text>
         </TouchableOpacity>
       </TouchableOpacity>
 
-      {expanded ? (
+      {isExpanded ? (
         <View style={styles.expanded}>
           {loadingEntries ? (
             <ActivityIndicator style={styles.entriesLoader} />
           ) : !entries || entries.length === 0 ? (
             <Text style={styles.emptyEntries}>{list.isTodo ? 'Sin tareas' : 'Sin entradas'}</Text>
+          ) : entries.length > MAX_VISIBLE_ENTRIES ? (
+            <ScrollView
+              style={styles.entriesScroll}
+              contentContainerStyle={styles.entriesScrollContent}
+              nestedScrollEnabled
+            >
+              {entries.map(renderEntryRow)}
+            </ScrollView>
           ) : (
-            entries.map((entry) => (
-              <TouchableOpacity
-                key={entry.id}
-                style={styles.entryRow}
-                onPress={() => setViewingEntry(entry)}
-                activeOpacity={0.6}
-              >
-                {list.isTodo ? (
-                  <Checkbox checked={entry.done} onToggle={() => toggleEntryDone(entry)} />
-                ) : (
-                  <View style={styles.bullet} />
-                )}
-                <Text
-                  style={[styles.entryName, list.isTodo && entry.done && styles.entryNameDone]}
-                  numberOfLines={1}
-                >
-                  {entry.name}
-                </Text>
-              </TouchableOpacity>
-            ))
+            entries.map(renderEntryRow)
           )}
         </View>
       ) : null}
@@ -216,6 +236,12 @@ const styles = StyleSheet.create({
   },
   entriesLoader: {
     marginVertical: 8,
+  },
+  entriesScroll: {
+    maxHeight: 480,
+  },
+  entriesScrollContent: {
+    gap: 10,
   },
   emptyEntries: {
     fontSize: 13,

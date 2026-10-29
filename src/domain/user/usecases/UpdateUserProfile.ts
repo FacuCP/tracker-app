@@ -6,6 +6,7 @@ export interface UserProfilePatch {
   moodFavorite?: boolean;
   financeFavorite?: boolean;
   gymFavorite?: boolean;
+  dailyRoutineFavorite?: boolean;
   fontScale?: number;
   notifyTrackers?: boolean;
   notifyDueTasks?: boolean;
@@ -26,6 +27,7 @@ export class UpdateUserProfile {
       moodFavorite: patch.moodFavorite ?? current?.moodFavorite,
       financeFavorite: patch.financeFavorite ?? current?.financeFavorite,
       gymFavorite: patch.gymFavorite ?? current?.gymFavorite,
+      dailyRoutineFavorite: patch.dailyRoutineFavorite ?? current?.dailyRoutineFavorite,
       fontScale: patch.fontScale ?? current?.fontScale,
       notifyTrackers: patch.notifyTrackers ?? current?.notifyTrackers,
       notifyDueTasks: patch.notifyDueTasks ?? current?.notifyDueTasks,

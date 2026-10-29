@@ -30,12 +30,17 @@ export function useDailyRoutines() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<DailyRoutineTaskStatus | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
+  const [favorite, setFavorite] = useState(true);
 
   const { startIso, endIso } = period.range;
 
   const reload = useCallback(async () => {
-    const freshSession = await container.getDailyRoutineSession.execute();
+    const [freshSession, profile] = await Promise.all([
+      container.getDailyRoutineSession.execute(),
+      container.getUserProfile.execute(),
+    ]);
     setSession(freshSession);
+    setFavorite(profile?.dailyRoutineFavorite ?? true);
 
     // Idempotente: resincroniza el color de hoy con el progreso actual cada
     // vez que se recarga, en vez de esperar un "cierre de día" que no existe.
@@ -69,6 +74,14 @@ export function useDailyRoutines() {
     },
     [reload],
   );
+
+  // Única forma de volver a agregar "Rutina diaria" a Favoritos si se sacó
+  // de ahí — es la única card sin una pantalla propia con su propia
+  // estrella, así que la estrella vive acá (al lado de "Ordenar").
+  const toggleFavorite = useCallback(async () => {
+    await container.updateUserProfile.execute({ dailyRoutineFavorite: !favorite });
+    await reload();
+  }, [favorite, reload]);
 
   const saveTask = useCallback(
     async (draft: DailyRoutineTaskDraft) => {
@@ -141,5 +154,7 @@ export function useDailyRoutines() {
     reorderMode,
     toggleReorder: () => setReorderMode((v) => !v),
     moveTask,
+    favorite,
+    toggleFavorite,
   };
 }

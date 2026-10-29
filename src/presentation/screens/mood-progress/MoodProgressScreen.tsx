@@ -1,4 +1,5 @@
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getMoodColorInfo } from '../../../domain/mood/entities/MoodColor';
@@ -74,26 +75,28 @@ export function MoodProgressScreen() {
         {vm.loading ? (
           <ActivityIndicator style={styles.loader} size="large" />
         ) : (
-          <View {...swipe}>
-            {vm.view === 'week' ? (
-              <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
-            ) : vm.view === 'month' ? (
-              <CalendarMonth
-                year={vm.anchor.getFullYear()}
-                month={vm.anchor.getMonth()}
-                renderDay={renderDay}
-              />
-            ) : (
-              <CalendarYear
-                year={vm.anchor.getFullYear()}
-                dayColors={(date) => {
-                  const entry = vm.entriesByDate[date];
-                  return entry ? entry.colors.map((c) => getMoodColorInfo(c).hex) : undefined;
-                }}
-                onSelectMonth={vm.showMonth}
-              />
-            )}
-          </View>
+          <GestureDetector gesture={swipe}>
+            <View>
+              {vm.view === 'week' ? (
+                <CalendarWeek anchor={vm.anchor} renderDay={renderDay} />
+              ) : vm.view === 'month' ? (
+                <CalendarMonth
+                  year={vm.anchor.getFullYear()}
+                  month={vm.anchor.getMonth()}
+                  renderDay={renderDay}
+                />
+              ) : (
+                <CalendarYear
+                  year={vm.anchor.getFullYear()}
+                  dayColors={(date) => {
+                    const entry = vm.entriesByDate[date];
+                    return entry ? entry.colors.map((c) => getMoodColorInfo(c).hex) : undefined;
+                  }}
+                  onSelectMonth={vm.showMonth}
+                />
+              )}
+            </View>
+          </GestureDetector>
         )}
 
         <Text style={styles.sectionTitle}>Referencias</Text>

@@ -1,13 +1,14 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
-import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
 import { ReorderRow } from '../../components/ReorderRow';
+import { DailyRoutineSummaryCard } from '../../dailyRoutine/components/DailyRoutineSummaryCard';
 import { FinanceSummaryCard } from '../../finance/components/FinanceSummaryCard';
 import { GymTodayCard } from '../../gym/components/GymTodayCard';
 import { ListCard } from '../../list/components/ListCard';
@@ -15,6 +16,7 @@ import { ListEntryModal } from '../../list/components/ListEntryModal';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
 import { CreateChooserModal } from './CreateChooserModal';
+import { FAVORITES_CARD_GAP, FavoritesCarousel, useCarouselSwipe } from './FavoritesCarousel';
 import { FavoriteCard, useFavorites } from './useFavorites';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
@@ -22,10 +24,23 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
 export function FavoritesScreen({ navigation }: Props) {
   const vm = useFavorites();
   const [chooserOpen, setChooserOpen] = useState(false);
-  // Deslizar hacia la izquierda lleva a "Rutinas diarias" (todavía sin implementar).
+
+  const trackersCard = vm.cards.find((c): c is Extract<FavoriteCard, { kind: 'trackers' }> => c.kind === 'trackers');
+  const listsCard = vm.cards.find((c): c is Extract<FavoriteCard, { kind: 'lists' }> => c.kind === 'lists');
+  // Se crean siempre (nunca condicionales — son hooks), aunque ese carrusel
+  // no esté presente todavía: así el gesto existe desde el primer render
+  // para el `requireToFail` de abajo.
+  const trackersSwipe = useCarouselSwipe(trackersCard?.trackers.length ?? 0);
+  const listsSwipe = useCarouselSwipe(listsCard?.lists.length ?? 0);
+
+  // Deslizar hacia la izquierda en cualquier lado que no sea un carrusel
+  // lleva a "Rutina diaria" — este swipe espera a que fallen los de los
+  // carruseles (`requireToFail`) para que ellos se queden con el gesto
+  // cuando arranca encima suyo (ver `useCarouselSwipe`).
   const swipe = useHorizontalSwipe({
     onSwipeLeft: () => navigation.navigate('DailyRoutines'),
     onSwipeRight: () => {},
+    requireToFail: [trackersSwipe.gesture, listsSwipe.gesture],
   });
 
   function choose(what: 'tracker' | 'list' | 'routine') {
@@ -37,6 +52,19 @@ export function FavoritesScreen({ navigation }: Props) {
 
   function renderCard(card: FavoriteCard) {
     switch (card.kind) {
+      case 'dailyRoutine':
+        return (
+          <DailyRoutineSummaryCard
+            key={card.key}
+            tasks={card.tasks}
+            doneCount={card.doneCount}
+            total={card.total}
+            favorite
+            onToggleFavorite={vm.toggleDailyRoutineFavorite}
+            onToggleTask={vm.toggleDailyRoutineTask}
+            onOpen={() => navigation.navigate('DailyRoutines')}
+          />
+        );
       case 'finance':
         return (
           <FinanceSummaryCard
@@ -65,31 +93,40 @@ export function FavoritesScreen({ navigation }: Props) {
             onOpenRoutine={(routineId) => navigation.navigate('GymRoutineDetail', { routineId })}
           />
         );
-      case 'tracker':
+      case 'trackers':
         return (
-          <TrackerCard
+          <FavoritesCarousel
             key={card.key}
-            trackerId={card.tracker.id}
-            onSeeProgress={() =>
-              card.tracker.id === ROUTINE_TRACKER_ID
-                ? navigation.navigate('DailyRoutines')
-                : navigation.navigate('TrackerProgress', { trackerId: card.tracker.id })
-            }
-            onFavoriteToggled={vm.reload}
+            items={card.trackers}
+            swipe={trackersSwipe}
+            renderItem={(tracker) => (
+              <TrackerCard
+                trackerId={tracker.id}
+                onSeeProgress={() => navigation.navigate('TrackerProgress', { trackerId: tracker.id })}
+                onFavoriteToggled={vm.reload}
+              />
+            )}
           />
         );
-      case 'list':
+      case 'lists':
         return (
-          <ListCard
+          <FavoritesCarousel
             key={card.key}
-            list={card.list}
-            counts={card.counts}
-            onAddEntry={() => vm.openAddEntry(card.list)}
-            onOpen={() => navigation.navigate('ListDetail', { listId: card.list.id })}
-            onToggleFavorite={() => vm.toggleListFavorite(card.list)}
-            showPin
-            onTogglePin={() => vm.toggleListPinnedExpanded(card.list)}
-            onEntryToggled={vm.reload}
+            items={card.lists}
+            swipe={listsSwipe}
+            renderItem={(list) => (
+              <ListCard
+                list={list}
+                counts={card.counts[list.id] ?? { total: 0, done: 0 }}
+                onAddEntry={() => vm.openAddEntry(list)}
+                onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
+                onToggleFavorite={() => vm.toggleListFavorite(list)}
+                showPin
+                onTogglePin={() => vm.toggleListPinnedExpanded(list)}
+                onEntryToggled={vm.reload}
+                alwaysExpanded
+              />
+            )}
           />
         );
       default:
@@ -99,22 +136,19 @@ export function FavoritesScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <View style={styles.swipeArea} {...swipe}>
+      <GestureDetector gesture={swipe}>
+      <View style={styles.swipeArea}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerBlock}>
           <View style={styles.headerRow}>
             <Text style={styles.greeting}>{vm.greeting}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('DailyRoutines')} hitSlop={8}>
-              <Text style={styles.dailyRoutinesHintText}>Rutina Diaria ›</Text>
-            </TouchableOpacity>
+            {!vm.loading && vm.cards.length > 1 ? (
+              <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
+                <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
           <Text style={styles.subtitle}>Tus favoritos</Text>
-
-          {!vm.loading && vm.cards.length > 1 ? (
-            <TouchableOpacity style={styles.reorderButtonWrap} onPress={vm.toggleReorder} hitSlop={8}>
-              <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
 
         {vm.loading ? (
@@ -155,6 +189,7 @@ export function FavoritesScreen({ navigation }: Props) {
         )}
       </ScrollView>
       </View>
+      </GestureDetector>
 
       <CreateChooserModal
         visible={chooserOpen}
@@ -182,16 +217,11 @@ const styles = StyleSheet.create({
   swipeArea: {
     flex: 1,
   },
-  dailyRoutinesHintText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-  },
   content: {
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 16,
-    gap: 12,
+    gap: FAVORITES_CARD_GAP,
   },
   headerBlock: {
     gap: 2,
@@ -223,9 +253,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
-  },
-  reorderButtonWrap: {
-    alignSelf: 'flex-end',
   },
   reorderButton: {
     color: theme.colors.accent,

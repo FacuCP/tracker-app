@@ -2,6 +2,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { container } from '../di/container';
+import { ROUTINE_TRACKER_ID } from '../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { addDays, fromIsoDate, toIsoDate, todayIso } from '../utils/date';
 
 /**
@@ -120,10 +121,13 @@ async function syncTrackerReminder(N: NotificationsModule, enabled: boolean): Pr
   if (!enabled) return;
 
   const today = todayIso();
-  const [mood, trackers] = await Promise.all([
+  const [mood, allTrackers] = await Promise.all([
     container.getMoodEntry.execute(today),
     container.getTrackers.execute(),
   ]);
+  // "Seguimiento de Rutina" no se carga a mano (lo completa `SyncRoutineTracker`
+  // solo) — no cuenta para "trackers sin cargar".
+  const trackers = allTrackers.filter((tracker) => tracker.id !== ROUTINE_TRACKER_ID);
   const entriesToday = await Promise.all(
     trackers.map((tracker) => container.getTrackerEntry.execute(tracker.id, today)),
   );

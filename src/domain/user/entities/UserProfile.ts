@@ -14,6 +14,7 @@ export interface UserProfile {
   readonly moodFavorite: boolean;
   readonly financeFavorite: boolean;
   readonly gymFavorite: boolean;
+  readonly dailyRoutineFavorite: boolean;
   /** Escala de la tipografía: 1 (100%) a 1.5 (150%), en pasos de 0.1. Sin usar por ahora. */
   readonly fontScale: number;
   /** Recordatorio diario 23:00 si quedan trackers sin cargar. */
@@ -41,6 +42,7 @@ export function createUserProfile(params: {
   moodFavorite?: boolean;
   financeFavorite?: boolean;
   gymFavorite?: boolean;
+  dailyRoutineFavorite?: boolean;
   fontScale?: number;
   notifyTrackers?: boolean;
   notifyDueTasks?: boolean;
@@ -62,6 +64,7 @@ export function createUserProfile(params: {
     moodFavorite: params.moodFavorite ?? true,
     financeFavorite: params.financeFavorite ?? true,
     gymFavorite: params.gymFavorite ?? true,
+    dailyRoutineFavorite: params.dailyRoutineFavorite ?? true,
     fontScale: clampFontScale(params.fontScale ?? FONT_SCALE_MIN),
     notifyTrackers: params.notifyTrackers ?? false,
     notifyDueTasks: params.notifyDueTasks ?? false,

@@ -1,12 +1,11 @@
 # app-celu
 
 App personal hecha con **Expo + React Native + TypeScript**, organizada con
-**Clean Architecture**. Tiene seis áreas, elegibles desde el menú del header:
+**Clean Architecture**. Tiene siete áreas, elegibles desde el menú del header:
 
-- **Favoritos** — pantalla principal. Junta los trackers y listas marcados con la
-  estrella; tiene un botón "＋ Crear" (tracker, lista o rutina). Deslizando
-  hacia la izquierda se llega a **Rutina diaria** (tareas que se resetean
-  solas todos los días).
+- **Favoritos** — pantalla principal por defecto (configurable en Ajustes).
+  Junta los trackers y listas marcados con la estrella; tiene un botón
+  "＋ Crear" (tracker, lista o rutina).
 - **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
@@ -15,8 +14,10 @@ App personal hecha con **Expo + React Native + TypeScript**, organizada con
   categorías) y su desglose por semana/mes/año.
 - **Gimnasio** — rutinas con ejercicios (series, repeticiones, peso, puesto) y un
   cuadro guiado para ir haciendo la rutina de hoy, con reseteo semanal.
-- **Eventos** — calendario con eventos (nombre, fecha, horario, color), con
-  repetición opcional cada N días.
+- **Eventos** — calendario con eventos (nombre, descripción, horario desde/hasta,
+  color), con repetición opcional cada N días o meses.
+- **Rutina diaria** — tareas que se resetean solas todos los días, con su
+  seguimiento abajo.
 
 Todo se guarda local en el teléfono y se puede exportar/importar como un único
 archivo de backup.
@@ -256,34 +257,26 @@ actualiza al volver.
 
 ## Navegación
 
-El título del header de las seis pantallas principales muestra el **nombre de
+El título del header de las siete pantallas principales muestra el **nombre de
 la pestaña actual** con una flechita ▾
 ([`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)); al tocarlo se
 despliega un menú para moverse entre:
 
-- **Favoritos** — la pantalla principal: los trackers y listas marcados con la
-  estrella, y el botón "＋ Crear".
+- **Favoritos** — la pantalla principal por defecto (configurable en Ajustes):
+  los trackers y listas marcados con la estrella, y el botón "＋ Crear".
 - **Trackers** — mood tracker + todos los trackers del usuario.
 - **Listas** — las listas del usuario (ver más abajo).
 - **Finanzas** — economía actual + ingresos/gastos (ver más abajo).
 - **Gimnasio** — rutinas del usuario (ver más abajo).
 - **Eventos** — calendario de eventos (ver más abajo).
+- **Rutina diaria** — tareas diarias + seguimiento (ver más abajo).
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
-es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las seis
-tienen el botón **"Ajustes"** arriba a la derecha
+es un **fundido suave** (`animation: 'fade'`) en vez del deslizamiento. Las
+siete tienen el botón **"Ajustes"** arriba a la derecha
 (`SettingsHeaderButton`, en `hubOptions`). El resto de pantallas (progreso,
 formularios, ajustes) sí son push con su flecha.
-
-Desde **Favoritos**, deslizar hacia la izquierda navega a **"Rutina diaria"**
-(`DailyRoutines`, ver más abajo) y deslizar hacia la derecha desde ahí vuelve.
-El gesto usa [`useHorizontalSwipe`](src/presentation/calendar/useHorizontalSwipe.ts)
-(el mismo hook que mueve de período en los calendarios, ver más abajo), que
-solo reclama el gesto cuando el movimiento es claramente horizontal, así no
-rompe el scroll vertical ni los taps de las cards. Favoritos también tiene un
-link chico "Rutina Diaria ›" al lado del saludo, como pista de que el gesto
-existe.
 
 ### Colores
 
@@ -333,21 +326,70 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 
 ## Favoritos
 
-La **pantalla principal**. Junta las cards que el usuario marca con la
-**estrella**: el **resumen de finanzas** (`FinanceSummaryCard`) y el **mood
-tracker** (incluidos por defecto — flags `financeFavorite` / `moodFavorite` en
-`UserProfile`), más los **trackers** y **listas** favoritos (flag `favorite` en
-cada entidad, `SetTrackerFavorite` / `SetListFavorite`). `useFavorites` arma la
-lista de cards y no hay una colección de "favoritos" aparte.
+La pantalla principal **por defecto** (configurable en Ajustes, ver más
+arriba). Junta las cards que el usuario marca con la **estrella**: **Rutina
+diaria** (`DailyRoutineSummaryCard`), el **resumen de finanzas**
+(`FinanceSummaryCard`) y el **mood tracker** (incluidos por defecto — flags
+`dailyRoutineFavorite` / `financeFavorite` / `moodFavorite` en `UserProfile`),
+más los **trackers** y **listas** favoritos (flag `favorite` en cada entidad,
+`SetTrackerFavorite` / `SetListFavorite`). `useFavorites` arma la lista de
+cards y no hay una colección de "favoritos" aparte.
 
-- **Orden manual.** Botón **"Ordenar"**: entra en modo reordenar, donde cada
-  ítem se muestra como una fila compacta (`FavoriteReorderRow`) con flechas
-  **▲ / ▼** para subirlo o bajarlo. El orden se guarda como una lista de claves
-  (`"finance"`, `"mood"`, `"tracker:<id>"`, `"list:<id>"`) en
-  `@app-celu/favorites-order/v1`; al cargar, los ítems no guardados van al final.
+- **Rutina diaria va primero por defecto.** `DailyRoutineSummaryCard`
+  muestra la lista de tareas de hoy (se tildan sin salir de Favoritos,
+  mismo `setDailyTaskDone` que usa la pantalla "Rutina diaria", y
+  re-sincroniza el tracker interno de seguimiento) y un indicador de
+  cuánto se completó (`X/Y` + barra de progreso). Reemplaza a
+  "Seguimiento de Rutina", que antes era el tracker que se adelantaba acá
+  — ese tracker ahora es de uso **interno nomás** (ver "Rutina diaria"
+  más abajo).
+- **Trackers y listas, agrupados en un solo lugar cada uno.** En vez de una
+  card por tracker/lista favorito, hay **una sola card de trackers** y
+  **una sola card de listas** (si hay alguno de cada tipo), cada una
+  mostrando un ítem a la vez con
+  [`FavoritesCarousel`](src/presentation/screens/favorites/FavoritesCarousel.tsx):
+  sin título (solo el agrupamiento), con el cambio de ítem con las flechas
+  **o deslizando**, con el ítem siguiente/anterior siguiendo el dedo en
+  vivo (`react-native-gesture-handler` moviendo un `Animated.Value`
+  propio, ventana de 3 paneles, transición de 320ms con
+  `Easing.out(Easing.cubic)`) en vez de cambiar recién al soltar. Es
+  **circular**: del último ítem se vuelve al primero
+  deslizando para adelante, y viceversa.
+- **El contador `‹ N/M ›` flota en el espacio entre cards, no agrega uno
+  propio.** Cuando hay más de un ítem, el contador es un overlay
+  posicionado arriba a la derecha del carrusel, dentro del mismo espacio
+  que ya separa esta card de la anterior (`FAVORITES_CARD_GAP`) — así el
+  espacio antes de un carrusel queda igual al que hay entre dos cards
+  sueltas.
+- **Cada ítem en su tamaño natural, sin relleno.** `FavoritesCarousel`
+  mide el alto de cada tracker/lista por separado y recorta el carrusel
+  (`overflow: 'hidden'`) al alto del ítem **actual** nomás — los paneles
+  vecinos (montados al costado para poder deslizar) quedan recortados en
+  vez de estirar el carrusel a su alto. Por este recorte, ninguna card
+  que pueda vivir acá adentro lleva sombra (`TrackerCard` no la tiene,
+  a propósito — una sombra queda cortada de forma despareja contra el
+  borde del recorte). Si el ítem a la vista cambia de alto, lo que sigue
+  debajo en
+  Favoritos sube o baja con una animación (`Animated.Value` propio del
+  carrusel, no `LayoutAnimation` — resultó poco confiable en Android con
+  la Nueva Arquitectura) en vez de saltar de golpe.
+- **Orden manual.** Botón **"Ordenar"**, a la altura del saludo: entra en
+  modo reordenar, donde cada ítem (incluidas las cards de trackers/listas,
+  como un bloque) se muestra como una fila compacta (`FavoriteReorderRow`)
+  con flechas **▲ / ▼** para subirlo o bajarlo. El orden se guarda como
+  una lista de claves (`"dailyRoutine"`, `"finance"`, `"mood"`, `"gym"`,
+  `"trackers"`, `"lists"`) en `@app-celu/favorites-order/v1`; al cargar,
+  los ítems no guardados van al final. No hay forma de reordenar a mano
+  **dentro** de un carrusel (qué tracker o lista aparece primero) ni de
+  la lista de tareas de "Rutina diaria".
+- **Deslizar hacia la izquierda, fuera de un carrusel, navega a "Rutina
+  diaria"** (`useHorizontalSwipe`, mismo hook que usan los calendarios y
+  el propio carrusel). Si el gesto arranca sobre una card de trackers o
+  listas, lo resuelve el carrusel (cambia de ítem) en vez de este swipe de
+  pantalla.
 - Fuera de ese modo, cada favorito se muestra con su card normal (`TrackerCard`
-  / `ListCard` / `FinanceSummaryCard` / `MoodTrackerCard`), con la misma
-  estrella para sacarlo.
+  / `ListCard` dentro de un carrusel, o `FinanceSummaryCard` / `MoodTrackerCard`
+  sueltas), con la misma estrella para sacarlo.
 - Botón **"＋ Crear"**: abre el `CreateChooserModal` (**Tracker** / **Lista** como
   botones centrados, **Cancelar** abajo) y navega a esa
   pestaña (con un param `{ create: true }` que la pantalla consume una vez para
@@ -413,19 +455,22 @@ crear. Las favoritas aparecen en la pestaña **Favoritos**.
 
 ### Card desplegable
 
-Tanto en **Listas** como en **Favoritos**, cada card de lista tiene un botón
-con un **triángulo** (▸/▾) que despliega/colapsa una vista **de solo
-lectura** de sus ítems — nombre nomás, con **checkbox** en to-do lists.
-Tocar un ítem ahí abre un modal mostrando **toda su info** (fecha, prioridad/
-rating, estado, comentario —
+En **Listas**, cada card tiene un botón con un **triángulo** (▸/▾) que
+despliega/colapsa una vista **de solo lectura** de sus ítems — nombre
+nomás, con **checkbox** en to-do lists. Tocar un ítem ahí abre un modal
+mostrando **toda su info** (fecha, prioridad/rating, estado, comentario —
 [`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx));
 tildar el checkbox no abre nada. Para editar, o borrar, hay que entrar a la
-lista como siempre. En **Favoritos** además hay un botón de **pin**
+lista como siempre. Hay también un botón de **pin**
 ([`PinButton`](src/presentation/components/PinButton.tsx), ícono de
 [Lucide](https://lucide.dev)): al pinear, la lista queda desplegada por
-defecto la próxima vez (`List.pinnedExpanded`, mismo patrón que `favorite`)
-— tanto en Favoritos como en Listas, ya que es una propiedad de la lista, no
-de la pantalla.
+defecto la próxima vez (`List.pinnedExpanded`, mismo patrón que `favorite`).
+
+En **Favoritos** (`ListCard` con `alwaysExpanded`), la vista desplegada se
+muestra **siempre**, sin triángulo para colapsarla (el pin sigue ahí, pero
+ya no cambia nada visible ahí mismo). Si la lista tiene **más de 15
+entradas**, esa vista pasa a ser un `ScrollView` con alto máximo en vez de
+crecer sin límite.
 
 ### Pantallas
 
@@ -582,8 +627,11 @@ programar nada; el primer toque de la semana nueva ya escribe con el
 
 ## Rutina diaria
 
-Se llega deslizando hacia la izquierda desde Favoritos (ver más arriba). Son
-**tareas** (`DailyRoutineTask`: título + descripción opcional, como una
+Una pestaña hub más, del menú del header (ver "Navegación" más arriba).
+Deslizar hacia la derecha en cualquier lugar que no sea el calendario de
+seguimiento vuelve a Favoritos (simétrico al swipe izquierda→Rutina diaria
+de Favoritos); deslizar hacia la izquierda o la derecha sobre el calendario
+mueve el período, igual que en cualquier otro tracker. Son **tareas** (`DailyRoutineTask`: título + descripción opcional, como una
 entrada de lista) con un check que se tilda y se resetea solo todos los
 días — mismo patrón de `cycleStart`/`resolveCompletedSets` que el gimnasio,
 pero con el **día** en vez de la semana (`DailyTaskProgress { taskId, day,
@@ -596,7 +644,11 @@ done }`, `resolveTaskDone`).
   tocar una fila la edita, el checkbox la tilda sin abrir nada. Un botón
   **"Ordenar"/"Listo"** (si hay más de una tarea) cambia la lista a filas con
   flechas ▲▼ para reordenarlas a mano — mismo [`ReorderRow`](src/presentation/components/ReorderRow.tsx)
-  que ya usan Favoritos y el detalle de una rutina de gimnasio.
+  que ya usan Favoritos y el detalle de una rutina de gimnasio. Al lado de
+  "Ordenar", siempre visible, una **estrella** (`dailyRoutineFavorite` en
+  `UserProfile`) — es la única forma de volver a agregar "Rutina diaria" a
+  Favoritos si se sacó de ahí, ya que es la única card de Favoritos sin otra
+  pantalla propia con su propia estrella.
 - **"Seguimiento de Rutina"**, abajo de todas las tareas
   ([`RoutineTrackerCalendar`](src/presentation/dailyRoutine/components/RoutineTrackerCalendar.tsx),
   solo aparece una vez que existe al menos una tarea): se muestra **igual que
@@ -613,11 +665,14 @@ done }`, `resolveTaskDone`).
   como no hay forma de disparar algo a medianoche sin un job en segundo
   plano, el último cambio del día es el que queda guardado como el color de
   ese día.
-- Como "Seguimiento de Rutina" es un tracker real, también aparece en la
-  pestaña **Trackers** y se puede favoritear — sale **favorito y primero por
-  defecto** en Favoritos, y "Ver progreso" sobre él (desde ahí o desde
-  Trackers) abre esta misma pantalla de Rutina diaria en vez del progreso
-  genérico de un tracker.
+- Aunque "Seguimiento de Rutina" es un tracker real por dentro, es de **uso
+  interno nomás**: no aparece en la pestaña **Trackers** ni en el carrusel de
+  trackers de Favoritos (se filtra explícitamente por id en
+  `useTrackersViewModel` y en `useFavorites`, sin importar su flag
+  `favorite`, que de hecho ya se crea en `false`) — solo se usa para pintar
+  este calendario. En Favoritos, lo que se ve es `DailyRoutineSummaryCard`
+  (ver "Favoritos" más arriba): la lista de tareas de hoy + un indicador de
+  cuánto se completó, en vez del tracker.
 
 ## Eventos
 
