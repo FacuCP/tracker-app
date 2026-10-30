@@ -4878,6 +4878,48 @@ del build de `eas build` — se iba a reproducir igual en desarrollo.
 
 ---
 
+## 111. Fix: `PersistentScrollView` cerraba la app al tocar el scroll — se sacó `Animated`/driver nativo, el thumb pasa a estado de React común *(fix)*
+
+**Contexto.** Después de #110 (ya mostraba los ítems y la barra), tocar
+el scroll en el APK instalado **cerraba la app** sin un error visible
+en pantalla — un crash nativo, no una excepción de JS con pantalla
+roja, consistente con algo del lado nativo del `Animated` de React
+Native (no `react-native-reanimated`) al engancharse al `onScroll` con
+`useNativeDriver: true` en la Nueva Arquitectura (Fabric), un área
+históricamente inestable en builds de release.
+
+**Decisión.** Se sacó `Animated` por completo de
+`PersistentScrollView`: en vez de un `Animated.Value` actualizado vía
+`Animated.event(..., { useNativeDriver: true })` y un `Animated.View`
+con la posición interpolada, el `onScroll` ahora es una función común
+que guarda el offset en un `useState`, y la posición del thumb
+(`translateY`) se calcula a mano cada render (`progress =
+scrollOffset / maxScroll`, acotado a [0, 1], multiplicado por el
+recorrido máximo) y se aplica con un `View` común. No hay ningún
+`Animated`/driver nativo de por medio — el thumb se actualiza por el
+ciclo normal de render de React en cada evento de scroll
+(`scrollEventThrottle={16}`), sin la ruta que crasheaba.
+
+**Alternativas descartadas.**
+
+- **Diagnosticar la causa exacta del crash nativo** (leer logs de
+  `adb logcat`, aislar si es específico de Fabric + `Animated` o de
+  alguna interacción con `nestedScrollEnabled`) antes de tocar código.
+  Se descartó por lo mismo que en #109: sin acceso al dispositivo para
+  seguir esa pista, sacar la dependencia problemática (el driver
+  nativo de `Animated`) resuelve el síntoma directamente, y una barra
+  que se actualiza por estado común alcanza de sobra para listas
+  cortas como las de este caso.
+
+**Consecuencias.** El thumb ya no se mueve por el driver nativo de
+`Animated` sino por un re-render de React en cada evento de scroll
+(throttleado a 16ms) — para las listas cortas de este caso (como
+mucho unas pocas decenas de filas) no se nota menos fluido.
+`npx tsc --noEmit` y `npx expo export --platform android
+--output-dir dist-check` corrieron limpios.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

@@ -1,7 +1,8 @@
-import { ReactNode, useRef, useState } from 'react';
+import { ReactNode, useState } from 'react';
 import {
-  Animated,
   LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -27,12 +28,14 @@ interface Props {
  * barrita nativa la que no se pinta, aparentemente por el tema/estilo
  * Android del build standalone. Esta barra no depende de nada nativo: se
  * calcula en JS a partir del alto del contenedor, el alto del contenido y
- * el scroll actual, así que se ve igual en desarrollo y en cualquier build.
+ * el scroll actual (estado de React común, sin `Animated`/driver nativo —
+ * ver #111, crasheaba al tocar el scroll en el build de `eas build`), así
+ * que se ve igual en desarrollo y en cualquier build.
  */
 export function PersistentScrollView({ children, style, contentContainerStyle, nestedScrollEnabled }: Props) {
   const [containerHeight, setContainerHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
-  const scrollY = useRef(new Animated.Value(0)).current;
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   function onLayout(e: LayoutChangeEvent) {
     setContainerHeight(e.nativeEvent.layout.height);
@@ -42,17 +45,18 @@ export function PersistentScrollView({ children, style, contentContainerStyle, n
     setContentHeight(height);
   }
 
+  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    setScrollOffset(e.nativeEvent.contentOffset.y);
+  }
+
   const canScroll = containerHeight > 0 && contentHeight > containerHeight;
   const thumbHeight = canScroll
     ? Math.max((containerHeight / contentHeight) * containerHeight, MIN_THUMB_HEIGHT)
     : 0;
   const maxTranslate = Math.max(containerHeight - thumbHeight, 0);
   const maxScroll = Math.max(contentHeight - containerHeight, 1);
-  const translateY = scrollY.interpolate({
-    inputRange: [0, maxScroll],
-    outputRange: [0, maxTranslate],
-    extrapolate: 'clamp',
-  });
+  const progress = Math.min(Math.max(scrollOffset / maxScroll, 0), 1);
+  const translateY = progress * maxTranslate;
 
   return (
     <View onLayout={onLayout}>
@@ -60,9 +64,7 @@ export function PersistentScrollView({ children, style, contentContainerStyle, n
         style={style}
         contentContainerStyle={contentContainerStyle}
         onContentSizeChange={onContentSizeChange}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: true,
-        })}
+        onScroll={onScroll}
         scrollEventThrottle={16}
         nestedScrollEnabled={nestedScrollEnabled}
         showsVerticalScrollIndicator={false}
@@ -71,7 +73,7 @@ export function PersistentScrollView({ children, style, contentContainerStyle, n
       </ScrollView>
       {canScroll ? (
         <View style={styles.track} pointerEvents="none">
-          <Animated.View style={[styles.thumb, { height: thumbHeight, transform: [{ translateY }] }]} />
+          <View style={[styles.thumb, { height: thumbHeight, transform: [{ translateY }] }]} />
         </View>
       ) : null}
     </View>
