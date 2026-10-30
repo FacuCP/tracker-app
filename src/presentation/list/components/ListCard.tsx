@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { container } from '../../../core/di/container';
 import { theme } from '../../../core/theme';
@@ -8,6 +8,7 @@ import { ListEntry } from '../../../domain/list/entities/ListEntry';
 import { Checkbox } from '../../components/Checkbox';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { InfoButton } from '../../components/InfoButton';
+import { PersistentScrollView } from '../../components/PersistentScrollView';
 import { PinButton } from '../../components/PinButton';
 import { ListCounts } from '../viewmodels/useLists';
 import { ListEntryInfoModal } from './ListEntryInfoModal';
@@ -193,15 +194,13 @@ export function ListCard({
           ) : !entries || entries.length === 0 ? (
             <Text style={styles.emptyEntries}>{list.isTodo ? 'Sin tareas' : 'Sin entradas'}</Text>
           ) : entries.length > maxVisibleEntries ? (
-            <ScrollView
+            <PersistentScrollView
               style={compact ? styles.entriesScrollFavorites : styles.entriesScroll}
               contentContainerStyle={styles.entriesScrollContent}
               nestedScrollEnabled
-              persistentScrollbar
-              showsVerticalScrollIndicator
             >
               {entries.map(renderEntryRow)}
-            </ScrollView>
+            </PersistentScrollView>
           ) : (
             entries.map(renderEntryRow)
           )}

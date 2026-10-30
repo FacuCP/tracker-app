@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { theme } from '../../../core/theme';
 import { DailyRoutineTaskStatus } from '../../../domain/dailyRoutine/usecases/GetDailyRoutineSession';
 import { Checkbox } from '../../components/Checkbox';
 import { FavoriteStar } from '../../components/FavoriteStar';
+import { PersistentScrollView } from '../../components/PersistentScrollView';
 
 /** A partir de esta cantidad de tareas, la lista scrollea en vez de crecer sin límite (igual que `ListCard` en Favoritos). */
 const MAX_VISIBLE_TASKS = 8;
@@ -85,15 +86,13 @@ export function DailyRoutineSummaryCard({
 
           {expanded ? (
             tasks.length > MAX_VISIBLE_TASKS ? (
-              <ScrollView
+              <PersistentScrollView
                 style={styles.tasksScroll}
                 contentContainerStyle={styles.tasksScrollContent}
                 nestedScrollEnabled
-                persistentScrollbar
-                showsVerticalScrollIndicator
               >
                 {tasks.map((item) => renderTaskRow(item, onToggleTask))}
-              </ScrollView>
+              </PersistentScrollView>
             ) : (
               <View style={styles.tasks}>{tasks.map((item) => renderTaskRow(item, onToggleTask))}</View>
             )

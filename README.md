@@ -526,9 +526,12 @@ defecto** (`defaultExpanded`, no depende de `pinnedExpanded`); el triángulo
 sigue estando para colapsarlas si se quiere, para esa sesión. El límite
 antes de scrollear ahí también es más bajo que en Listas — **8 entradas**
 en vez de 15 (`compact`, es un resumen, no la lista entera); pasado eso,
-esa vista pasa a ser un `ScrollView` con alto máximo en vez de crecer sin
-límite, con el scrollbar siempre visible (`persistentScrollbar`) para que
-quede claro que hay más — sin eso, parecía que la lista terminaba justo ahí.
+esa vista pasa a ser un
+[`PersistentScrollView`](src/presentation/components/PersistentScrollView.tsx)
+(alto máximo en vez de crecer sin límite) con una barra de scroll siempre
+visible calculada en JS —no la nativa de Android (`persistentScrollbar`),
+que no se veía en los APK de `eas build`— para que quede claro que hay
+más; sin eso, parecía que la lista terminaba justo ahí.
 
 ### Pantallas
 

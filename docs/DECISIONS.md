@@ -4023,6 +4023,9 @@ entran por el ancho de pantalla (`flexWrap`).
   Es una prop nativa de `ScrollView`, sin dependencias nuevas; en iOS no
   tiene efecto (ahí los indicadores siempre se auto-ocultan, no hay forma
   nativa de dejarlos fijos), pero cubre la plataforma donde se probó esto.
+  (Nota: en los APK generados con `eas build` esta barra nativa no se veía
+  —sí en desarrollo—, aunque el scroll funcionaba bien; reemplazada en
+  #109 por una barra propia en JS que no depende de nada nativo.)
 - **Grilla del mood tracker en dos filas fijas**: `MoodColorPicker` ya no
   usa un solo contenedor `flexWrap` — arma dos filas explícitas
   (`MOOD_COLORS.slice(0, 5)` y `.slice(5)`), cada una con sus columnas en
@@ -4793,6 +4796,85 @@ su renglón sin que Yoga tenga que decidir si la achica o no).
 
 **Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
 --platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 109. La barra de scroll persistente pasa a ser propia (JS), no nativa — no se veía en los APK de `eas build` *(elección del usuario + fix)*
+
+**Contexto.** La `persistentScrollbar` nativa de #94 (en `ListCard` y
+`DailyRoutineSummaryCard`) no aparecía en la app instalada desde un APK
+de `eas build` (preview o production) — sí se veía corriendo en
+desarrollo (Metro). El scroll en sí funcionaba perfecto en ambos casos;
+solo la barrita visual nativa de Android no se pintaba en el build
+standalone. No se encontró la causa exacta (probablemente algo del
+tema/estilo nativo de Android que difiere entre el shell de desarrollo
+y el build final), pero sin acceso al dispositivo para seguir
+investigando ahí, se optó por sacarle la dependencia a lo nativo
+directamente.
+
+**Decisión.** Nuevo
+[`PersistentScrollView`](src/presentation/components/PersistentScrollView.tsx):
+envuelve un `ScrollView` normal (con `showsVerticalScrollIndicator=
+{false}`, el indicador nativo apagado del todo) y dibuja su propia
+barra — un `View` track absoluto a la derecha y un `Animated.View`
+thumb cuya altura y posición se calculan en JS a partir de
+`onLayout` (alto del contenedor), `onContentSizeChange` (alto del
+contenido) y `onScroll` (posición actual, con `useNativeDriver: true`
+vía `Animated.event` para que el thumb siga el scroll a 60fps sin ida
+y vuelta al puente de JS). Se muestra solo si el contenido es más alto
+que el contenedor (si no, no hay nada para scrollear). No depende de
+ninguna prop/estilo nativo de la plataforma, así que se ve igual en
+desarrollo y en cualquier build. `ListCard` (sus dos variantes) y
+`DailyRoutineSummaryCard` pasan a usarlo en vez del `ScrollView` con
+`persistentScrollbar` directo.
+
+**Alternativas descartadas.**
+
+- **Seguir investigando la causa nativa exacta** (tema de Android,
+  diferencia entre el shell de Expo Go/dev client y el build de
+  `eas build`, etc.) antes de tocar código. Se descartó por ahora: no
+  hay acceso al dispositivo para diagnosticarlo más a fondo, y una
+  barra en JS resuelve el pedido ("que la barra se vea") sin depender
+  de entender esa diferencia.
+
+**Consecuencias.** El thumb se mueve con `Animated.event` nativo
+(`useNativeDriver: true`), pero el cálculo de su alto/rango sigue en
+JS (recalculado en cada cambio de `containerHeight`/`contentHeight`) —
+para las listas cortas de este caso (como mucho unas pocas decenas de
+filas) no tiene impacto de performance perceptible. `npx tsc --noEmit`
+y `npx expo export --platform android --output-dir dist-check`
+corrieron limpios. (Nota: esta versión tenía un bug que escondía TODOS
+los ítems — ver #110, corregido ahí.)
+
+---
+
+## 110. Fix: `PersistentScrollView` no mostraba ningún ítem — el `flex: 1` del `ScrollView` colapsaba a alto 0 *(fix)*
+
+**Contexto.** Tras #109, las listas y "Rutina diaria" en Favoritos
+dejaron de mostrar **cualquier** ítem apenas superaban el tope (8/15) —
+peor que el problema original (al menos antes se veían los ítems, solo
+faltaba la barra).
+
+**Decisión.** La causa: en `PersistentScrollView`, el `maxHeight` que
+pasa el que lo usa (`ListCard`/`DailyRoutineSummaryCard`) quedaba en el
+`View` exterior (el que envuelve `ScrollView` + barra), y el
+`ScrollView` de adentro tenía `flex: 1` en vez de ese estilo. Un hijo
+con `flex: 1` dentro de una `View` sin alto definido no tiene nada
+para "llenar" — Yoga lo colapsa a alto 0, y ahí no se ve ningún hijo
+aunque estén todos renderizados. Se corrigió pasando el `style` (el
+`maxHeight`) directo al `ScrollView` (que sí sabe resolver su propio
+alto como el mínimo entre el contenido y ese `maxHeight`, sin
+depender de flex) y dejando el `View` exterior sin estilo propio —
+se achica solo al alto ya resuelto del `ScrollView`, que es lo único
+que tiene adentro. Es, de hecho, el mismo acomodo que ya usaban
+`ListCard`/`DailyRoutineSummaryCard` *antes* de #109 (el `ScrollView`
+con `maxHeight` como hijo directo de una `View` sin alto propio), solo
+que ahora envuelto una capa más para la barra.
+
+**Consecuencias.** Es un bug de layout en JS puro, no algo específico
+del build de `eas build` — se iba a reproducir igual en desarrollo.
+`npx tsc --noEmit` y `npx expo export --platform android
+--output-dir dist-check` corrieron limpios.
 
 ---
 
