@@ -3879,6 +3879,923 @@ corrieron limpios.
 
 ---
 
+## 92. Mood tracker más compacto; listas en Favoritos limitadas a 10 ítems antes de scrollear *(elección del usuario)*
+
+**Contexto.** Dos pedidos de compactar Favoritos: (1) el mood tracker
+ocupaba bastante, sobre todo sin registrar todavía (grilla de 9
+colores + nota + descripción + botones); (2) las listas desplegadas en
+Favoritos (`ListCard` con `alwaysExpanded`) scrolleaban recién pasadas
+las 15 entradas, el mismo umbral que en la pestaña Listas — se pidió
+bajarlo a 10 ahí.
+
+**Decisión.**
+
+- **`MoodTrackerCard`**: `padding` 18→14, `gap` 16→10, `kicker`
+  11→10px, `date` 18→16px, `loader` 24→14 de margen. Afecta también a
+  la pestaña Trackers (mismo componente, sin variante) — mismo criterio
+  que sacarle la sombra a `TrackerCard` (#85): el cambio es una mejora
+  neutral/positiva en los dos lugares, no hacía falta una prop
+  `compact` para separar el caso de Favoritos.
+- **`MoodEditor`** (compartido con el modal de edición del calendario,
+  `MoodDayModal`): `gap`s generales 16→10/12→10, el textarea de
+  descripción 60→44px de alto mínimo, botones un poco más chicos
+  (`paddingVertical` 12→10). **No se tocó el tamaño de los círculos de
+  color** (`MoodColorPicker`, 44px) ni el de los botones de guardar/
+  borrar — son blancos táctiles, achicarlos más arriesgaba que
+  cuesten más de tocar; solo se achicó el espacio **entre** elementos
+  (`gap` de la grilla 12→8).
+- **`MoodEntrySummary`** (vista de solo lectura, ya registrado hoy):
+  mismo criterio, `gap` 14→10, preview 56→44px.
+- **`ListCard`**: nueva constante `MAX_VISIBLE_ENTRIES_FAVORITES = 10`,
+  usada en vez de `MAX_VISIBLE_ENTRIES` (15) **solo cuando
+  `alwaysExpanded`** (o sea, solo en Favoritos — en la pestaña Listas
+  el triángulo sigue scrolleando recién a las 15). El `ScrollView`
+  resultante también usa un `maxHeight` más bajo (340 en vez de 480)
+  para que el recorte sea consistente con "como máximo se ven ~10".
+  (Nota: bajado a 8 en #93.)
+
+**Alternativas descartadas.**
+
+- **Prop `compact` en `MoodTrackerCard`** para que Favoritos y
+  Trackers se vean distinto. Se descartó: el achique no le resta nada
+  a la pestaña Trackers (sigue siendo perfectamente usable, y de hecho
+  dejan entrar más trackers en pantalla sin scrollear), así que no
+  valía la complejidad de una variante.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 93. Recorte de Favoritos a 8 ítems; Rutina diaria colapsable; fix de entradas desactualizadas al volver a Favoritos; reacomodo del mood editor *(elección del usuario + fix)*
+
+**Contexto.** Cuatro pedidos juntos: (1) bajar de 10 a 8 el límite
+antes de scrollear en Favoritos (#92), y que el mismo límite aplique a
+la lista de tareas de "Rutina diaria" (`DailyRoutineSummaryCard`, que
+hasta ahora scrolleaba recién a las 15); (2) que "Rutina diaria"
+se pueda colapsar para mostrar solo el progreso, igual que una lista,
+pero expandida por defecto; (3) un bug: editar una entrada de una
+lista (nombre/fecha/comentario/rating) y volver a Favoritos no se
+veía reflejado ahí; (4) en el mood tracker, mover la nota al costado
+del último color y alinear "Ver progreso" con "Guardar".
+
+**Decisión.**
+
+- **Límite a 8**: `ListCard.MAX_VISIBLE_ENTRIES_FAVORITES` 10→8 (con
+  el `maxHeight` del scroll bajado a juego, 340→280).
+  `DailyRoutineSummaryCard.MAX_VISIBLE_TASKS` 15→8, mismo criterio que
+  `ListCard` en Favoritos (ahí nunca había tenido un límite distinto al
+  de Listas — ahora lo tiene, igual que las listas).
+- **"Rutina diaria" colapsable**: mismo triángulo ▸/▾ que `ListCard`
+  (nuevo botón al lado de la estrella), `useState(true)` — expandida
+  por defecto. Colapsada oculta la lista de tareas y deja la barra de
+  progreso (`X/Y` + barra), que es lo que pide el pedido ("que
+  muestre solo el progreso"). El triángulo solo aparece si `total > 0`
+  (nada que colapsar/expandir si no hay tareas todavía).
+- **Fix de entradas desactualizadas**: la causa era que `ListCard`
+  solo volvía a pedir las entradas de una lista cuando cambiaban
+  `counts.total`/`counts.done` (las dependencias del `useEffect`) — una
+  edición que no toca cuántas entradas hay ni cuántas están hechas
+  (renombrar, cambiar fecha/comentario/rating) no cambia esos números,
+  así que la vista desplegada se quedaba mostrando los datos viejos
+  hasta cerrarla y volver a abrirla. Se sumó `reloadTick` a
+  `useFavorites` **y** a `useLists` (mismo bug ahí, aunque no se había
+  reportado — es el mismo componente `ListCard` en los dos lugares): un
+  número que suma 1 en cada `reload()` exitoso, sin importar qué
+  cambió. Se pasa como prop nueva (`reloadTick`) a cada `ListCard`
+  (`FavoritesScreen` y `ListsScreen`) y entra en las dependencias del
+  `useEffect` que pide las entradas — así cualquier recarga de la
+  pantalla (incluida la que ya dispara `useFocusEffect` al volver de
+  editar) fuerza un refetch, sin perder el camino existente
+  (`counts.total`/`counts.done`, que sigue cubriendo el caso de
+  agregar/borrar una entrada desde el modal rápido de Favoritos sin
+  navegar a ningún lado).
+- **Mood editor reacomodado**: `MoodColorPicker` suma una prop
+  `trailing` — un `ReactNode` que se agrega como un ítem más **dentro**
+  de la misma grilla (`flexWrap`) de colores, así queda en la fila del
+  último color si hay lugar, o pasa a la siguiente fila del wrap si no
+  (mismo comportamiento de cualquier ítem de la grilla). `MoodEditor`
+  le pasa ahí el campo "Nota" (antes una fila propia debajo de la
+  grilla) con el mismo ancho que un ítem de color (70px) para que se
+  vea como una pieza más del conjunto. Para "Ver progreso" a la altura
+  de "Guardar": `MoodEditor` suma `leftAction` (otro `ReactNode`,
+  opcional) que se renderiza a la izquierda de la fila de botones
+  (`justifyContent: 'space-between'` en vez de `flex-end` cuando está
+  presente) — `MoodTrackerCard` le pasa el link "Ver progreso →" ahí en
+  el estado sin registrar (con `MoodEditor` visible); en el estado ya
+  registrado (`MoodEntrySummary`, sin botón "Guardar" con el que
+  alinearse) sigue como antes, suelto debajo. `MoodDayModal` (el otro
+  lugar que usa `MoodEditor`) no pasa `leftAction`, así que no cambia
+  nada ahí.
+
+**Alternativas descartadas.**
+
+- **Arreglar el bug de entradas desactualizadas agregando `isExpanded`
+  a algo más agresivo** (p. ej. recargar entradas en cada render). Se
+  prefirió una señal explícita (`reloadTick`) ligada al ciclo de vida
+  real de "la pantalla recargó", más barata y más fácil de razonar que
+  recargar por las dudas en cada render.
+
+**Consecuencias.** `reloadTick` es un patrón que conviene repetir si
+aparece el mismo problema en otro lado (cualquier card hija que guarde
+su propio estado derivado de datos que el padre puede cambiar "por
+afuera"). `npx tsc --noEmit` y `npx expo export --platform android
+--output-dir dist-check` corrieron limpios.
+
+---
+
+## 94. Scrollbar siempre visible en las vistas recortadas; grilla de colores del mood tracker en dos filas fijas (5 + 4) *(elección del usuario)*
+
+**Contexto.** Dos ajustes: (1) cuando una lista o "Rutina diaria" tenía
+más ítems de los que entran antes de scrollear (#93), no había ninguna
+pista de que seguía habiendo más — se veía igual que si la lista
+terminara ahí; (2) en el mood tracker, se pidió que la grilla de los 9
+colores se acomode siempre en **5 arriba y 4 abajo** (junto con la nota,
+que ahora vive en esa segunda fila — #93), en vez de depender de cuántos
+entran por el ancho de pantalla (`flexWrap`).
+
+**Decisión.**
+
+- **Scrollbar persistente**: los tres `ScrollView` que recortan contenido
+  (`ListCard` en sus dos variantes, `DailyRoutineSummaryCard`) suman
+  `persistentScrollbar` (no se auto-oculta en Android, a diferencia del
+  comportamiento por defecto) y `showsVerticalScrollIndicator` explícito.
+  Es una prop nativa de `ScrollView`, sin dependencias nuevas; en iOS no
+  tiene efecto (ahí los indicadores siempre se auto-ocultan, no hay forma
+  nativa de dejarlos fijos), pero cubre la plataforma donde se probó esto.
+- **Grilla del mood tracker en dos filas fijas**: `MoodColorPicker` ya no
+  usa un solo contenedor `flexWrap` — arma dos filas explícitas
+  (`MOOD_COLORS.slice(0, 5)` y `.slice(5)`), cada una con sus columnas en
+  `flex: 1` (no un ancho fijo en px) para que las 5 columnas se repartan
+  el ancho disponible siempre en partes iguales, sea cual sea la pantalla,
+  sin superponerse ni necesitar un valor de ancho calculado a mano. El
+  `trailing` (la "Nota", de #93) se agrega como sexto ítem de la segunda
+  fila, con el mismo `flex: 1` que los colores — ocupa el "5° lugar" de
+  esa fila, alineado en columna con los de arriba.
+
+**Alternativas descartadas.**
+
+- **Un gradiente/sombra en el borde inferior** para insinuar que sigue
+  (en vez de, o adicional a, el scrollbar persistente). Hubiera hecho
+  falta `expo-linear-gradient` (no es una dependencia del proyecto) o
+  simularlo a mano con varias `View` apiladas; `persistentScrollbar` ya
+  resuelve el pedido sin agregar nada nuevo.
+- **Ancho fijo en px para las columnas de la grilla** (en vez de
+  `flex: 1`), calculado a mano para que entren justo 5. Es frágil: varía
+  según el ancho de pantalla del dispositivo y hubiera quedado bien solo
+  en el tamaño probado.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 95. Fix de "Guardar"/selección en trackers; listas colapsables en Favoritos (se saca el pin, ahora vive en Listas); orden manual en Listas y Trackers *(elección del usuario + fix)*
+
+**Contexto.** Cuatro pedidos:
+
+1. En `TrackerCard`, "Guardar" (de las opciones) quede a la derecha, a
+   la misma altura que "Ver progreso" — mismo patrón que ya se usó en
+   el mood tracker (#93). Además, un bug: cambiar el contador (−/+) de
+   un tracker que **también** tiene opciones borraba la selección de
+   opciones todavía sin guardar.
+2. Que las listas en Favoritos se puedan colapsar igual que "Rutina
+   diaria" (#93), pero arrancando desplegadas — y que se saque el pin
+   de Favoritos, porque con eso ya no tiene uso (antes el pin era la
+   única forma de que una lista arrancara desplegada en Favoritos;
+   ahora que todas arrancan así por defecto, pinear ahí no cambia nada
+   visible — el usuario lo notó).
+3. Que el pin pase a la pestaña **Listas**, donde sí tiene sentido
+   ("para que queden desplegadas siempre, como funcionaba antes en
+   Favoritos").
+4. Que listas (en Listas) y trackers (en Trackers) se puedan reordenar
+   a mano, mismo patrón que Favoritos (botón "Ordenar"/"Listo" +
+   `ReorderRow` con flechas ▲▼).
+
+**Decisión.**
+
+- **Fix del contador que borraba la selección**: `useTrackerCard.reload`
+  pasa a aceptar `{ keepSelection?: boolean }`; `setCount` (el −/+ del
+  contador) lo llama con `keepSelection: true` — antes `reload` vaciaba
+  `selectedOptionIds` siempre, sin importar si lo que cambió fue el
+  contador y no las opciones. El `reload` del enfoque de pantalla y el
+  de después de `saveOptions` siguen vaciando la selección como antes
+  (ahí sí corresponde).
+- **"Guardar" al lado de "Ver progreso"**: mismo patrón que `MoodEditor`
+  (#93) — una sola fila al fondo de la card, con `justifyContent:
+  'space-between'` solo cuando hay botón "Guardar" que mostrar
+  (`hasOptions && !optionsLocked`); si no, la fila queda con "Ver
+  progreso" solo, alineado a la izquierda como antes.
+- **Listas colapsables en Favoritos, sin pin ahí**: `ListCard` cambia
+  sus props — se saca `alwaysExpanded`, se suma `defaultExpanded`
+  (con qué estado arranca, en vez de `list.pinnedExpanded`) y `compact`
+  (el límite de 8 ítems antes de scrollear de #93, antes atado a
+  `alwaysExpanded`). Favoritos pasa `defaultExpanded compact` y ya no
+  pasa `showPin`/`onTogglePin` — el triángulo (ya existía, antes solo
+  se ocultaba con `alwaysExpanded`) queda visible y funciona como en
+  cualquier lado.
+- **Pin en Listas**: `useLists` suma `togglePinnedExpanded` (idéntico al
+  que tenía `useFavorites`, que se sacó de ahí por quedar sin uso);
+  `ListsScreen` le pasa `showPin`/`onTogglePin` a `ListCard` — ya no
+  manda `defaultExpanded`, así que arranca según `list.pinnedExpanded`
+  como corresponde ahí.
+- **Orden manual en Listas y Trackers**: mismo mecanismo que
+  `FavoritesOrder`, pero uno por pantalla — `ListsOrderRepository`/
+  `GetListsOrder`/`SaveListsOrder` y
+  `TrackersOrderRepository`/`GetTrackersOrder`/`SaveTrackersOrder`
+  (nuevas claves `@app-celu/lists-order/v1` y
+  `@app-celu/trackers-order/v1` en `STORAGE_KEYS` — el backup las toma
+  solas, recorre `ALL_STORAGE_KEYS`). A diferencia de `FavoritesOrder`
+  (que guarda claves de distinto tipo: `"finance"`, `"tracker:<id>"`,
+  etc.), acá cada guardado es una lista homogénea de ids nomás, así que
+  no hace falta el `FavoriteRef`/parseo de #72 — se sumaron dos
+  funciones chicas reusables en
+  [`core/utils/order.ts`](src/core/utils/order.ts):
+  `sanitizeIdOrder` (sanea el array guardado) y `applyIdOrder` (aplica
+  ese orden a una lista de ítems con `id`, con los no guardados al
+  final — la misma lógica que `useFavorites` ya hacía a mano, ahora
+  compartida). `useLists`/`useTrackersViewModel` suman `reorderMode` /
+  `toggleReorder` / `move`, igual que `useFavorites`. `ListsScreen`/
+  `TrackersScreen` suman el botón "Ordenar"/"Listo" y, en modo
+  reordenar, cambian a una lista de `ReorderRow`. En Trackers, el mood
+  tracker **no entra** al reordenamiento (queda fijo arriba, se oculta
+  mientras se reordena) — mismo criterio que en Favoritos, donde no se
+  puede reordenar **dentro** de un carrusel, solo las cards entre sí.
+
+**Alternativas descartadas.**
+
+- **Un solo repositorio de "orden" genérico y reusable** para
+  Favoritos, Listas y Trackers. Se descartó: `FavoritesOrderRepository`
+  ya tiene una forma distinta (claves con prefijo de tipo, por los
+  ítems mezclados que ordena) que no aplica a Listas/Trackers (ids
+  homogéneos nomás); forzar una abstracción común hubiera complicado
+  el caso simple para no repetir ~10 líneas por repositorio. Lo que sí
+  se compartió (`sanitizeIdOrder`/`applyIdOrder`) es la lógica, no el
+  repositorio.
+
+**Consecuencias.** `ListCard` ya no tiene ningún caso de uso para
+`alwaysExpanded` — queda completamente reemplazado por
+`defaultExpanded`/`compact`. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 96. Comentario y "Editar" sin salir de la card del tracker; vista de solo lectura al abrir un día ya cargado en "Ver progreso" *(elección del usuario)*
+
+**Contexto.** Tres pedidos sobre trackers con opciones:
+
+1. En `TrackerCard`, un botón **"Agregar comentario"** a la izquierda
+   de "Guardar", para cargar el comentario de hoy sin ir hasta "Ver
+   progreso".
+2. Al guardar, donde estaba "Guardar" que aparezca un botón
+   **"Editar"** que muestre de nuevo las opciones (precargadas) para
+   poder cambiarlas ahí mismo, en vez de mandar siempre a "Ver
+   progreso" (el resumen de solo lectura decía exactamente eso:
+   "Editás desde 'Ver progreso'").
+3. En `TrackerDayModal` (el modal de un día en "Ver progreso"), que
+   abrir un día **ya cargado** muestre primero una vista de solo
+   lectura, con un botón "Editar" que recién ahí muestre la forma
+   editable (con "Actualizar" para guardar los cambios); un día
+   **vacío** sigue yendo directo a la forma editable, como hoy.
+
+**Decisión.**
+
+- **Nuevo [`TrackerOptionsSummary`](src/presentation/tracker/components/TrackerOptionsSummary.tsx)**:
+  se extrajo el `OptionsSummary` que antes vivía adentro de
+  `TrackerCard.tsx` (puntos de color + nombres, con una línea de
+  `hint` opcional) a un componente propio, para reusarlo tal cual en
+  `TrackerDayModal`.
+- **Nuevo `TrackerCommentModal`**: modal chico (igual estructura que
+  `MoodDayModal`/`TrackerDayModal` — `KeyboardAvoider` + hoja que sube
+  desde abajo) con un solo campo de texto, precargado con el
+  comentario de hoy si ya había uno. (Nota: reemplazado por un campo
+  en línea, sin modal, en #98.)
+- **`useTrackerCard`** suma:
+  - `saveComment(comment)`: guarda el comentario de hoy manteniendo
+    las opciones/el número que ya hubiera (`entry?.optionIds`/
+    `entry?.value`, igual patrón que `setCount`), y usa
+    `reload({ keepSelection: true })` (mismo fix de #95 — no tiene que
+    perder una selección de opciones sin guardar todavía).
+  - `editingOptions` (estado) + `openEditOptions()`: fuerza el modo
+    edición de las opciones aunque ya haya una entrada guardada hoy,
+    precargando `selectedOptionIds` con lo que ya estaba elegido
+    (`entry.optionIds`). `optionsLocked` pasa a depender también de
+    `!editingOptions`. `reload()` (sin `keepSelection`) resetea
+    `editingOptions` a `false` además de la selección — vuelve al modo
+    lectura después de guardar.
+  - El botón de guardar opciones dice **"Actualizar"** en vez de
+    "Guardar" cuando ya había una entrada (`vm.entry`), mismo criterio
+    que ya usaba `TrackerDayModal`.
+- **`TrackerCard`**: la fila de abajo pasa a tener, a la derecha,
+  **"Agregar comentario"/"Editar comentario"** (según si ya hay
+  comentario) siempre que el tracker tenga opciones, y al lado el
+  botón que corresponda — "Editar" (abre `openEditOptions`) si está
+  bloqueado, o "Guardar"/"Actualizar" si no. El resumen de solo
+  lectura ya no dice "Editás desde 'Ver progreso'" (ahora se edita
+  ahí mismo). Guardar un comentario puede fallar la validación del
+  dominio (un tracker sin contador no puede tener una entrada sin
+  ninguna opción ni número — `createTrackerEntry` tira error si
+  `optionIds` está vacío y no hay `value`); se cubre con un
+  `Alert.alert` mostrando el mensaje de error en vez de dejar que
+  falle en silencio. (Nota: en #98 el botón "Agregar/Editar
+  comentario" y el "Editar" de texto se reemplazaron — comentario en
+  línea, "Editar" como lápiz junto al resumen.)
+- **`TrackerDayModal`**: suma `viewMode` (arranca en `true` si
+  `entry != null`, se resetea en cada cambio de día). En modo vista
+  muestra `TrackerOptionsSummary` (si hay opciones elegidas), el
+  número tal cual quedó, y el comentario (o "Sin comentario."); el
+  botón de abajo es "Editar" en vez de "Guardar"/"Actualizar". Tocarlo
+  pasa a `viewMode: false`, mostrando la misma forma editable de
+  siempre (ya precargada por el `useEffect` existente). Un día vacío
+  nunca entra en modo vista (`viewMode` arranca en `false` ahí), va
+  directo a la forma editable, sin cambios.
+
+**Alternativas descartadas.**
+
+- **Un solo componente de "resumen de día"** compartido entre
+  `TrackerCard` (resumen de opciones nomás) y `TrackerDayModal` (
+  opciones + número + comentario). Se descartó: lo único realmente
+  igual entre los dos es el bloque de opciones (`TrackerOptionsSummary`,
+  que sí se compartió); el número y el comentario se muestran distinto
+  en cada lugar (en la card el número es siempre editable, nunca un
+  resumen; en el modal si se muestra de solo lectura) y forzarlos a un
+  componente común no ahorraba código, solo lo indirectaba.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 97. Confirmación al borrar un día en "Ver progreso"; "Agregar comentario" arriba de "Guardar", pegado *(elección del usuario)*
+
+**Contexto.** Dos ajustes chicos sobre #96: (1) "Borrar" en
+`TrackerDayModal` (el modal de un día en "Ver progreso" de un tracker)
+borraba al toque, sin preguntar — único "Borrar" de un registro en toda
+la app sin confirmación; (2) "Agregar comentario"/"Editar comentario"
+en `TrackerCard` quedaba al lado de "Guardar"/"Editar", se pidió
+arriba, bien pegado (poca separación).
+
+**Decisión.**
+
+- **Confirmación al borrar un día**: `TrackerProgressScreen` suma
+  `confirmDeleteDay` (mismo patrón que `confirmDeleteList`/
+  `confirmDeleteSelected` en listas — `Alert.alert` con Cancelar/Borrar
+  destructivo) y se lo pasa a `TrackerDayModal` como `onDelete` en vez
+  de `vm.deleteDay` directo. El modal en sí no cambia — sigue sin saber
+  nada de confirmaciones, es la pantalla la que decide, igual que en
+  todos los demás "Borrar" de la app.
+- **"Agregar comentario" arriba, pegado**: `TrackerCard.bottomRowRight`
+  pasa de fila (`flexDirection: 'row'`, `gap: 16`) a columna (default,
+  sin `flexDirection`) con `gap: 4` y `alignItems: 'flex-end'` — el
+  texto del comentario y el botón de Guardar/Editar quedan uno arriba
+  del otro, pegados y alineados a la derecha, en vez de lado a lado.
+  (Nota: `bottomRowRight` y el botón de comentario se borraron en #98
+  — el comentario pasó a un campo en línea y "Editar" a un lápiz junto
+  al resumen de opciones.)
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 98. Comentario del tracker como campo de texto en línea (como la descripción del mood tracker); se oculta al guardar; "Editar" pasa a ser un lápiz a la altura del resumen *(elección del usuario)*
+
+**Contexto.** Sobre #96/#97: el comentario de `TrackerCard` se cargaba
+con un modal aparte (`TrackerCommentModal`) abierto desde un botón
+"Agregar/Editar comentario". Se pidió que en cambio sea un campo de
+texto **en línea**, igual al de "Descripción (opcional)" del mood
+tracker (un `TextInput` siempre visible dentro de la propia edición,
+sin modal); que al guardar el día, ese campo deje de mostrarse hasta
+que se vuelva a editar (como ya pasa con los chips de opciones); y que
+el botón "Editar" deje de ser texto y pase a ser un lápiz, a la altura
+del resumen de la selección de hoy (no al lado de "Ver progreso").
+
+**Decisión.**
+
+- **Comentario en línea, no modal.** Se borró
+  [`TrackerCommentModal.tsx`](src/presentation/tracker/components/TrackerCommentModal.tsx)
+  (quedó sin usar). `TrackerCard` ahora muestra un `TextInput`
+  multilínea (mismo estilo que el campo de descripción de
+  `MoodEditor`: borde gris, `padding:10`, `minHeight:44`) justo debajo
+  de los chips de opciones, **solo cuando se están editando** las
+  opciones (`!vm.optionsLocked`) — el mismo estado que ya ocultaba/
+  mostraba los chips, así que el comentario queda atado a la misma
+  regla de "se ve mientras se edita, se oculta al guardar" sin estado
+  nuevo en el componente.
+- **`useTrackerCard` suma `commentDraft`/`onCommentDraftChange`**, en
+  vez de la función aislada `saveComment` (que se borró). Se precarga
+  con `entry?.comment ?? ''` tanto en `reload()` (cuando no es
+  `keepSelection`) como en `openEditOptions()` — mismo momento en que
+  ya se precargaba `selectedOptionIds`. `saveOptions()` manda
+  `comment: commentDraft` en vez de `entry?.comment` (pasaba el
+  comentario viejo sin cambios) — ahora un solo "Guardar"/"Actualizar"
+  persiste opciones + comentario juntos, ya no hace falta un guardado
+  aparte para el comentario.
+- **"Editar" pasa a ser un lápiz junto al resumen.**
+  [`TrackerOptionsSummary`](src/presentation/tracker/components/TrackerOptionsSummary.tsx)
+  suma un prop opcional `onEdit`: si se pasa, agrega el
+  [`EditButton`](src/presentation/components/EditButton.tsx) (el lápiz
+  reusado de #87) al final de la misma fila del resumen —como
+  `summaryTexts` ya tenía `flex: 1`, el lápiz queda pegado a la derecha
+  sin tocar el layout. `TrackerCard` le pasa `onEdit={vm.openEditOptions}`;
+  `TrackerDayModal` no pasa `onEdit` (sigue con su propio botón
+  "Editar" de texto en la fila de acciones de abajo, sin cambios — el
+  pedido era puntual sobre la card del home).
+- **Fila de abajo de `TrackerCard` simplificada**: con el comentario y
+  el "Editar" afuera, vuelve a tener solo "Ver progreso" y, mientras se
+  está editando, "Guardar"/"Actualizar" al lado (`space-between` solo
+  en ese caso). Bloqueado (ya guardado), la fila queda con "Ver
+  progreso" nomás.
+
+**Alternativas descartadas.**
+
+- **Mantener el comentario visible siempre** (también en modo
+  bloqueado, como un texto de solo lectura). Se descartó: el pedido
+  explícito fue que "se deje de mostrar hasta que se vaya a editar",
+  igual que las opciones — mantenerlo visible rompía esa simetría sin
+  necesidad.
+- **Agregar el lápiz como parte fija de `TrackerOptionsSummary`**
+  (siempre, sin prop). Se descartó porque `TrackerDayModal` reusa el
+  mismo componente en su vista de solo lectura con su propio botón
+  "Editar" ya resuelto (#96); forzar el lápiz ahí duplicaría la acción.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 99. Comentario en gris bajo el resumen de opciones; "Registrado hoy" en verde al lado de "Ver progreso"; fix de destello en los carruseles de Favoritos *(elección del usuario + fix)*
+
+**Contexto.** Tres pedidos:
+
+1. En el resumen de solo lectura de `TrackerCard` (opciones ya
+   guardadas), si el día tiene comentario, mostrarlo en gris debajo
+   del nombre de la opción elegida.
+2. El texto "Ya registraste hoy." (hint chico debajo del resumen) pasa
+   a mostrarse a la **derecha de "Ver progreso"**, en **verde**, como
+   **"Registrado hoy"** con un **tilde**.
+3. Los carruseles de Favoritos (`FavoritesCarousel`) seguían mostrando
+   un **destello del ítem anterior** al cambiar de tarjeta, pese al fix
+   de #83/el comentario ya existente en `completeTransition` sobre
+   resetear `translateX` en un `useLayoutEffect` atado a `index`.
+
+**Decisión.**
+
+- **Comentario gris en el resumen**: `TrackerOptionsSummary` suma un
+  prop `comment?: string` — si viene, se muestra en gris
+  (`#6b7280`, mismo tono que otros textos secundarios de la app) debajo
+  del nombre de la opción. `TrackerCard` le pasa
+  `comment={vm.entry?.comment}`. `TrackerDayModal` no lo usa (ya
+  muestra el comentario completo en su propia fila "Comentario", sin
+  cambios).
+- **"Registrado hoy" en la fila de abajo**: se sacó el `hint` que
+  mostraba `TrackerOptionsSummary` en `TrackerCard` (ya no se le pasa
+  `hint`) y en su lugar, cuando `vm.optionsLocked`, la fila de abajo
+  muestra a la derecha de "Ver progreso" un ícono `Check` (14px,
+  `strokeWidth={3}`) y el texto **"Registrado hoy"**, ambos en verde
+  (`#16a34a`, el mismo verde que ya usaba "Guardado ✓" en el header).
+  La fila vuelve a necesitar `space-between` siempre que haya opciones
+  (`hasOptions`, sin importar si está bloqueada o no), ya que ahora las
+  dos ramas (bloqueada/editando) muestran algo a la derecha.
+- **Fix del destello en los carruseles**: la causa real no era el
+  reseteo de `translateX` en sí (ese ya corría en un `useLayoutEffect`
+  sincronizado con el cambio de `index`), sino que la animación de
+  `translateX` usaba `useNativeDriver: true` — una vez una
+  `Animated.Value` se anima con el driver nativo queda "adjunta" a un
+  nodo nativo, y sus actualizaciones (incluido el `setValue(0)` del
+  reseteo) viajan por un canal del hilo nativo separado del commit de
+  React/Fabric que reordena los hijos prev/current/next; esos dos
+  canales no siempre llegan a pantalla en el mismo frame, y en el
+  medio se veía un frame con el `translateX` ya en 0 pero los hijos
+  todavía sin reordenar (o viceversa) — el destello. Se cambiaron los
+  tres usos de `translateX` en `useCarouselSwipe`
+  (`Animated.timing` de `completeTransition`, `Animated.spring` de
+  `cancelDrag`) a `useNativeDriver: false`, para que el transform se
+  actualice por el mismo canal JS que ya sincroniza el reorden de
+  hijos.
+
+**Alternativas descartadas.**
+
+- **Retrasar el reseteo de `translateX` con un frame extra**
+  (`requestAnimationFrame` doble o `InteractionManager`) en vez de
+  sacar el driver nativo. Se descartó: es un parche no determinístico
+  (depende de cuántos frames tarde en sincronizar cada canal, puede
+  variar por dispositivo) en vez de arreglar la causa (dos canales de
+  actualización en paralelo).
+- **Mostrar "Registrado hoy" dentro de `TrackerOptionsSummary`** (como
+  hint, en vez de en la fila de abajo). Se descartó porque el pedido
+  fue puntualmente "a la derecha de Ver progreso".
+
+**Consecuencias.** El arrastre del carrusel pasa a animarse por JS en
+vez de por el driver nativo — más que suficiente para dos tarjetas de
+ancho de pantalla, sin notarse más lento. `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios.
+
+---
+
+## 100. Se sacó "Borrar" del contador de `TrackerCard`; tacho al lado de "Actualizar", con confirmación *(elección del usuario)*
+
+**Contexto.** El contador de `TrackerCard` tenía un botón de texto
+"Borrar" al lado, sin preguntar antes — el único "Borrar" de la app sin
+confirmación salvo el de #97 que ya se corrigió. Se pidió sacarlo de
+ahí y, en cambio, poner un tacho de basura al lado de "Actualizar" (en
+la edición de opciones) para borrar el registro del día si se quiere,
+preguntando antes.
+
+**Decisión.**
+
+- Se sacó el `View`/botón "Borrar" que estaba al lado del `Counter` en
+  `TrackerCard` — el contador queda solo, sin acción de borrado propia
+  (un tracker sin opciones ya no tiene forma de borrar el día desde la
+  card; sigue pudiéndose desde "Ver progreso", que desde #97 ya pide
+  confirmación).
+- Al lado del botón "Actualizar" (solo cuando ya hay una entrada
+  guardada, `vm.entry`, y se está editando las opciones) aparece un
+  ícono `Trash` (20px, `#dc2626`, mismo color/tamaño que el tacho de
+  `SelectionBar`) que llama a una nueva `confirmDeleteEntry()` en
+  `TrackerCard` — mismo patrón `Alert.alert` (Cancelar/Borrar
+  destructivo) que `confirmDeleteDay` en `TrackerProgressScreen` (#97),
+  antes de ejecutar `vm.clearEntry`. No aparece para una entrada nueva
+  sin guardar todavía (nada que borrar) ni mientras el resumen está en
+  modo lectura (bloqueado) — solo mientras se está editando.
+
+**Alternativas descartadas.**
+
+- **Dejar el tacho visible también en el resumen bloqueado** (junto al
+  lápiz de #98). Se descartó: el pedido fue puntualmente "al lado de
+  actualizar", es decir, en el modo edición.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 101. Mood tracker alineado al patrón de los trackers normales: "Registrado hoy", lápiz para editar, nota/comentario combinados *(elección del usuario)*
+
+**Contexto.** El mood tracker se quedó atrás de los últimos cambios a
+`TrackerCard` (#96–#100): una vez guardado el día, mostraba un texto
+("Ya registraste hoy. Podés editarlo desde 'Ver progreso'.") sin forma
+de editar ahí mismo, y nota/comentario se veían en dos líneas con
+estilos distintos (nota en negro negrita, comentario en gris
+itálica). Se pidió unificar con el patrón ya establecido en los
+trackers normales: un badge **"Registrado hoy"** en verde con un
+tilde al lado de "Ver progreso", un **lápiz** para editar sin salir de
+la card, y debajo de la selección una sola línea **"nota/10 -
+comentario"**.
+
+**Decisión.**
+
+- **`useMoodTrackerCard` suma `editing`/`openEdit()`**, mismo patrón
+  que `editingOptions`/`openEditOptions` de `useTrackerCard`:
+  `openEdit()` precarga `colors`/`description`/`note` desde
+  `savedEntry` y fuerza el editor a mostrarse aunque ya haya un
+  registro guardado hoy. `save()` deja `editing` en `false` al
+  terminar (vuelve al resumen). La pantalla no resetea `editing` al
+  recuperar el foco (mismo criterio que ya tenían los borradores sin
+  guardar: no se pisan sin que el usuario guarde o cancele).
+- **`MoodEntrySummary`** suma un prop opcional `onEdit` (agrega el
+  mismo [`EditButton`](src/presentation/components/EditButton.tsx) al
+  final de la fila, apoyado en que `texts` ya tenía `flex: 1`, igual
+  que hizo `TrackerOptionsSummary` en #98) y combina nota y comentario
+  en una sola línea gris (`#6b7280`): `"7/10 - Me sentí bien"` (si
+  falta alguno de los dos, se muestra solo el que haya); antes eran
+  dos `Text` separados con estilos distintos.
+- **`MoodTrackerCard`**: `locked = savedEntry != null && !editing`. En
+  modo lectura muestra `MoodEntrySummary` con `onEdit={vm.openEdit}` y,
+  en una fila propia debajo, "Ver progreso" a la izquierda y el badge
+  verde **"Registrado hoy" + ✓** (ícono `Check`) a la derecha — mismo
+  armado que `TrackerCard` (#99). Mientras se edita (sin registro
+  guardado, o reabierto con el lápiz), sigue mostrando `MoodEditor`
+  con "Ver progreso" como `leftAction` junto a "Guardar"/"Actualizar"
+  (el label cambia a "Actualizar" si ya había `savedEntry`) — ese
+  mecanismo ya existía y sigue siendo el único lugar que lo usa, no
+  hizo falta tocar `MoodEditor`.
+
+**Alternativas descartadas.**
+
+- **Sacar el prop `leftAction` de `MoodEditor`** ya que solo lo usa
+  `MoodTrackerCard`. Se descartó: sigue activamente en uso (la fila de
+  "Ver progreso" + "Guardar"/"Actualizar" durante la edición no
+  cambió), no es código muerto.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 102. Nombre de la emoción debajo del color, en el selector del mood tracker *(elección del usuario)*
+
+**Contexto.** En `MoodColorPicker` (la grilla de 9 colores para elegir el
+ánimo del día), cada círculo mostraba solo el **nombre del color**
+("Naranja", "Violeta", ...) debajo. Se pidió agregar el **nombre de la
+emoción** (el campo `meaning` de `MOOD_COLORS`, p. ej. "Bien,
+tranquilo") y que quede en **dos renglones** (nombre del color arriba,
+emoción abajo), en vez de un solo renglón.
+
+**Decisión.** `renderSwatch` en `MoodColorPicker.tsx` agrega un segundo
+`Text` con `info.meaning` debajo del nombre, ambos con
+`numberOfLines={1}` (si no entra, se corta con "…" en vez de forzar un
+tercer renglón) — nombre en el mismo estilo de antes, emoción un poco
+más chica y más clara (`fontSize: 9`, `#9ca3af`). Son las columnas de
+~63px de siempre (dos filas fijas de #94), sin tocar el resto del
+layout de la grilla. (Nota: en #104 se sacó el nombre del color en
+todo el mood tracker, incluida esta grilla — queda un solo renglón con
+la emoción, que ahora sí puede partirse en dos líneas si no entra.)
+
+**Alternativas descartadas.**
+
+- **Dejar que el texto haga `flexWrap` libre** en vez de dos `Text`
+  separados con `numberOfLines={1}` cada uno. Se descartó: con una sola
+  palabra (nombre del color) no hay espacio natural para partir en dos
+  líneas, y la emoción sola podía terminar ocupando una cantidad de
+  líneas distinta por color, rompiendo la alineación entre columnas de
+  la misma fila.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 103. La repetición mensual de Finanzas pasa a ser configurable como la de eventos (días/meses, hasta fecha/cantidad/indefinida) *(elección del usuario)*
+
+**Contexto.** Un movimiento de Finanzas que se repite solo podía
+hacerlo **cada mes**, y terminar de dos formas: indefinidamente o tras
+**N meses** (contando el primero) — `FinanceRepeat { months: number |
+null }`. Se pidió que sea igual de flexible que la repetición de
+eventos del calendario (`EventRepeat`, ver `EventModal`): repetir cada
+**X días o X meses**, y terminar **indefinidamente**, **hasta una
+fecha**, o **tras una cantidad de veces**. Los ajustes de monto
+(`adjustments`, "Ajustar monto (desde hoy)") y "Finalizado" debían
+seguir funcionando exactamente igual — el pedido era solo sobre la
+repetición en sí.
+
+**Decisión.**
+
+- **`FinanceTransaction.ts`** suma `FinanceRepeatEndType` ('never' |
+  'onDate' | 'afterCount'), `FinanceRepeatUnit` ('days' | 'months') y
+  reescribe `FinanceRepeat` como `{ intervalValue, intervalUnit,
+  endType, endDate?, count? }` — mismo esquema que `EventRepeat`
+  (constantes `MIN_INTERVAL_VALUE`, `MAX_INTERVAL_DAYS` (3650),
+  `MAX_INTERVAL_MONTHS` (120), `MIN_REPEAT_COUNT`/`MAX_REPEAT_COUNT`
+  (1–5000), `DEFAULT_INTERVAL_DAYS`/`DEFAULT_INTERVAL_MONTHS`, todas
+  con los mismos valores que las de `CalendarEvent.ts`, pero
+  declaradas aparte — son dominios independientes). La validación en
+  `createFinanceTransaction` es el mismo código que
+  `createCalendarEvent` adaptado a "movimiento" en los mensajes de
+  error. `adjustments`/`finishedOn` no cambiaron: siguen gateados por
+  `repeat` truthy, sin tocar su lógica.
+- **`financeOccurrencesInRange`** (`occurrences.ts`) pasa a avanzar con
+  `addDays` o `addMonthsClamped` según `intervalUnit` (igual que
+  `eventOccurrencesInRange`), corta en `MAX_OCCURRENCES` (5000) o en
+  `repeat.count` si `endType === 'afterCount'`, y el rango efectivo
+  ahora toma el mínimo entre `endIso` (el período consultado),
+  `repeat.endDate` (si `endType === 'onDate'`) **y** `finishedOn` (el
+  "Finalizado" manual, que sigue siendo independiente de cómo termina
+  la repetición).
+- **Migración de datos ya guardados**: `FinanceTransactionDto.ts` suma
+  `repeatFromDto()`, que distingue el formato viejo (`{ months }`, sin
+  `intervalValue`/`intervalUnit`/`endType`) del nuevo por la presencia
+  de esos campos, y lo traduce: `months: null` → `{ intervalValue: 1,
+  intervalUnit: 'months', endType: 'never' }`; `months: N` → mismo
+  intervalo mensual con `endType: 'afterCount', count: N`. Así los
+  movimientos recurrentes ya guardados (p. ej. un alquiler cargado
+  antes de este cambio) siguen funcionando igual sin que el usuario
+  tenga que volver a configurarlos.
+- **`FinanceTransactionModal.tsx`**: el checkbox pasa de "Se repite
+  todos los meses" a **"Se repite"**, y el bloque de "Indefinidamente"/
+  "Por X meses" se reemplaza por los mismos dos controles que
+  `EventModal` — "Repetir cada" (número + `SelectField` Días/Meses) y
+  "Repetición" (`SelectField` Indefinidamente/Hasta una fecha/Cantidad
+  de veces, con el `DateField`/`TextInput` que corresponda al lado). El
+  bloque de ajuste de monto (`adjustBox`, "Monto actual"/"Ajustar
+  monto") y "Finalizado — no calcular las próximas" quedan exactamente
+  donde estaban, sin cambios de comportamiento ni de estilo.
+- **`FinanceReportSection.tsx`**: `installmentLabel` ya no puede asumir
+  "mes N" (ahora puede repetirse por días) — con `endType ===
+  'afterCount'` sigue mostrando "cuota N/total"; en los otros casos
+  (indefinida o hasta una fecha, donde no hay un "total" fijo) muestra
+  "#N" en vez de "mes N".
+
+**Alternativas descartadas.**
+
+- **Reusar `EventRepeat`/`eventOccurrencesInRange` directamente** desde
+  Finanzas en vez de duplicar el esquema. Se descartó: evento y
+  movimiento financiero son dominios separados en este proyecto (cada
+  uno con sus propias entidades/casos de uso); importar uno desde el
+  otro acoplaría dos *bounded contexts* que hoy no se conocen entre sí,
+  por una duplicación chica (un `interface` y una función de ~15
+  líneas).
+- **No migrar los datos viejos** y forzar al usuario a reconfigurar sus
+  movimientos recurrentes ya guardados. Se descartó: es una app
+  personal con datos reales ya cargados (alquiler, sueldo, etc.);
+  perder esa configuración de repetición sin aviso es peor que las
+  ~15 líneas de `repeatFromDto`.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 104. Mood tracker al nivel de los trackers normales: solo emociones (sin nombre de color), borrar al editar desde la card, "Ver progreso" con vista/edición como `TrackerDayModal`, y tacho en vez de "Borrar" en ambos *(elección del usuario)*
+
+**Contexto.** Cuatro ajustes para terminar de emparejar el mood tracker
+con el patrón ya usado en los trackers normales (#96–#100):
+
+1. En todo el mood tracker se mostraba "Nombre del color · Emoción"
+   (p. ej. "Naranja · Bien, tranquilo"); se pidió sacar el nombre del
+   color y dejar solo la emoción.
+2. Al reabrir el editor con el lápiz en la card del home (#101), no
+   había forma de borrar el registro de hoy — en los trackers normales
+   ese mismo lápiz-y-reeditar sí tiene un tacho al lado de "Actualizar"
+   (#100).
+3. En "Ver progreso" del mood tracker, tocar un día siempre iba directo
+   a la forma editable, sin la vista de solo lectura +
+   "Editar"/"Borrar" que ya tiene `TrackerDayModal` (#96/#97) para los
+   trackers normales.
+4. El botón "Borrar" (texto rojo) de `TrackerDayModal` y del editor de
+   mood (`MoodEditor`, usado en la card y en el modal de día) debía
+   pasar a ser un **tacho de basura**, en ambos.
+
+**Decisión.**
+
+- **Solo emociones**: `MoodEditor` (preview de arriba) y
+  `MoodEntrySummary` ya no muestran `getMoodColorInfo(c).name`, solo
+  `.meaning`. En `MoodColorPicker`, el segundo renglón agregado en
+  #102 (nombre del color) se sacó entero — queda un solo `Text` con la
+  emoción, ahora en `numberOfLines={2}` (antes de #102 esto era un
+  renglón con el nombre nomás; ahora, al ser la única etiqueta, usa las
+  dos líneas para la frase de la emoción si no entra en una).
+- **Tacho al editar desde la card**: `useMoodTrackerCard` suma
+  `deleteEntry()` (`container.deleteMoodEntry`, limpia `savedEntry` y
+  el borrador, sale de `editing`). `MoodTrackerCard` pasa
+  `onDelete={vm.savedEntry ? confirmDeleteEntry : undefined}` a
+  `MoodEditor` — mismo `Alert.alert` de confirmación que
+  `TrackerCard` (#100), y solo aparece reeditando una entrada que ya
+  existía (no en un día nuevo sin guardar todavía, igual criterio que
+  en trackers).
+- **Vista/edición en "Ver progreso"**: `MoodDayModal` suma `viewMode`
+  (arranca en `true` si `entry != null`, se resetea en cada cambio de
+  día) — mismo patrón que `TrackerDayModal`. En modo vista muestra
+  `MoodEntrySummary` (sin el lápiz propio del resumen; aquí el botón
+  de editar sigue siendo de texto, no el lápiz de la card, mismo
+  criterio que #98 para no duplicar la acción) y una fila de acciones
+  propia (tacho "Borrar" + "Editar") fuera del `ScrollView`. Al tocar
+  "Editar" pasa a mostrar el `MoodEditor` de siempre, con su propio
+  tacho+"Actualizar" ya resueltos adentro. Un día vacío nunca entra en
+  modo vista, va directo a la forma editable, sin cambios.
+  `MoodProgressScreen` suma `confirmDeleteDay` (mismo `Alert.alert` que
+  ya tenía el equivalente de trackers desde #97 — acá nunca se había
+  agregado) en vez de pasar `vm.deleteDay` directo.
+- **Tacho en vez de texto**: `MoodEditor.deleteButton` y
+  `TrackerDayModal.deleteButton` dejan de ser un botón rojo con texto
+  "Borrar" y pasan a un ícono `Trash` (20px, `#dc2626`) sin fondo,
+  mismo tamaño/color que el tacho de `SelectionBar` y el de
+  `TrackerCard` (#100).
+
+**Alternativas descartadas.**
+
+- **Poner el lápiz de edición también en `MoodEntrySummary` dentro de
+  `MoodDayModal`** (en vez de mantener el botón "Editar" de texto ahí).
+  Se descartó por la misma razón que en #98: el lápiz es para la card
+  del home; el modal de "Ver progreso" usa su propio botón de texto,
+  consistente con `TrackerDayModal`.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 105. Cada palabra de la emoción del mood tracker en su propio renglón *(elección del usuario)*
+
+**Contexto.** Cada `meaning` de `MOOD_COLORS` son dos palabras
+separadas por coma (p. ej. "Bien, tranquilo"). Mostrándolas como un
+solo texto, el salto de línea quedaba a merced del ancho disponible —
+a veces las dos palabras entraban en un renglón, a veces no, sin
+garantía. Se pidió que queden siempre **una por renglón**.
+
+**Decisión.** Nueva función
+[`splitMoodMeaning`](src/domain/mood/entities/MoodColor.ts) (`meaning.split(',
+')`) y los tres lugares que muestran la emoción de un día —
+`MoodColorPicker` (la grilla de 9 colores), `MoodEditor` (preview de
+arriba) y `MoodEntrySummary` (resumen de solo lectura) — pasan a
+renderizar cada palabra en su propio `Text`, en vez de un solo texto
+con `numberOfLines`. Con dos colores elegidos, salen 4 renglones (2
+por color, en el orden de `entry.colors`/`colors`). `MoodReferenceCards`
+(las cards de "Referencias" en "Ver progreso", una por cada uno de los
+9 colores con su nombre) no se tocó: no es la selección de un día ni
+"dos emociones", es la lista completa de colores. (Nota: en #106 se
+volvió atrás este split en `MoodEditor` y `MoodEntrySummary` — ahí la
+columna es ancha y las dos palabras entran cómodas en un renglón;
+`MoodColorPicker`, que sí tiene la columna angosta, se queda con el
+split de este `#105`.)
+
+**Alternativas descartadas.**
+
+- **Forzar el salto con `numberOfLines={2}`** (lo que ya hacía
+  `MoodColorPicker` desde #102/#104). Se descartó: no garantiza que el
+  corte caiga justo en la coma — con columnas más anchas el texto
+  podía entrar entero en un renglón, y con una palabra más larga podía
+  cortarse a mitad de palabra en vez de en el espacio después de la
+  coma.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 106. Al mostrar la selección del día, las dos palabras de la emoción vuelven a un solo renglón *(elección del usuario)*
+
+**Contexto.** El split de #105 (una palabra por renglón) aplicado a
+`MoodEditor` (preview de arriba) y `MoodEntrySummary` (resumen de solo
+lectura) se pidió revertir ahí: al **mostrar la selección** del día,
+las dos palabras de cada emoción tienen que volver a estar en el mismo
+renglón.
+
+**Decisión.** `MoodEditor` y `MoodEntrySummary` vuelven a un solo
+`Text` con `getMoodColorInfo(c).meaning` completo por color
+seleccionado (como antes de #105) — ahí la columna de texto es ancha
+(`flex: 1` en un bloque junto al cuadrado de colores), así que las dos
+palabras entran sin problema en un renglón. `MoodColorPicker` no
+cambia: sigue usando `splitMoodMeaning` de #105, porque ahí sí es una
+columna angosta (una de 9, ~63px) donde las dos palabras no siempre
+entran juntas.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 107. En el selector del mood tracker, una palabra que no entra rebalsa el renglón en vez de cortarse o pasar a una línea más *(elección del usuario)*
+
+**Contexto.** En `MoodColorPicker`, cada palabra de la emoción
+(`splitMoodMeaning`, #105) se mostraba con `numberOfLines={1}` — una
+palabra larga que no entraba en la columna angosta (~63px) se cortaba
+con "…" en vez de mostrarse completa. Se pidió que se vea completa, sin
+agregar un tercer renglón al círculo (prefiere que la palabra se salga
+del ancho de su columna antes que eso).
+
+**Decisión.** Se sacó `numberOfLines={1}` del `Text` de cada palabra y
+se le agregó `flexShrink: 0` — así Yoga no lo achica para que entre en
+el ancho disponible (que es lo que antes forzaba el corte con "…", y
+lo que haría falta para que pase a una línea más si solo se sacaba
+`numberOfLines`): la palabra se mide a su ancho natural de una sola
+línea y, si no entra en la columna de ~63px, sigue de largo por
+encima del espacio de los círculos vecinos en vez de ajustarse. Pasa
+solo con las palabras más largas ("emocionado", "desmotivado",
+"Energizado"); la mayoría entra sin problema. (Nota: en la práctica
+`flexShrink: 0` no evitó el salto de línea — el texto seguía pasando a
+un renglón más en vez de desbordar. Reemplazado en #108 por un ancho
+fijo más generoso en el contenedor del texto.)
+
+**Alternativas descartadas.**
+
+- **Sacar `numberOfLines` sin más.** Es lo que se probó primero: sin
+  ese límite pero sin `flexShrink: 0`, el nodo de texto se seguía
+  midiendo contra el ancho disponible de la columna y el texto pasaba
+  a una línea más (un tercer renglón en el círculo) en vez de
+  desbordar — exactamente lo que se pidió evitar.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 108. El contenedor del texto de cada emoción se agranda para que las palabras largas entren en su propio renglón *(elección del usuario + fix)*
+
+**Contexto.** El `flexShrink: 0` de #107 no evitó en la práctica que
+una palabra larga pasara a un renglón más — el nodo de texto seguía
+midiéndose contra el ancho de la columna del swatch (~63px) y
+envolviendo ahí. Se pidió en cambio agrandar el espacio donde va el
+texto de cada emoción, para que la palabra más larga entre en una sola
+línea sin necesidad de desbordar ni de envolver.
+
+**Decisión.** `labelLines` (el contenedor de las 1-2 líneas de palabra
+debajo de cada círculo) pasa a tener un ancho fijo de **76px** —más
+ancho que la columna de 1/5 que le toca al swatch de 44px (que ronda
+los 60-65px)— calculado para que entre de una la palabra más larga del
+dominio ("desmotivado"/"emocionado"/"Energizado", ~11 caracteres a
+`fontSize: 11`). Como `item` tiene `alignItems: 'center'` y nada
+recorta (`overflow: 'hidden'`), ese ancho extra se reparte centrado,
+"invadiendo" un poco el `gap` de 8px hacia los swatches vecinos en vez
+de la columna completa de al lado. Se sacó el `flexShrink: 0` de #107
+(ya no hace falta: con el contenedor ancho, cada palabra entra sola en
+su renglón sin que Yoga tenga que decidir si la achica o no).
+
+**Alternativas descartadas.**
+
+- **Agrandar todas las columnas del grid** (los 5 `item` de la
+  primera fila, no solo el contenedor del texto) para que el swatch y
+  el texto compartan el mismo ancho más generoso. Se descartó: el
+  swatch (44px) nunca tuvo problema de espacio, achicar menos columnas
+  por fila o agrandarlas todas movía el layout entero (separación
+  entre círculos) por un problema que es puntual del texto.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

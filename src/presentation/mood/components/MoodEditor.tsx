@@ -1,3 +1,5 @@
+import { Trash } from 'lucide-react-native';
+import { ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { MoodColor, getMoodColorInfo } from '../../../domain/mood/entities/MoodColor';
@@ -18,12 +20,15 @@ interface Props {
   saving?: boolean;
   saveLabel?: string;
   onDelete?: () => void;
+  /** Se muestra a la izquierda, a la misma altura que "Guardar"/"Borrar" — lo usa `MoodTrackerCard` para "Ver progreso". */
+  leftAction?: ReactNode;
 }
 
 /**
  * Bloque reutilizable para cargar/editar el ánimo de un día: preview,
- * selector de colores, nota del 1 al 10, descripción opcional y botones. Lo
- * usan tanto la card del home como el modal de edición del calendario.
+ * selector de colores (con la nota al costado del último, dentro de la misma
+ * grilla), descripción opcional y botones. Lo usan tanto la card del home
+ * como el modal de edición del calendario.
  */
 export function MoodEditor({
   colors,
@@ -36,6 +41,7 @@ export function MoodEditor({
   saving = false,
   saveLabel = 'Guardar',
   onDelete,
+  leftAction,
 }: Props) {
   const hex = colors.map((c) => getMoodColorInfo(c).hex);
   const noteError = parseNoteInput(note).error;
@@ -51,28 +57,34 @@ export function MoodEditor({
           ) : (
             colors.map((c) => (
               <Text key={c} style={styles.meaning}>
-                {getMoodColorInfo(c).name} · {getMoodColorInfo(c).meaning}
+                {getMoodColorInfo(c).meaning}
               </Text>
             ))
           )}
         </View>
       </View>
 
-      <MoodColorPicker selected={colors} onChange={onColorsChange} />
-
-      <View style={styles.noteRow}>
-        <Text style={styles.noteLabel}>Nota ({NOTE_MIN}–{NOTE_MAX})</Text>
-        <TextInput
-          style={[styles.noteInput, noteError && styles.noteInputError]}
-          placeholder="—"
-          placeholderTextColor="#9ca3af"
-          value={note}
-          onChangeText={onNoteChange}
-          keyboardType="decimal-pad"
-          maxLength={4}
-        />
-        {noteError ? <Text style={styles.noteErrorText}>{noteError}</Text> : null}
-      </View>
+      <MoodColorPicker
+        selected={colors}
+        onChange={onColorsChange}
+        trailing={
+          <View style={styles.noteBox}>
+            <Text style={styles.noteLabel}>
+              Nota ({NOTE_MIN}–{NOTE_MAX})
+            </Text>
+            <TextInput
+              style={[styles.noteInput, noteError && styles.noteInputError]}
+              placeholder="—"
+              placeholderTextColor="#9ca3af"
+              value={note}
+              onChangeText={onNoteChange}
+              keyboardType="decimal-pad"
+              maxLength={4}
+            />
+            {noteError ? <Text style={styles.noteErrorText}>{noteError}</Text> : null}
+          </View>
+        }
+      />
 
       <TextInput
         style={styles.input}
@@ -83,23 +95,26 @@ export function MoodEditor({
         multiline
       />
 
-      <View style={styles.actions}>
-        {onDelete ? (
-          <TouchableOpacity style={[styles.button, styles.deleteButton]} onPress={onDelete}>
-            <Text style={styles.deleteText}>Borrar</Text>
+      <View style={[styles.actions, leftAction ? styles.actionsBetween : null]}>
+        {leftAction ?? null}
+        <View style={styles.actionButtons}>
+          {onDelete ? (
+            <TouchableOpacity style={styles.deleteButton} onPress={onDelete} hitSlop={10} activeOpacity={0.6}>
+              <Trash size={20} color="#dc2626" />
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.button, styles.saveButton, !canSave && styles.buttonDisabled]}
+            onPress={onSave}
+            disabled={!canSave}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveText}>{saveLabel}</Text>
+            )}
           </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity
-          style={[styles.button, styles.saveButton, !canSave && styles.buttonDisabled]}
-          onPress={onSave}
-          disabled={!canSave}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveText}>{saveLabel}</Text>
-          )}
-        </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -107,12 +122,12 @@ export function MoodEditor({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
+    gap: 10,
   },
   previewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   meanings: {
     flex: 1,
@@ -126,23 +141,25 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 13,
   },
-  noteRow: {
-    flexDirection: 'row',
+  noteBox: {
+    flex: 1,
     alignItems: 'center',
-    gap: 10,
+    gap: 2,
+    justifyContent: 'center',
   },
   noteLabel: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: '600',
     color: '#374151',
+    textAlign: 'center',
   },
   noteInput: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    width: 64,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    width: 56,
     textAlign: 'center',
     color: '#111827',
     fontWeight: '700',
@@ -158,23 +175,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 10,
-    padding: 12,
-    minHeight: 60,
+    padding: 10,
+    minHeight: 44,
     textAlignVertical: 'top',
     color: '#111827',
   },
   actions: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'flex-end',
+  },
+  actionsBetween: {
+    justifyContent: 'space-between',
+  },
+  actionButtons: {
+    flexDirection: 'row',
     gap: 10,
   },
   button: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 96,
+    minWidth: 88,
   },
   saveButton: {
     backgroundColor: '#2563eb',
@@ -187,10 +211,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteButton: {
-    backgroundColor: '#fee2e2',
-  },
-  deleteText: {
-    color: '#b91c1c',
-    fontWeight: '700',
+    padding: 10,
   },
 });

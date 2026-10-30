@@ -60,7 +60,13 @@ export function useFinances() {
       const parsed = parseAmount(draft.amount);
       if (parsed.amount == null) return;
       const repeat = draft.repeats
-        ? { months: draft.repeatForever ? null : draft.repeatMonths }
+        ? {
+            intervalValue: draft.repeatIntervalValue,
+            intervalUnit: draft.repeatIntervalUnit,
+            endType: draft.repeatEndType,
+            endDate: draft.repeatEndType === 'onDate' ? draft.repeatEndDate : undefined,
+            count: draft.repeatEndType === 'afterCount' ? draft.repeatCount : undefined,
+          }
         : null;
       await container.saveFinanceTransaction.execute({
         id: editing?.id,

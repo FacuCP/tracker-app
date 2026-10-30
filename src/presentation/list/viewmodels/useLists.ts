@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { container } from '../../../core/di/container';
+import { applyIdOrder } from '../../../core/utils/order';
 import { List } from '../../../domain/list/entities/List';
 import { ListEntryDraft } from '../components/ListEntryModal';
 import { parseRating } from '../parseRating';
@@ -22,11 +23,18 @@ export function useLists() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [entryTarget, setEntryTarget] = useState<List | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  // Mismo propósito que en `useFavorites`: `ListCard` lo usa para saber
+  // cuándo re-pedir sus entradas, porque `counts.total`/`counts.done` no
+  // cambian si solo se editó un campo de una entrada (sin tocar cuántas hay
+  // ni cuántas están hechas).
+  const [reloadTick, setReloadTick] = useState(0);
 
   const reload = useCallback(async () => {
-    const [message, all] = await Promise.all([
+    const [message, all, savedOrder] = await Promise.all([
       container.getWelcomeMessage.execute(),
       container.getLists.execute(),
+      container.getListsOrder.execute(),
     ]);
     const entryCounts: Record<string, ListCounts> = {};
     await Promise.all(
@@ -39,9 +47,10 @@ export function useLists() {
       }),
     );
     setGreeting(message);
-    setLists(all);
+    setLists(applyIdOrder(all, savedOrder));
     setCounts(entryCounts);
     setLoading(false);
+    setReloadTick((t) => t + 1);
   }, []);
 
   useFocusEffect(
@@ -73,6 +82,26 @@ export function useLists() {
     [reload],
   );
 
+  const togglePinnedExpanded = useCallback(
+    async (list: List) => {
+      await container.setListPinnedExpanded.execute(list.id, !list.pinnedExpanded);
+      await reload();
+    },
+    [reload],
+  );
+
+  const move = useCallback((id: string, direction: 'up' | 'down') => {
+    setLists((prev) => {
+      const i = prev.findIndex((l) => l.id === id);
+      const j = direction === 'up' ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      container.saveListsOrder.execute(next.map((l) => l.id)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const saveEntry = useCallback(
     async (draft: ListEntryDraft) => {
       if (!entryTarget) return;
@@ -94,15 +123,20 @@ export function useLists() {
     lists,
     counts,
     loading,
+    reloadTick,
     createOpen,
     openCreate: () => setCreateOpen(true),
     closeCreate: () => setCreateOpen(false),
     createList,
     toggleFavorite,
+    togglePinnedExpanded,
     entryTarget,
     openAddEntry: setEntryTarget,
     closeEntryModal: () => setEntryTarget(null),
     saveEntry,
+    reorderMode,
+    toggleReorder: () => setReorderMode((v) => !v),
+    move,
     reload,
   };
 }

@@ -10,8 +10,8 @@ App personal hecha con **Expo + React Native + TypeScript**, organizada con
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
   rating); una lista puede ser una **to-do list** (entradas que se tildan).
-- **Finanzas** — economía actual + ingresos/gastos (con repetición mensual y
-  categorías) y su desglose por semana/mes/año.
+- **Finanzas** — economía actual + ingresos/gastos (con repetición opcional
+  cada N días o meses, y categorías) y su desglose por semana/mes/año.
 - **Gimnasio** — rutinas con ejercicios (series, repeticiones, peso, puesto) y un
   cuadro guiado para ir haciendo la rutina de hoy, con reseteo semanal.
 - **Eventos** — calendario con eventos (nombre, descripción, horario desde/hasta,
@@ -299,6 +299,17 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 | Amarillo | Seguro, confiado |
 | Marrón | Inseguro, raro |
 
+En el selector (`MoodColorPicker`), cada círculo muestra debajo solo la
+**emoción** ("Bien, tranquilo"), sin el nombre del color — en todo el mood
+tracker se muestra la emoción nomás, nunca el nombre del color. Cada
+emoción son dos palabras separadas por coma; en el selector se muestran
+siempre **una por renglón**, con el espacio del texto un poco más ancho
+que el círculo (76px) para que entre de una la palabra más larga, sin
+cortarse con "…" ni pasar a un renglón más; al mostrar la selección del
+día (card
+del home, resumen de solo lectura) van las dos juntas en un solo
+renglón.
+
 ### Reglas de negocio
 
 - Un día tiene **1 o 2** estados de ánimo (nunca 0, nunca repetidos).
@@ -309,14 +320,28 @@ en un gris azulado suave (`#e9ebf2`), cards un tono por encima (`#f8f9fc`).
 ### Pantallas
 
 - **Trackers**: saludo "Hola {nombre}!", la card del mood tracker, después una
-  card por cada tracker del usuario y, al final, el botón **＋ Crear tracker
-  nuevo**.
+  card por cada tracker del usuario (en el **orden manual** que guardó el
+  usuario) y, al final, el botón **＋ Crear tracker nuevo**. Botón
+  **"Ordenar"/"Listo"** (si hay más de un tracker, a la altura del saludo)
+  cambia esa lista a filas con flechas ▲▼ para reordenarlas a mano — mismo
+  [`ReorderRow`](src/presentation/components/ReorderRow.tsx) que usan
+  Favoritos/Rutina diaria/Listas; el mood tracker queda fijo arriba y se
+  oculta mientras se reordena, no entra en ese orden.
   - Mood card: si hoy no tiene registro → editor (colores + nota + descripción).
-    Una vez guardado → modo lectura; se edita desde "Ver progreso". Tiene una
+    Una vez guardado → resumen de solo lectura (colores + una línea
+    **"nota/10 - comentario"** en gris) con un **lápiz** al lado para volver a
+    editarlo sin salir de la card (precargado, con un **tacho** al lado de
+    "Actualizar" para borrar el registro de hoy, con confirmación), y abajo,
+    a la derecha de "Ver progreso", el badge **"Registrado hoy" en verde con
+    un tilde** — mismo patrón que los trackers normales. Tiene una
     **estrella** arriba a la derecha (favorito; arranca marcada).
 - **Progreso de ánimo**: calendario propio (empieza en lunes) con **Semana /
-  Mes / Año**, navegación entre períodos (flechas `‹ ›` o **swipe** horizontal)
-  y edición/borrado de cualquier día. En
+  Mes / Año**, navegación entre períodos (flechas `‹ ›` o **swipe** horizontal).
+  Tocar un día **ya cargado** abre una vista de solo lectura con un botón
+  **"Editar"** (pasa a la forma editable, precargada, con "Actualizar"); un
+  día **vacío** va directo a la forma editable, con "Guardar" — mismo patrón
+  que `TrackerDayModal`. "Borrar" pide **confirmación** antes de borrar el
+  registro del día. En
   **Año**, tocar un mes lo abre. Cada día con nota la muestra sobre los colores;
   arriba se ve el **promedio** de las notas del período. Debajo, las
   **Referencias**: una card por color (emoción + contador), **ordenadas por
@@ -336,11 +361,14 @@ más los **trackers** y **listas** favoritos (flag `favorite` en cada entidad,
 cards y no hay una colección de "favoritos" aparte.
 
 - **Rutina diaria va primero por defecto.** `DailyRoutineSummaryCard`
-  muestra la lista de tareas de hoy — tocar cualquier parte de una fila la
-  tilda/destilda, sin salir de Favoritos (mismo `setDailyTaskDone` que usa
-  la pantalla "Rutina diaria", y re-sincroniza el tracker interno de
-  seguimiento) — y un indicador de
-  cuánto se completó (`X/Y` + barra de progreso). Reemplaza a
+  muestra un indicador de cuánto se completó (`X/Y` + barra de progreso) y,
+  **desplegada por defecto** (mismo triángulo ▸/▾ que `ListCard`, al lado de
+  la estrella — colapsarla deja solo el progreso a la vista), la lista de
+  tareas de hoy — tocar cualquier parte de una fila la tilda/destilda, sin
+  salir de Favoritos (mismo `setDailyTaskDone` que usa la pantalla "Rutina
+  diaria", y re-sincroniza el tracker interno de seguimiento). Pasadas 8
+  tareas, esa lista scrollea en vez de crecer sin límite (mismo límite que
+  las listas en Favoritos, ver "Card desplegable" más abajo). Reemplaza a
   "Seguimiento de Rutina", que antes era el tracker que se adelantaba acá
   — ese tracker ahora es de uso **interno nomás** (ver "Rutina diaria"
   más abajo).
@@ -406,8 +434,11 @@ Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
   (rojo), configurables (nombre y color, de 1 a 6). Con una sola opción funciona
   como un "hecho / no hecho".
 - **Número**: un **contador** por día que se va sumando/restando (nunca baja de 0).
-- **Comentario**: texto libre opcional por día (`TrackerEntry.comment`), se
-  edita desde el día en "Ver progreso" (no desde la card rápida del home).
+- **Comentario**: texto libre opcional por día (`TrackerEntry.comment`). Se
+  edita desde el día en "Ver progreso", o con un **campo de texto en línea**
+  en la card rápida del home (igual que la descripción del mood tracker,
+  sin modal) mientras se están editando las opciones — se guarda junto con
+  ellas al tocar "Guardar"/"Actualizar".
 
 ### Pantallas
 
@@ -423,16 +454,35 @@ Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
   Abajo, el **resumen**: una card por opción con su conteo y/o **registros /
   promedio / mín / máx / total** del número. "Editar" en la barra superior
   abre el formulario. Tocar un día abre
-  [`TrackerDayModal`](src/presentation/tracker/components/TrackerDayModal.tsx),
-  con un campo de comentario además de las opciones/el número.
+  [`TrackerDayModal`](src/presentation/tracker/components/TrackerDayModal.tsx):
+  si ese día **ya tiene algo cargado**, arranca en una vista de solo
+  lectura (opciones elegidas, número, comentario) con un botón
+  **"Editar"**; recién ahí aparece la forma editable (opciones, número,
+  comentario) con **"Actualizar"** para guardar los cambios. Un día
+  **vacío** va directo a esa forma editable, con **"Guardar"**. El botón de
+  borrar es un **tacho** (no texto) y pide **confirmación** antes de borrar
+  el registro de ese día.
 
 ### Card del tracker
 
-- **Opciones**: se eligen 1 o 2 y se toca **Guardar**. Quedan en modo lectura;
-  para cambiarlas hay que ir a "Ver progreso" (igual que el mood tracker).
-- **Número**: **contador** con − / +. Cada toque persiste al instante; "Borrar"
-  lo saca.
-- Un tracker con las dos cosas muestra los dos bloques.
+- **Opciones**: se eligen 1 o 2, con el **comentario** debajo (campo de
+  texto, opcional), y se toca **Guardar** — queda a la derecha, a la misma
+  altura que "Ver progreso" (fila al fondo de la card, mismo patrón que el
+  mood tracker). Una vez guardadas, los chips y el comentario se ocultan y
+  queda un resumen de solo lectura (puntos de color + nombres, con el
+  comentario del día en gris debajo si tiene) con un **lápiz** a la altura
+  de ese resumen — tocarlo vuelve a mostrar los chips y el comentario,
+  precargados con lo ya elegido, con **"Actualizar"** para guardar los
+  cambios, sin salir de la card. En la fila de abajo, a la derecha de "Ver
+  progreso", aparece **"Registrado hoy" en verde con un tilde** mientras
+  esté en modo lectura (en vez del botón de Guardar/Actualizar, que solo se
+  ve mientras se está editando).
+- **Número**: **contador** con − / +. Cada toque persiste al instante. Para
+  borrar el registro de un tracker con opciones, hay un tacho al lado de
+  "Actualizar" mientras se edita (pide confirmación); un tracker solo con
+  contador (sin opciones) se borra desde "Ver progreso".
+- Un tracker con las dos cosas muestra los dos bloques — tocar el contador no
+  pierde una selección de opciones que todavía no se guardó.
 - **Estrella** arriba a la derecha: favorito. También hay un checkbox "Agregar a
   Favoritos" en el formulario.
 
@@ -465,26 +515,33 @@ que abre un modal mostrando **toda su info**
 ([`ListEntryInfoModal`](src/presentation/list/components/ListEntryInfoModal.tsx)).
 En una lista normal (sin checkbox, sin "hecho" que tildar), tocar la fila
 sigue abriendo ese mismo modal directo, como siempre. Para editar, o
-borrar, una entrada hay que entrar a la lista. Hay también un botón de
-**pin**
+borrar, una entrada hay que entrar a la lista.
+
+En **Listas**, cada card tiene además un botón de **pin**
 ([`PinButton`](src/presentation/components/PinButton.tsx), ícono de
 [Lucide](https://lucide.dev)): al pinear, la lista queda desplegada por
 defecto la próxima vez (`List.pinnedExpanded`, mismo patrón que `favorite`).
-
-En **Favoritos** (`ListCard` con `alwaysExpanded`), la vista desplegada se
-muestra **siempre**, sin triángulo para colapsarla (el pin sigue ahí, pero
-ya no cambia nada visible ahí mismo). Si la lista tiene **más de 15
-entradas**, esa vista pasa a ser un `ScrollView` con alto máximo en vez de
-crecer sin límite.
+En **Favoritos** no hay pin — ahí todas arrancan **desplegadas por
+defecto** (`defaultExpanded`, no depende de `pinnedExpanded`); el triángulo
+sigue estando para colapsarlas si se quiere, para esa sesión. El límite
+antes de scrollear ahí también es más bajo que en Listas — **8 entradas**
+en vez de 15 (`compact`, es un resumen, no la lista entera); pasado eso,
+esa vista pasa a ser un `ScrollView` con alto máximo en vez de crecer sin
+límite, con el scrollbar siempre visible (`persistentScrollbar`) para que
+quede claro que hay más — sin eso, parecía que la lista terminaba justo ahí.
 
 ### Pantallas
 
 - **Listas** (hub): saludo "Hola {nombre}!" + "Estas son tus listas", y
-  una card por lista con su nombre y su conteo. Las **to-do lists se listan
-  primero** y muestran **`hechas/total`** en vez de "N entradas". Tocar la card
+  una card por lista con su nombre y su conteo, en el **orden manual** que
+  guardó el usuario (por defecto, **to-do lists primero**). Muestran
+  **`hechas/total`** en vez de "N entradas" en las to-do. Tocar la card
   entra a la lista; el **＋** de la card agrega una entrada rápido (abre el
-  modal). Abajo, **＋ Crear lista nueva** (el modal tiene el checkbox "Hacerla
-  una to-do list").
+  modal). Botón **"Ordenar"/"Listo"** (si hay más de una lista, a la altura
+  del saludo) cambia a filas con flechas ▲▼ para reordenar a mano — mismo
+  patrón que Favoritos/Rutina diaria/Trackers; reordenar a mano pisa el
+  agrupamiento por defecto de to-do primero. Abajo, **＋ Crear lista nueva**
+  (el modal tiene el checkbox "Hacerla una to-do list").
 - **Detalle de la lista** ([`list-detail/`](src/presentation/screens/list-detail/)):
   título = nombre de la lista. Arriba, un selector **Ordenar por: Fecha / A-Z /
   Rating** (dice **Prioridad** en una to-do list). El orden por defecto es
@@ -534,17 +591,20 @@ del otro, **Añadir ingreso** (verde) y **Añadir gasto** (rojo). Tiene una
 en Favoritos, y desde ahí los botones llevan a Finanzas con el modal ya abierto.
 
 Un **movimiento** tiene nombre, fecha, **monto** (obligatorio, > 0), comentario
-opcional, una **categoría** y una **repetición** opcional. El campo de monto se
-formatea mientras se tipea (`$`, puntos de miles, coma decimal). Si se repite,
-impacta la economía el mismo día de cada mes (el último día si el mes es más
-corto), ya sea **indefinidamente** o **por N meses** (contando el primero). El
-dominio no guarda cada ocurrencia: las calcula al vuelo (`occurrences.ts`).
+opcional, una **categoría** y una **repetición** opcional (`FinanceRepeat`,
+mismo esquema que la de eventos — cada cuántos **días o meses**, terminando
+**indefinidamente**, **hasta una fecha** o **tras una cantidad de veces**). Si
+es mensual, impacta la economía el mismo día de cada mes (el último día si el
+mes es más corto). El campo de monto se formatea mientras se tipea (`$`,
+puntos de miles, coma decimal). El dominio no guarda cada ocurrencia: las
+calcula al vuelo (`occurrences.ts`).
 
 Al **editar** un movimiento con repetición hay un botón **"Ajustar monto (desde
 hoy)"**: se ingresa un monto nuevo y, de esa fecha en adelante, las ocurrencias
 valen eso. Se puede usar varias veces (queda una lista de `adjustments` con su
 fecha); el monto vigente de cada ocurrencia lo resuelve `financeAmountOn`, y el
-desglose muestra "cuota 3/12".
+desglose muestra "cuota 3/12" si la repetición termina tras una cantidad de
+veces, o "#3" si es indefinida o hasta una fecha (no hay un total fijo).
 
 También al editar aparece un checkbox **"Finalizado"**: lo marca con la fecha de
 hoy (`finishedOn`) y las cuotas/repeticiones posteriores dejan de calcularse
@@ -821,6 +881,8 @@ Todo **local** con AsyncStorage, cada cosa en su blob JSON:
 | `@app-celu/finance-categories/v1` | `{ [id]: FinanceCategoryDto }` (siembra defaults la 1ª vez) |
 | `@app-celu/finance-transactions/v1` | `{ [id]: FinanceTransactionDto }` (movimientos) |
 | `@app-celu/favorites-order/v1` | `string[]` (orden manual de la pantalla Favoritos) |
+| `@app-celu/lists-order/v1` | `string[]` (orden manual de la pantalla Listas, ids de lista) |
+| `@app-celu/trackers-order/v1` | `string[]` (orden manual de la pantalla Trackers, ids de tracker) |
 | `@app-celu/gym-routines/v1` | `{ [routineId]: GymRoutineDto }` |
 | `@app-celu/gym-exercises/v1` | `{ [routineId]: { [exerciseId]: GymExerciseDto } }` |
 | `@app-celu/gym-progress/v1` | `{ [routineId]: { [exerciseId]: GymProgressDto } }` (series de la semana actual) |

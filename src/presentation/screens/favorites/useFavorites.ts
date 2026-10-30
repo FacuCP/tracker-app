@@ -46,6 +46,12 @@ export function useFavorites() {
   const [loading, setLoading] = useState(true);
   const [entryTarget, setEntryTarget] = useState<List | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
+  // Se suma 1 cada reload exitoso — `ListCard` lo usa para saber cuándo
+  // re-pedir sus entradas en vez de `counts.total`/`counts.done` (que no
+  // cambian si solo se editó un campo de una entrada sin tocar cuántas hay
+  // ni cuántas están hechas, así que una edición así no se veía reflejada
+  // al volver a Favoritos).
+  const [reloadTick, setReloadTick] = useState(0);
 
   const reload = useCallback(async () => {
     const [message, profile, allTrackers, allLists, bal, savedOrder, dailyRoutineSession] = await Promise.all([
@@ -149,6 +155,7 @@ export function useFavorites() {
     setBalance(bal);
     setCards(ordered);
     setLoading(false);
+    setReloadTick((t) => t + 1);
   }, []);
 
   useFocusEffect(
@@ -178,14 +185,6 @@ export function useFavorites() {
   const toggleListFavorite = useCallback(
     async (list: List) => {
       await container.setListFavorite.execute(list.id, !list.favorite);
-      await reload();
-    },
-    [reload],
-  );
-
-  const toggleListPinnedExpanded = useCallback(
-    async (list: List) => {
-      await container.setListPinnedExpanded.execute(list.id, !list.pinnedExpanded);
       await reload();
     },
     [reload],
@@ -237,6 +236,7 @@ export function useFavorites() {
     cards,
     loading,
     isEmpty: !loading && cards.length === 0,
+    reloadTick,
     reorderMode,
     toggleReorder: () => setReorderMode((v) => !v),
     move,
@@ -245,7 +245,6 @@ export function useFavorites() {
     closeEntryModal: () => setEntryTarget(null),
     saveEntry,
     toggleListFavorite,
-    toggleListPinnedExpanded,
     toggleFinanceFavorite,
     toggleDailyRoutineFavorite,
     toggleDailyRoutineTask,

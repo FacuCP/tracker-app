@@ -75,8 +75,11 @@ export function FinancesScreen({ navigation, route }: Props) {
                   amount: amountInputFromNumber(vm.editing.amount),
                   categoryId: vm.editing.categoryId,
                   repeats: vm.editing.repeat != null,
-                  repeatForever: vm.editing.repeat != null && vm.editing.repeat.months == null,
-                  repeatMonths: vm.editing.repeat?.months ?? 6,
+                  repeatIntervalValue: vm.editing.repeat?.intervalValue ?? 1,
+                  repeatIntervalUnit: vm.editing.repeat?.intervalUnit ?? 'months',
+                  repeatEndType: vm.editing.repeat?.endType ?? 'never',
+                  repeatEndDate: vm.editing.repeat?.endDate ?? vm.editing.date,
+                  repeatCount: vm.editing.repeat?.count ?? 1,
                   adjustments: vm.editing.adjustments.map((a) => ({ ...a })),
                   finished: vm.editing.finishedOn != null,
                 }

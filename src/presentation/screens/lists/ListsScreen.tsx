@@ -1,10 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { ReorderRow } from '../../components/ReorderRow';
 import { CreateListButton } from '../../list/components/CreateListButton';
 import { CreateListModal } from '../../list/components/CreateListModal';
 import { ListCard } from '../../list/components/ListCard';
@@ -27,7 +28,14 @@ export function ListsScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.greeting}>{vm.greeting}</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.greeting}>{vm.greeting}</Text>
+          {!vm.loading && vm.lists.length > 1 ? (
+            <TouchableOpacity onPress={vm.toggleReorder} hitSlop={8}>
+              <Text style={styles.reorderButton}>{vm.reorderMode ? 'Listo' : 'Ordenar'}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <Text style={styles.subtitle}>Estas son tus listas</Text>
 
         {vm.loading ? (
@@ -38,6 +46,18 @@ export function ListsScreen({ navigation, route }: Props) {
               <View style={styles.empty}>
                 <Text style={styles.emptyText}>Todavía no tenés listas.</Text>
               </View>
+            ) : vm.reorderMode ? (
+              vm.lists.map((list, index) => (
+                <ReorderRow
+                  key={list.id}
+                  title={list.name}
+                  typeLabel={list.isTodo ? 'to-do list' : 'lista'}
+                  isFirst={index === 0}
+                  isLast={index === vm.lists.length - 1}
+                  onUp={() => vm.move(list.id, 'up')}
+                  onDown={() => vm.move(list.id, 'down')}
+                />
+              ))
             ) : (
               vm.lists.map((list) => (
                 <ListCard
@@ -48,11 +68,14 @@ export function ListsScreen({ navigation, route }: Props) {
                   onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
                   onToggleFavorite={() => vm.toggleFavorite(list)}
                   onEntryToggled={vm.reload}
+                  reloadTick={vm.reloadTick}
+                  showPin
+                  onTogglePin={() => vm.togglePinnedExpanded(list)}
                 />
               ))
             )}
 
-            <CreateListButton onPress={vm.openCreate} />
+            {!vm.reorderMode ? <CreateListButton onPress={vm.openCreate} /> : null}
           </>
         )}
       </ScrollView>
@@ -82,10 +105,22 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 12,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   greeting: {
+    flexShrink: 1,
     fontSize: 24,
     fontWeight: '800',
     color: theme.colors.text,
+  },
+  reorderButton: {
+    color: theme.colors.accent,
+    fontWeight: '800',
+    fontSize: 14,
   },
   subtitle: {
     fontSize: 14,

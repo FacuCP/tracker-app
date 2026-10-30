@@ -14,12 +14,22 @@ import { IsoDate, formatDdMmYyyy, todayIso } from '../../../core/utils/date';
 import { theme } from '../../../core/theme';
 import { FinanceCategory, GENERAL_CATEGORY } from '../../../domain/finance/entities/FinanceCategory';
 import {
+  DEFAULT_INTERVAL_DAYS,
+  DEFAULT_INTERVAL_MONTHS,
   FinanceAmountChange,
   FinanceKind,
+  FinanceRepeatEndType,
+  FinanceRepeatUnit,
   MAX_FINANCE_NAME,
+  MAX_INTERVAL_DAYS,
+  MAX_INTERVAL_MONTHS,
+  MIN_INTERVAL_VALUE,
+  MIN_REPEAT_COUNT,
+  MAX_REPEAT_COUNT,
 } from '../../../domain/finance/entities/FinanceTransaction';
 import { Checkbox } from '../../components/Checkbox';
 import { KeyboardAvoider } from '../../components/KeyboardAvoider';
+import { SelectField, SelectOption } from '../../components/SelectField';
 import { DateField } from '../../list/components/DateField';
 import { formatAmountInput, formatMoney, parseAmount } from '../money';
 
@@ -32,13 +42,27 @@ export interface FinanceTransactionDraft {
   amount: string;
   categoryId?: string;
   repeats: boolean;
-  repeatForever: boolean;
-  repeatMonths: number;
+  repeatIntervalValue: number;
+  repeatIntervalUnit: FinanceRepeatUnit;
+  repeatEndType: FinanceRepeatEndType;
+  repeatEndDate: IsoDate;
+  repeatCount: number;
   /** Ajustes de monto ({ from, amount }), ordenados por fecha. */
   adjustments: FinanceAmountChange[];
   /** Solo en edición de un movimiento con repetición: marcado como finalizado. */
   finished: boolean;
 }
+
+const END_TYPES: readonly SelectOption<FinanceRepeatEndType>[] = [
+  { key: 'never', label: 'Indefinidamente' },
+  { key: 'onDate', label: 'Hasta una fecha' },
+  { key: 'afterCount', label: 'Cantidad de veces' },
+];
+
+const UNIT_OPTIONS: readonly SelectOption<FinanceRepeatUnit>[] = [
+  { key: 'days', label: 'Días' },
+  { key: 'months', label: 'Meses' },
+];
 
 interface Props {
   visible: boolean;
@@ -69,8 +93,13 @@ export function FinanceTransactionModal({
   const [comment, setComment] = useState('');
   const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
   const [repeats, setRepeats] = useState(false);
-  const [repeatForever, setRepeatForever] = useState(true);
-  const [repeatMonths, setRepeatMonths] = useState('6');
+  const [intervalUnit, setIntervalUnit] = useState<FinanceRepeatUnit>('months');
+  /** Se guarda un texto por unidad, para no perder lo tipeado al ir y volver entre días y meses. */
+  const [intervalDaysText, setIntervalDaysText] = useState(String(DEFAULT_INTERVAL_DAYS));
+  const [intervalMonthsText, setIntervalMonthsText] = useState(String(DEFAULT_INTERVAL_MONTHS));
+  const [endType, setEndType] = useState<FinanceRepeatEndType>('never');
+  const [endDate, setEndDate] = useState<IsoDate>(todayIso());
+  const [count, setCount] = useState('1');
   const [adjustments, setAdjustments] = useState<FinanceAmountChange[]>([]);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustValue, setAdjustValue] = useState('');
@@ -86,8 +115,20 @@ export function FinanceTransactionModal({
       setComment(initial?.comment ?? '');
       setCategoryId(initial?.categoryId);
       setRepeats(initial?.repeats ?? false);
-      setRepeatForever(initial?.repeatForever ?? true);
-      setRepeatMonths(initial ? String(initial.repeatMonths) : '6');
+      setIntervalUnit(initial?.repeatIntervalUnit ?? 'months');
+      setIntervalDaysText(
+        initial?.repeatIntervalUnit === 'days'
+          ? String(initial.repeatIntervalValue)
+          : String(DEFAULT_INTERVAL_DAYS),
+      );
+      setIntervalMonthsText(
+        initial?.repeatIntervalUnit !== 'days'
+          ? String(initial?.repeatIntervalValue ?? DEFAULT_INTERVAL_MONTHS)
+          : String(DEFAULT_INTERVAL_MONTHS),
+      );
+      setEndType(initial?.repeatEndType ?? 'never');
+      setEndDate(initial?.repeatEndDate ?? initial?.date ?? todayIso());
+      setCount(initial?.repeatCount != null ? String(initial.repeatCount) : '1');
       setAdjustments(initial?.adjustments ?? []);
       setAdjustOpen(false);
       setAdjustValue('');
@@ -99,12 +140,31 @@ export function FinanceTransactionModal({
 
   const accent = kind === 'income' ? INCOME : EXPENSE;
   const amountError = parseAmount(amount).error;
-  const monthsValue = Number(repeatMonths);
-  const monthsError =
-    repeats && !repeatForever && (!Number.isInteger(monthsValue) || monthsValue < 1)
-      ? 'Poné un número entero de meses (1 o más)'
+
+  const intervalText = intervalUnit === 'months' ? intervalMonthsText : intervalDaysText;
+  const setIntervalText = intervalUnit === 'months' ? setIntervalMonthsText : setIntervalDaysText;
+  const intervalValue = Number(intervalText);
+  const maxInterval = intervalUnit === 'months' ? MAX_INTERVAL_MONTHS : MAX_INTERVAL_DAYS;
+  const countValue = Number(count);
+
+  const intervalError =
+    repeats &&
+    (intervalText.trim() === '' ||
+      !Number.isInteger(intervalValue) ||
+      intervalValue < MIN_INTERVAL_VALUE ||
+      intervalValue > maxInterval)
+      ? `Poné un entero entre ${MIN_INTERVAL_VALUE} y ${maxInterval}`
       : undefined;
-  const canSave = name.trim().length > 0 && !amountError && !monthsError && !saving;
+  const countError =
+    repeats &&
+    endType === 'afterCount' &&
+    (count.trim() === '' || !Number.isInteger(countValue) || countValue < MIN_REPEAT_COUNT || countValue > MAX_REPEAT_COUNT)
+      ? `Poné un entero entre ${MIN_REPEAT_COUNT} y ${MAX_REPEAT_COUNT}`
+      : undefined;
+  const endDateError =
+    repeats && endType === 'onDate' && endDate < date ? 'Tiene que ser posterior al movimiento' : undefined;
+
+  const canSave = name.trim().length > 0 && !amountError && !intervalError && !countError && !endDateError && !saving;
 
   const currentAmount =
     adjustments.length > 0
@@ -140,8 +200,11 @@ export function FinanceTransactionModal({
         amount,
         categoryId,
         repeats,
-        repeatForever,
-        repeatMonths: Math.max(1, Math.round(monthsValue) || 1),
+        repeatIntervalValue: intervalValue,
+        repeatIntervalUnit: intervalUnit,
+        repeatEndType: endType,
+        repeatEndDate: endType === 'onDate' ? endDate : date,
+        repeatCount: endType === 'afterCount' ? countValue : 1,
         adjustments,
         finished,
       });
@@ -216,36 +279,64 @@ export function FinanceTransactionModal({
                   activeOpacity={0.7}
                 >
                   <Checkbox checked={repeats} onToggle={() => setRepeats((v) => !v)} />
-                  <Text style={styles.repeatLabel}>Se repite todos los meses</Text>
+                  <Text style={styles.repeatLabel}>Se repite</Text>
                 </TouchableOpacity>
 
                 {repeats ? (
                   <>
-                    <View style={styles.repeatOptions}>
-                      <RepeatOption
-                        label="Indefinidamente"
-                        active={repeatForever}
-                        onPress={() => setRepeatForever(true)}
-                      />
-                      <RepeatOption
-                        label="Por X meses"
-                        active={!repeatForever}
-                        onPress={() => setRepeatForever(false)}
-                      />
-                    </View>
-                    {!repeatForever ? (
+                    <View style={styles.field}>
+                      <Text style={styles.label}>Repetir cada</Text>
                       <View style={styles.monthsRow}>
-                        <TextInput
-                          style={[styles.input, styles.monthsInput, monthsError && styles.inputError]}
-                          value={repeatMonths}
-                          onChangeText={setRepeatMonths}
-                          keyboardType="number-pad"
-                          maxLength={3}
-                        />
-                        <Text style={styles.monthsHint}>meses (contando este)</Text>
+                        <View style={styles.intervalValueField}>
+                          <TextInput
+                            style={[styles.input, intervalError && styles.inputError]}
+                            placeholder={
+                              intervalUnit === 'months' ? String(DEFAULT_INTERVAL_MONTHS) : String(DEFAULT_INTERVAL_DAYS)
+                            }
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={intervalText}
+                            onChangeText={setIntervalText}
+                            keyboardType="number-pad"
+                            maxLength={4}
+                          />
+                        </View>
+                        <View style={styles.field}>
+                          <SelectField value={intervalUnit} options={UNIT_OPTIONS} onChange={setIntervalUnit} />
+                        </View>
                       </View>
-                    ) : null}
-                    {monthsError ? <Text style={styles.errorText}>{monthsError}</Text> : null}
+                      {intervalError ? <Text style={styles.errorText}>{intervalError}</Text> : null}
+                    </View>
+
+                    <View style={styles.field}>
+                      <View style={styles.monthsRow}>
+                        <View style={styles.field}>
+                          <SelectField label="Repetición" value={endType} options={END_TYPES} onChange={setEndType} />
+                        </View>
+
+                        {endType === 'onDate' ? (
+                          <View style={styles.field}>
+                            <DateField value={endDate} onChange={setEndDate} label="Hasta" />
+                          </View>
+                        ) : null}
+
+                        {endType === 'afterCount' ? (
+                          <View style={styles.field}>
+                            <Text style={styles.label}>Cantidad de veces</Text>
+                            <TextInput
+                              style={[styles.input, countError && styles.inputError]}
+                              placeholder="1"
+                              placeholderTextColor={theme.colors.textMuted}
+                              value={count}
+                              onChangeText={setCount}
+                              keyboardType="number-pad"
+                              maxLength={4}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                      {endDateError ? <Text style={styles.errorText}>{endDateError}</Text> : null}
+                      {countError ? <Text style={styles.errorText}>{countError}</Text> : null}
+                    </View>
 
                     {initial ? (
                       <View style={styles.adjustBox}>
@@ -359,26 +450,6 @@ function CategoryChip({
       activeOpacity={0.8}
     >
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function RepeatOption({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.repeatOption, active && styles.repeatOptionActive]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <Text style={[styles.repeatOptionText, active && styles.repeatOptionTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -539,43 +610,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  repeatOptions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  repeatOption: {
+  field: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
+    gap: 4,
   },
-  repeatOptionActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: '#eff6ff',
-  },
-  repeatOptionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
-  },
-  repeatOptionTextActive: {
-    color: '#1e3a8a',
+  intervalValueField: {
+    width: 70,
   },
   monthsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  monthsInput: {
-    width: 70,
-    textAlign: 'center',
-    fontWeight: '800',
-  },
-  monthsHint: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
   },
   actions: {
     flexDirection: 'row',

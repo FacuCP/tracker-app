@@ -154,8 +154,11 @@ function ToggleButton({
 
 function installmentLabel(item: FinanceReportItem): string | null {
   if (!item.recurring) return null;
-  const total = item.transaction.repeat?.months;
-  return total != null ? `cuota ${item.index + 1}/${total}` : `mes ${item.index + 1}`;
+  const repeat = item.transaction.repeat;
+  if (repeat?.endType === 'afterCount' && repeat.count != null) {
+    return `cuota ${item.index + 1}/${repeat.count}`;
+  }
+  return `#${item.index + 1}`;
 }
 
 function ItemRow({ item, onPress }: { item: FinanceReportItem; onPress: () => void }) {

@@ -27,6 +27,9 @@ import { GetTrackers } from '../../domain/tracker/usecases/GetTrackers';
 import { SaveTrackerEntry } from '../../domain/tracker/usecases/SaveTrackerEntry';
 import { SetTrackerFavorite } from '../../domain/tracker/usecases/SetTrackerFavorite';
 import { UpdateTracker } from '../../domain/tracker/usecases/UpdateTracker';
+import { TrackersOrderRepositoryImpl } from '../../data/tracker/repositories/TrackersOrderRepositoryImpl';
+import { GetTrackersOrder } from '../../domain/tracker/usecases/GetTrackersOrder';
+import { SaveTrackersOrder } from '../../domain/tracker/usecases/SaveTrackersOrder';
 import { AsyncStorageListLocalDataSource } from '../../data/list/datasources/ListLocalDataSource';
 import { AsyncStorageListEntryLocalDataSource } from '../../data/list/datasources/ListEntryLocalDataSource';
 import { ListRepositoryImpl } from '../../data/list/repositories/ListRepositoryImpl';
@@ -41,6 +44,9 @@ import { SaveListEntry } from '../../domain/list/usecases/SaveListEntry';
 import { SetListEntryDone } from '../../domain/list/usecases/SetListEntryDone';
 import { SetListFavorite } from '../../domain/list/usecases/SetListFavorite';
 import { SetListPinnedExpanded } from '../../domain/list/usecases/SetListPinnedExpanded';
+import { ListsOrderRepositoryImpl } from '../../data/list/repositories/ListsOrderRepositoryImpl';
+import { GetListsOrder } from '../../domain/list/usecases/GetListsOrder';
+import { SaveListsOrder } from '../../domain/list/usecases/SaveListsOrder';
 import { AsyncStorageFinanceCategoryLocalDataSource } from '../../data/finance/datasources/FinanceCategoryLocalDataSource';
 import { AsyncStorageFinanceTransactionLocalDataSource } from '../../data/finance/datasources/FinanceTransactionLocalDataSource';
 import { FinanceCategoryRepositoryImpl } from '../../data/finance/repositories/FinanceCategoryRepositoryImpl';
@@ -116,10 +122,12 @@ const trackerRepository = new TrackerRepositoryImpl(new AsyncStorageTrackerLocal
 const trackerEntryRepository = new TrackerEntryRepositoryImpl(
   new AsyncStorageTrackerEntryLocalDataSource(),
 );
+const trackersOrderRepository = new TrackersOrderRepositoryImpl();
 
 // --- Listas del usuario ---
 const listRepository = new ListRepositoryImpl(new AsyncStorageListLocalDataSource());
 const listEntryRepository = new ListEntryRepositoryImpl(new AsyncStorageListEntryLocalDataSource());
+const listsOrderRepository = new ListsOrderRepositoryImpl();
 
 // --- Finanzas ---
 const financeCategoryRepository = new FinanceCategoryRepositoryImpl(
@@ -182,12 +190,16 @@ export const container = {
   saveTrackerEntry: new SaveTrackerEntry(trackerRepository, trackerEntryRepository),
   deleteTrackerEntry: new DeleteTrackerEntry(trackerEntryRepository),
   getTrackerRange: new GetTrackerRange(trackerEntryRepository),
+  getTrackersOrder: new GetTrackersOrder(trackersOrderRepository),
+  saveTrackersOrder: new SaveTrackersOrder(trackersOrderRepository),
 
   getLists: new GetLists(listRepository),
   getList: new GetList(listRepository),
   createList: new CreateList(listRepository, generateId),
   setListFavorite: new SetListFavorite(listRepository),
   setListPinnedExpanded: new SetListPinnedExpanded(listRepository),
+  getListsOrder: new GetListsOrder(listsOrderRepository),
+  saveListsOrder: new SaveListsOrder(listsOrderRepository),
   deleteList: new DeleteList(listRepository, listEntryRepository),
   getListEntries: new GetListEntries(listEntryRepository),
   saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),

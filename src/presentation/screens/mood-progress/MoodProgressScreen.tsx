@@ -1,4 +1,4 @@
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -23,6 +23,13 @@ export function MoodProgressScreen() {
     onSwipeLeft: vm.goToNext,
     onSwipeRight: vm.goToPrevious,
   });
+
+  function confirmDeleteDay() {
+    Alert.alert('Borrar registro', 'Se borrará el registro de ánimo de este día.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Borrar', style: 'destructive', onPress: vm.deleteDay },
+    ]);
+  }
 
   const renderDay = ({ date, dayOfMonth, isToday, size }: {
     date: string;
@@ -115,7 +122,7 @@ export function MoodProgressScreen() {
         entry={vm.selectedEntry}
         onClose={vm.closeDay}
         onSave={vm.saveDay}
-        onDelete={vm.deleteDay}
+        onDelete={confirmDeleteDay}
       />
     </SafeAreaView>
   );

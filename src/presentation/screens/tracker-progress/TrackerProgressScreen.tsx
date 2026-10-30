@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useLayoutEffect } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -53,6 +54,13 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
         ) : null,
     });
   }, [navigation, tracker, trackerId]);
+
+  function confirmDeleteDay() {
+    Alert.alert('Borrar registro', 'Se borrará el registro de este día.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Borrar', style: 'destructive', onPress: vm.deleteDay },
+    ]);
+  }
 
   function dayFills(date: string): string[] | undefined {
     const entry = vm.entriesByDate[date];
@@ -161,7 +169,7 @@ export function TrackerProgressScreen({ route, navigation }: Props) {
           entry={vm.selectedEntry}
           onClose={vm.closeDay}
           onSave={vm.saveDay}
-          onDelete={vm.deleteDay}
+          onDelete={confirmDeleteDay}
         />
       ) : null}
     </SafeAreaView>

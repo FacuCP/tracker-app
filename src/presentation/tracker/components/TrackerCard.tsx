@@ -1,10 +1,12 @@
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Check, Trash } from 'lucide-react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { capitalize, formatLongDate, todayIso } from '../../../core/utils/date';
-import { getTrackerOption } from '../../../domain/tracker/entities/Tracker';
+import { MAX_TRACKER_COMMENT } from '../../../domain/tracker/entities/TrackerEntry';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { useTrackerCard } from '../viewmodels/useTrackerCard';
 import { Counter } from './Counter';
+import { TrackerOptionsSummary } from './TrackerOptionsSummary';
 
 interface Props {
   trackerId: string;
@@ -21,6 +23,13 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
   async function toggleFavorite() {
     await vm.toggleFavorite();
     onFavoriteToggled?.();
+  }
+
+  function confirmDeleteEntry() {
+    Alert.alert('Borrar registro', 'Se borrará el registro de hoy para este tracker.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Borrar', style: 'destructive', onPress: vm.clearEntry },
+    ]);
   }
 
   const hasOptions = (tracker?.options.length ?? 0) > 0;
@@ -44,13 +53,11 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
         <>
           {hasOptions ? (
             vm.optionsLocked ? (
-              <OptionsSummary
-                labels={(vm.entry?.optionIds ?? []).map(
-                  (id) => getTrackerOption(tracker, id)?.label ?? '—',
-                )}
-                colors={(vm.entry?.optionIds ?? []).map(
-                  (id) => getTrackerOption(tracker, id)?.color ?? '#9ca3af',
-                )}
+              <TrackerOptionsSummary
+                tracker={tracker}
+                optionIds={vm.entry?.optionIds ?? []}
+                comment={vm.entry?.comment}
+                onEdit={vm.openEditOptions}
               />
             ) : (
               <>
@@ -75,55 +82,57 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
                     );
                   })}
                 </View>
-                <TouchableOpacity
-                  style={[
-                    styles.saveButton,
-                    (vm.selectedOptionIds.length === 0 || vm.saving) && styles.saveButtonDisabled,
-                  ]}
-                  onPress={vm.saveOptions}
-                  disabled={vm.selectedOptionIds.length === 0 || vm.saving}
-                >
-                  {vm.saving ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.saveText}>Guardar</Text>
-                  )}
-                </TouchableOpacity>
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Comentario (opcional)"
+                  placeholderTextColor="#9ca3af"
+                  value={vm.commentDraft}
+                  onChangeText={vm.onCommentDraftChange}
+                  maxLength={MAX_TRACKER_COMMENT}
+                  multiline
+                />
               </>
             )
           ) : null}
 
-          {tracker.hasCounter ? (
-            <View style={styles.counterRow}>
-              <Counter value={vm.count} onChange={vm.setCount} />
-              {vm.entry ? (
-                <TouchableOpacity onPress={vm.clearEntry} style={styles.clearButton}>
-                  <Text style={styles.clearText}>Borrar</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : null}
+          {tracker.hasCounter ? <Counter value={vm.count} onChange={vm.setCount} /> : null}
         </>
       )}
 
-      <TouchableOpacity onPress={onSeeProgress} style={styles.progressButton}>
-        <Text style={styles.progressText}>Ver progreso →</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function OptionsSummary({ labels, colors }: { labels: string[]; colors: string[] }) {
-  return (
-    <View style={styles.summary}>
-      <View style={styles.summaryDots}>
-        {colors.map((color, i) => (
-          <View key={i} style={[styles.summaryDot, { backgroundColor: color }]} />
-        ))}
-      </View>
-      <View style={styles.summaryTexts}>
-        <Text style={styles.summaryLabel}>{labels.join(' · ') || '—'}</Text>
-        <Text style={styles.summaryHint}>Ya registraste hoy. Editás desde “Ver progreso”.</Text>
+      <View style={[styles.bottomRow, hasOptions ? styles.bottomRowBetween : null]}>
+        <TouchableOpacity onPress={onSeeProgress}>
+          <Text style={styles.progressText}>Ver progreso →</Text>
+        </TouchableOpacity>
+        {hasOptions ? (
+          vm.optionsLocked ? (
+            <View style={styles.registeredBadge}>
+              <Check size={14} color="#16a34a" strokeWidth={3} />
+              <Text style={styles.registeredText}>Registrado hoy</Text>
+            </View>
+          ) : (
+            <View style={styles.editActions}>
+              {vm.entry ? (
+                <TouchableOpacity onPress={confirmDeleteEntry} hitSlop={10} activeOpacity={0.6}>
+                  <Trash size={20} color="#dc2626" />
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  (vm.selectedOptionIds.length === 0 || vm.saving) && styles.saveButtonDisabled,
+                ]}
+                onPress={vm.saveOptions}
+                disabled={vm.selectedOptionIds.length === 0 || vm.saving}
+              >
+                {vm.saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.saveText}>{vm.entry ? 'Actualizar' : 'Guardar'}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )
+        ) : null}
       </View>
     </View>
   );
@@ -187,7 +196,6 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   saveButton: {
-    alignSelf: 'flex-start',
     backgroundColor: '#2563eb',
     borderRadius: 10,
     paddingVertical: 10,
@@ -202,51 +210,39 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
   },
-  summary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  summaryDots: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  summaryDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  summaryTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    fontWeight: '800',
+  commentInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 10,
+    minHeight: 44,
+    textAlignVertical: 'top',
     color: '#111827',
   },
-  summaryHint: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  counterRow: {
+  bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
   },
-  clearButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  clearText: {
-    color: '#b91c1c',
-    fontWeight: '700',
-  },
-  progressButton: {
-    alignSelf: 'flex-start',
+  bottomRowBetween: {
+    justifyContent: 'space-between',
   },
   progressText: {
     color: '#2563eb',
     fontWeight: '700',
+  },
+  registeredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  registeredText: {
+    color: '#16a34a',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  editActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
 });

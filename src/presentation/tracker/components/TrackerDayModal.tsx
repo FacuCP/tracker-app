@@ -1,3 +1,4 @@
+import { Trash } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -6,6 +7,7 @@ import { MAX_OPTIONS_PER_DAY, Tracker } from '../../../domain/tracker/entities/T
 import { MAX_TRACKER_COMMENT, TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
 import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 import { Counter } from './Counter';
+import { TrackerOptionsSummary } from './TrackerOptionsSummary';
 
 interface Props {
   tracker: Tracker;
@@ -16,12 +18,18 @@ interface Props {
   onDelete: () => Promise<void> | void;
 }
 
-/** Modal para editar el registro de un día de un tracker del usuario. */
+/**
+ * Modal para ver/editar el registro de un día de un tracker del usuario. Si
+ * el día ya tiene algo cargado, arranca en una vista de solo lectura (el
+ * botón "Editar" pasa a la forma editable, precargada); si está vacío, va
+ * directo a la forma editable, como siempre.
+ */
 export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelete }: Props) {
   const [optionIds, setOptionIds] = useState<string[]>([]);
   const [count, setCount] = useState(0);
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState(entry != null);
 
   const hasOptions = tracker.options.length > 0;
 
@@ -30,6 +38,7 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
     setCount(entry?.value != null ? Math.max(0, Math.round(entry.value)) : 0);
     setComment(entry?.comment ?? '');
     setSaving(false);
+    setViewMode(entry != null);
   }, [date, entry]);
 
   function toggleOption(id: string) {
@@ -71,61 +80,97 @@ export function TrackerDayModal({ tracker, date, entry, onClose, onSave, onDelet
               style={styles.body}
               contentContainerStyle={styles.bodyContent}
             >
-              {hasOptions ? (
-                <View style={styles.options}>
-                  {tracker.options.map((option) => {
-                    const selected = optionIds.includes(option.id);
-                    return (
-                      <TouchableOpacity
-                        key={option.id}
-                        style={[
-                          styles.optionChip,
-                          { borderColor: option.color },
-                          selected && { backgroundColor: option.color },
-                        ]}
-                        onPress={() => toggleOption(option.id)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
+              {viewMode && entry ? (
+                <View style={styles.viewBlock}>
+                  {hasOptions ? (
+                    entry.optionIds.length > 0 ? (
+                      <TrackerOptionsSummary tracker={tracker} optionIds={entry.optionIds} />
+                    ) : (
+                      <Text style={styles.viewEmpty}>Sin opciones elegidas.</Text>
+                    )
+                  ) : null}
 
-              {tracker.hasCounter ? (
-                <View style={styles.counterWrap}>
-                  <Counter value={count} onChange={(next) => setCount(Math.max(0, next))} />
-                </View>
-              ) : null}
+                  {tracker.hasCounter ? (
+                    <View style={styles.viewRow}>
+                      <Text style={styles.viewLabel}>Número</Text>
+                      <Text style={styles.viewCount}>{entry.value ?? 0}</Text>
+                    </View>
+                  ) : null}
 
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Comentario (opcional)"
-                placeholderTextColor="#9ca3af"
-                value={comment}
-                onChangeText={setComment}
-                maxLength={MAX_TRACKER_COMMENT}
-                multiline
-                textAlignVertical="top"
-              />
+                  <View style={styles.viewRow}>
+                    <Text style={styles.viewLabel}>Comentario</Text>
+                    {entry.comment ? (
+                      <Text style={styles.viewComment}>{entry.comment}</Text>
+                    ) : (
+                      <Text style={styles.viewEmpty}>Sin comentario.</Text>
+                    )}
+                  </View>
+                </View>
+              ) : (
+                <>
+                  {hasOptions ? (
+                    <View style={styles.options}>
+                      {tracker.options.map((option) => {
+                        const selected = optionIds.includes(option.id);
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[
+                              styles.optionChip,
+                              { borderColor: option.color },
+                              selected && { backgroundColor: option.color },
+                            ]}
+                            onPress={() => toggleOption(option.id)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  {tracker.hasCounter ? (
+                    <View style={styles.counterWrap}>
+                      <Counter value={count} onChange={(next) => setCount(Math.max(0, next))} />
+                    </View>
+                  ) : null}
+
+                  <TextInput
+                    style={styles.commentInput}
+                    placeholder="Comentario (opcional)"
+                    placeholderTextColor="#9ca3af"
+                    value={comment}
+                    onChangeText={setComment}
+                    maxLength={MAX_TRACKER_COMMENT}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.actions}>
               {entry ? (
-                <TouchableOpacity style={[styles.button, styles.deleteButton]} onPress={onDelete}>
-                  <Text style={styles.deleteText}>Borrar</Text>
+                <TouchableOpacity style={styles.deleteButton} onPress={onDelete} hitSlop={10} activeOpacity={0.6}>
+                  <Trash size={20} color="#dc2626" />
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity
-                style={[styles.button, styles.saveButton, (!canSave || saving) && styles.disabled]}
-                onPress={handleSave}
-                disabled={!canSave || saving}
-              >
-                <Text style={styles.saveText}>{entry ? 'Actualizar' : 'Guardar'}</Text>
-              </TouchableOpacity>
+              {viewMode ? (
+                <TouchableOpacity style={[styles.button, styles.editButton]} onPress={() => setViewMode(false)}>
+                  <Text style={styles.editButtonText}>Editar</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.button, styles.saveButton, (!canSave || saving) && styles.disabled]}
+                  onPress={handleSave}
+                  disabled={!canSave || saving}
+                >
+                  <Text style={styles.saveText}>{entry ? 'Actualizar' : 'Guardar'}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </Pressable>
         </Pressable>
@@ -202,6 +247,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
   },
+  viewBlock: {
+    gap: 16,
+  },
+  viewRow: {
+    gap: 4,
+  },
+  viewLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  viewCount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  viewComment: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  viewEmpty: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -217,6 +289,14 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: '#2563eb',
   },
+  editButton: {
+    borderWidth: 1.5,
+    borderColor: '#2563eb',
+  },
+  editButtonText: {
+    color: '#2563eb',
+    fontWeight: '700',
+  },
   disabled: {
     opacity: 0.4,
   },
@@ -225,10 +305,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteButton: {
-    backgroundColor: '#fee2e2',
-  },
-  deleteText: {
-    color: '#b91c1c',
-    fontWeight: '700',
+    padding: 10,
   },
 });

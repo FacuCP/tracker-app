@@ -54,6 +54,15 @@ export function isMoodColor(value: string): value is MoodColor {
 }
 
 /**
+ * Cada `meaning` son dos palabras separadas por coma (p. ej. "Bien,
+ * tranquilo"). La UI las muestra una por renglón en vez de un solo texto que
+ * puede o no partirse ahí según el ancho disponible.
+ */
+export function splitMoodMeaning(meaning: string): string[] {
+  return meaning.split(', ');
+}
+
+/**
  * Orden en el que se muestran los colores en las referencias de la pantalla
  * de progreso. El primero (naranja) va solo en su fila; el resto, de a pares.
  */

@@ -18,17 +18,23 @@ interface Props {
   onAddEntry: () => void;
   onOpen: () => void;
   onToggleFavorite: () => void;
-  /** Solo en Favoritos: muestra el botón de pin (desplegada por defecto). */
+  /** Solo en Listas: muestra el botón de pin (desplegada por defecto la próxima vez). */
   showPin?: boolean;
   onTogglePin?: () => void;
   /** Se llama después de tildar/destildar un ítem desde la vista desplegada. */
   onEntryToggled?: () => void;
-  /** Solo en Favoritos: siempre desplegada, sin triángulo para colapsarla. */
-  alwaysExpanded?: boolean;
+  /** Con qué estado arranca desplegada/colapsada, antes de que el usuario toque el triángulo. Sin esto, arranca según `list.pinnedExpanded`. */
+  defaultExpanded?: boolean;
+  /** Solo en Favoritos: resumen compacto — límite más bajo antes de scrollear. */
+  compact?: boolean;
+  /** Se suma 1 en cada recarga de la pantalla que contiene la card — ver `useFavorites`/`useLists`. */
+  reloadTick?: number;
 }
 
 /** A partir de esta cantidad de entradas, la vista desplegada scrollea en vez de crecer sin límite. */
 const MAX_VISIBLE_ENTRIES = 15;
+/** En Favoritos el límite es más bajo — la idea ahí es un resumen compacto, no la lista entera. */
+const MAX_VISIBLE_ENTRIES_FAVORITES = 8;
 
 function subtitle(list: List, counts: ListCounts): string {
   if (list.isTodo) {
@@ -49,10 +55,12 @@ function subtitle(list: List, counts: ListCounts): string {
  * fecha/comentario/rating si tiene; en listas normales, tocar la fila
  * muestra esa misma info (no hay "hecho" que tildar). Para editar o borrar
  * una entrada hay que entrar a la lista como siempre. Con más de 15
- * entradas, esa vista scrollea en vez de crecer sin límite. En Favoritos, el
- * pin hace que quede desplegada por defecto la próxima vez; con
- * `alwaysExpanded` (también solo en Favoritos) queda siempre desplegada y no
- * hay triángulo para colapsarla.
+ * entradas (8 en Favoritos — ahí es un resumen, no la lista entera, ver
+ * `compact`), esa vista scrollea en vez de crecer sin límite. En Listas, el
+ * pin hace que quede desplegada por defecto la próxima vez
+ * (`list.pinnedExpanded`); en Favoritos arranca desplegada siempre
+ * (`defaultExpanded`), sin pin (no tiene sentido ahí — ya está desplegada
+ * por defecto y el triángulo ya deja colapsarla para esa sesión).
  */
 export function ListCard({
   list,
@@ -63,13 +71,16 @@ export function ListCard({
   showPin = false,
   onTogglePin,
   onEntryToggled,
-  alwaysExpanded = false,
+  defaultExpanded,
+  compact = false,
+  reloadTick,
 }: Props) {
-  const [expanded, setExpanded] = useState(list.pinnedExpanded);
+  const [expanded, setExpanded] = useState(defaultExpanded ?? list.pinnedExpanded);
   const [entries, setEntries] = useState<ListEntry[] | null>(null);
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ListEntry | null>(null);
-  const isExpanded = alwaysExpanded || expanded;
+  const isExpanded = expanded;
+  const maxVisibleEntries = compact ? MAX_VISIBLE_ENTRIES_FAVORITES : MAX_VISIBLE_ENTRIES;
 
   // Si se pinea desde otra parte (o al recargar), queda desplegada; nunca se
   // fuerza el colapso solo porque se despineó.
@@ -77,10 +88,12 @@ export function ListCard({
     if (list.pinnedExpanded) setExpanded(true);
   }, [list.pinnedExpanded]);
 
-  // `counts` cambia cada vez que la pantalla que contiene la card recarga
-  // (agregar/borrar una entrada, tildar una tarea desde la lista completa,
-  // etc.), así que entra en las dependencias para no tener que cerrar y
-  // volver a abrir la vista desplegada para que se actualice.
+  // Re-pide las entradas cuando se despliega, cuando cambia la lista, o
+  // cuando la pantalla que contiene la card recarga (`reloadTick`, p. ej. al
+  // volver de editar una entrada) — `counts.total`/`counts.done` solos no
+  // alcanzan: no cambian si la edición no tocó cuántas entradas hay ni
+  // cuántas están hechas, así que antes una edición así quedaba sin verse
+  // acá hasta cerrar y volver a abrir la vista desplegada.
   useEffect(() => {
     if (!isExpanded) return;
     let active = true;
@@ -94,7 +107,7 @@ export function ListCard({
     return () => {
       active = false;
     };
-  }, [isExpanded, list.id, counts.total, counts.done]);
+  }, [isExpanded, list.id, counts.total, counts.done, reloadTick]);
 
   async function toggleEntryDone(entry: ListEntry) {
     const next = !entry.done;
@@ -164,11 +177,9 @@ export function ListCard({
           />
         ) : null}
 
-        {alwaysExpanded ? null : (
-          <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
-            <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
+          <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.addButton} onPress={onAddEntry} activeOpacity={0.7}>
           <Text style={styles.addSign}>＋</Text>
@@ -181,11 +192,13 @@ export function ListCard({
             <ActivityIndicator style={styles.entriesLoader} />
           ) : !entries || entries.length === 0 ? (
             <Text style={styles.emptyEntries}>{list.isTodo ? 'Sin tareas' : 'Sin entradas'}</Text>
-          ) : entries.length > MAX_VISIBLE_ENTRIES ? (
+          ) : entries.length > maxVisibleEntries ? (
             <ScrollView
-              style={styles.entriesScroll}
+              style={compact ? styles.entriesScrollFavorites : styles.entriesScroll}
               contentContainerStyle={styles.entriesScrollContent}
               nestedScrollEnabled
+              persistentScrollbar
+              showsVerticalScrollIndicator
             >
               {entries.map(renderEntryRow)}
             </ScrollView>
@@ -263,6 +276,9 @@ const styles = StyleSheet.create({
   },
   entriesScroll: {
     maxHeight: 480,
+  },
+  entriesScrollFavorites: {
+    maxHeight: 280,
   },
   entriesScrollContent: {
     gap: 10,

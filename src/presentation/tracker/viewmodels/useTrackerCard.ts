@@ -10,8 +10,12 @@ import { TrackerEntry } from '../../../domain/tracker/entities/TrackerEntry';
  * ViewModel de la card de un tracker del usuario en el home.
  *
  * - Opciones: se eligen una o dos (como el mood tracker) y se **guardan**; una
- *   vez guardadas quedan en modo lectura y se editan desde "Ver progreso".
+ *   vez guardadas quedan en modo lectura (resumen), con un botón "Editar" que
+ *   vuelve a mostrar los chips — precargados con lo ya elegido — para
+ *   cambiarlas sin salir de la card.
  * - Número: funciona como **contador**; cada − / + persiste al instante.
+ * - Comentario: campo de texto dentro de la misma edición de opciones (igual
+ *   que la descripción del mood tracker), no un modal aparte.
  * Un tracker puede tener las dos cosas a la vez.
  */
 export function useTrackerCard(trackerId: string) {
@@ -20,19 +24,30 @@ export function useTrackerCard(trackerId: string) {
   const [entry, setEntry] = useState<TrackerEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
+  const [commentDraft, setCommentDraft] = useState('');
+  // Fuerza el modo edición de las opciones aunque ya haya una entrada
+  // guardada hoy — por defecto, una entrada guardada se ve en modo lectura.
+  const [editingOptions, setEditingOptions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
-  const reload = useCallback(async () => {
-    const [t, e] = await Promise.all([
-      container.getTracker.execute(trackerId),
-      container.getTrackerEntry.execute(trackerId, date),
-    ]);
-    setTracker(t);
-    setEntry(e);
-    setSelectedOptionIds([]);
-    setLoading(false);
-  }, [trackerId, date]);
+  const reload = useCallback(
+    async (opts?: { keepSelection?: boolean }) => {
+      const [t, e] = await Promise.all([
+        container.getTracker.execute(trackerId),
+        container.getTrackerEntry.execute(trackerId, date),
+      ]);
+      setTracker(t);
+      setEntry(e);
+      if (!opts?.keepSelection) {
+        setSelectedOptionIds([]);
+        setCommentDraft(e?.comment ?? '');
+        setEditingOptions(false);
+      }
+      setLoading(false);
+    },
+    [trackerId, date],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -47,6 +62,12 @@ export function useTrackerCard(trackerId: string) {
   );
 
   // --- Opciones (hasta 2, reemplaza la más vieja) ---
+  const openEditOptions = useCallback(() => {
+    setSelectedOptionIds(entry ? [...entry.optionIds] : []);
+    setCommentDraft(entry?.comment ?? '');
+    setEditingOptions(true);
+  }, [entry]);
+
   const toggleOption = useCallback((optionId: string) => {
     setSelectedOptionIds((prev) => {
       if (prev.includes(optionId)) return prev.filter((id) => id !== optionId);
@@ -66,7 +87,7 @@ export function useTrackerCard(trackerId: string) {
         // Si el tracker también tiene contador, un día sin número guardado
         // todavía arranca en 0 (en vez de quedar sin número).
         value: tracker?.hasCounter ? entry?.value ?? 0 : entry?.value,
-        comment: entry?.comment,
+        comment: commentDraft,
       });
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2500);
@@ -74,7 +95,7 @@ export function useTrackerCard(trackerId: string) {
     } finally {
       setSaving(false);
     }
-  }, [selectedOptionIds, trackerId, date, tracker, entry, reload]);
+  }, [selectedOptionIds, trackerId, date, tracker, entry, commentDraft, reload]);
 
   // --- Número (contador) ---
   const setCount = useCallback(
@@ -87,7 +108,11 @@ export function useTrackerCard(trackerId: string) {
         optionIds: entry?.optionIds ?? [],
         comment: entry?.comment,
       });
-      await reload();
+      // `keepSelection`: cambiar el contador no debe perder una selección de
+      // opciones todavía sin guardar (un tracker puede tener las dos cosas a
+      // la vez) — antes este `reload` la vaciaba igual que el de después de
+      // guardar, aunque acá no se guardó nada de las opciones.
+      await reload({ keepSelection: true });
     },
     [trackerId, date, entry, reload],
   );
@@ -111,8 +136,11 @@ export function useTrackerCard(trackerId: string) {
     justSaved,
     selectedOptionIds,
     toggleOption,
+    commentDraft,
+    onCommentDraftChange: setCommentDraft,
     saveOptions,
-    optionsLocked: (entry?.optionIds.length ?? 0) > 0,
+    optionsLocked: (entry?.optionIds.length ?? 0) > 0 && !editingOptions,
+    openEditOptions,
     count: entry?.value ?? 0,
     setCount,
     clearEntry,

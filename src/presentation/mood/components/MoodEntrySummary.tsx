@@ -1,36 +1,42 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { getMoodColorInfo } from '../../../domain/mood/entities/MoodColor';
-import { MoodEntry } from '../../../domain/mood/entities/MoodEntry';
+import { MoodEntry, NOTE_MAX } from '../../../domain/mood/entities/MoodEntry';
 import { formatNote } from '../parseNoteInput';
 import { DiagonalSplitSquare } from '../../components/DiagonalSplitSquare';
+import { EditButton } from '../../components/EditButton';
 
 interface Props {
   entry: MoodEntry;
+  /** Si se pasa, muestra un lápiz a la altura de este resumen para volver a editar. */
+  onEdit?: () => void;
 }
 
 /** Vista de solo lectura de un registro ya guardado. */
-export function MoodEntrySummary({ entry }: Props) {
+export function MoodEntrySummary({ entry, onEdit }: Props) {
+  const noteComment = [
+    entry.note != null ? `${formatNote(entry.note)}/${NOTE_MAX}` : null,
+    entry.description || null,
+  ]
+    .filter(Boolean)
+    .join(' - ');
+
   return (
     <View style={styles.container}>
       <DiagonalSplitSquare
         colors={entry.colors.map((c) => getMoodColorInfo(c).hex)}
-        size={56}
+        size={44}
         borderColor="#E5E7EB"
       />
       <View style={styles.texts}>
         {entry.colors.map((c) => (
           <Text key={c} style={styles.meaning}>
-            {getMoodColorInfo(c).name} · {getMoodColorInfo(c).meaning}
+            {getMoodColorInfo(c).meaning}
           </Text>
         ))}
-        {entry.note != null ? (
-          <Text style={styles.note}>Nota {formatNote(entry.note)}</Text>
-        ) : null}
-        {entry.description ? (
-          <Text style={styles.description}>“{entry.description}”</Text>
-        ) : null}
+        {noteComment ? <Text style={styles.noteComment}>{noteComment}</Text> : null}
       </View>
+      {onEdit ? <EditButton onPress={onEdit} /> : null}
     </View>
   );
 }
@@ -39,7 +45,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
   },
   texts: {
     flex: 1,
@@ -50,16 +56,9 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: '600',
   },
-  note: {
-    fontSize: 13,
-    color: '#111827',
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  description: {
+  noteComment: {
     fontSize: 13,
     color: '#6b7280',
-    fontStyle: 'italic',
     marginTop: 2,
   },
 });

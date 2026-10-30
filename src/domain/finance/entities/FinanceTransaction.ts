@@ -4,14 +4,37 @@ import { IsoDate } from '../../../core/utils/date';
 export type FinanceKind = 'income' | 'expense';
 
 /**
- * Repetición mensual del movimiento. `months = null` → se repite
- * indefinidamente; `months = N` → ocurre N veces en total (contando la
- * primera). Siempre cae el mismo día del mes que la fecha inicial (si el mes
- * es más corto, el último día).
+ * Cómo termina la repetición de un movimiento — mismo esquema que la
+ * repetición de eventos (`EventRepeat`):
+ *  - `never`: indefinida.
+ *  - `onDate`: hasta (e incluyendo) `endDate`.
+ *  - `afterCount`: después de `count` ocurrencias en total (contando la primera).
+ */
+export type FinanceRepeatEndType = 'never' | 'onDate' | 'afterCount';
+
+/** Unidad del intervalo de repetición: cada cuántos días, o cada cuántos meses. */
+export type FinanceRepeatUnit = 'days' | 'months';
+
+/**
+ * Repetición del movimiento. Cae cada `intervalValue` unidades
+ * (`intervalUnit`) desde la fecha inicial — si es en meses, siempre el mismo
+ * día del mes (si el mes es más corto, el último día).
  */
 export interface FinanceRepeat {
-  readonly months: number | null;
+  readonly intervalValue: number;
+  readonly intervalUnit: FinanceRepeatUnit;
+  readonly endType: FinanceRepeatEndType;
+  readonly endDate?: IsoDate;
+  readonly count?: number;
 }
+
+export const MIN_INTERVAL_VALUE = 1;
+export const MAX_INTERVAL_DAYS = 3650;
+export const MAX_INTERVAL_MONTHS = 120;
+export const MIN_REPEAT_COUNT = 1;
+export const MAX_REPEAT_COUNT = 5000;
+export const DEFAULT_INTERVAL_DAYS = 7;
+export const DEFAULT_INTERVAL_MONTHS = 1;
 
 /**
  * Un cambio de monto de un movimiento que se repite: a partir de `from`
@@ -102,13 +125,29 @@ export function createFinanceTransaction(params: {
 
   let repeat: FinanceRepeat | null = null;
   if (params.repeat) {
-    const months = params.repeat.months;
-    if (months !== null) {
-      if (!Number.isInteger(months) || months < 1) {
-        throw new Error('La cantidad de meses tiene que ser un entero mayor o igual a 1');
-      }
+    const { intervalValue, intervalUnit, endType } = params.repeat;
+    const maxInterval = intervalUnit === 'months' ? MAX_INTERVAL_MONTHS : MAX_INTERVAL_DAYS;
+    if (!Number.isInteger(intervalValue) || intervalValue < MIN_INTERVAL_VALUE || intervalValue > maxInterval) {
+      throw new Error(
+        `El intervalo de repetición tiene que ser un entero entre ${MIN_INTERVAL_VALUE} y ${maxInterval}`,
+      );
     }
-    repeat = { months };
+    if (endType === 'onDate') {
+      if (!params.repeat.endDate || params.repeat.endDate < params.date) {
+        throw new Error('La fecha de fin tiene que ser posterior a la fecha del movimiento');
+      }
+      repeat = { intervalValue, intervalUnit, endType, endDate: params.repeat.endDate };
+    } else if (endType === 'afterCount') {
+      const count = params.repeat.count;
+      if (!count || !Number.isInteger(count) || count < MIN_REPEAT_COUNT || count > MAX_REPEAT_COUNT) {
+        throw new Error(
+          `La cantidad de repeticiones tiene que ser un entero entre ${MIN_REPEAT_COUNT} y ${MAX_REPEAT_COUNT}`,
+        );
+      }
+      repeat = { intervalValue, intervalUnit, endType, count };
+    } else {
+      repeat = { intervalValue, intervalUnit, endType: 'never' };
+    }
   }
 
   if (params.finishedOn != null && !isIsoDate(params.finishedOn)) {

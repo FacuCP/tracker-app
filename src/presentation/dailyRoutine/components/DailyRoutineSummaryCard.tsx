@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { theme } from '../../../core/theme';
@@ -5,8 +6,8 @@ import { DailyRoutineTaskStatus } from '../../../domain/dailyRoutine/usecases/Ge
 import { Checkbox } from '../../components/Checkbox';
 import { FavoriteStar } from '../../components/FavoriteStar';
 
-/** A partir de esta cantidad de tareas, la lista scrollea en vez de crecer sin límite (igual que `ListCard`). */
-const MAX_VISIBLE_TASKS = 15;
+/** A partir de esta cantidad de tareas, la lista scrollea en vez de crecer sin límite (igual que `ListCard` en Favoritos). */
+const MAX_VISIBLE_TASKS = 8;
 
 interface Props {
   tasks: DailyRoutineTaskStatus[];
@@ -35,11 +36,13 @@ function renderTaskRow(item: DailyRoutineTaskStatus, onToggleTask: (item: DailyR
 }
 
 /**
- * Card de "Rutina diaria" en Favoritos: la lista de tareas de hoy (se tildan
- * sin salir de Favoritos) y un indicador de cuánto se completó. Reemplaza al
- * tracker "Seguimiento de Rutina" que antes aparecía acá — ese tracker ahora
- * es de uso interno nomás (solo se ve en la pantalla de Rutina diaria, para
- * el calendario de seguimiento).
+ * Card de "Rutina diaria" en Favoritos: un indicador de cuánto se completó y,
+ * desplegada (por defecto lo está — mismo triángulo que `ListCard`, al lado
+ * de la estrella), la lista de tareas de hoy (se tildan sin salir de
+ * Favoritos). Colapsada muestra solo el progreso. Reemplaza al tracker
+ * "Seguimiento de Rutina" que antes aparecía acá — ese tracker ahora es de
+ * uso interno nomás (solo se ve en la pantalla de Rutina diaria, para el
+ * calendario de seguimiento).
  */
 export function DailyRoutineSummaryCard({
   tasks,
@@ -50,13 +53,21 @@ export function DailyRoutineSummaryCard({
   onToggleTask,
   onOpen,
 }: Props) {
+  const [expanded, setExpanded] = useState(true);
   const percent = total === 0 ? 0 : Math.round((doneCount / total) * 100);
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.title}>Rutina diaria</Text>
-        <FavoriteStar favorite={favorite} onToggle={onToggleFavorite} />
+        <View style={styles.headerActions}>
+          <FavoriteStar favorite={favorite} onToggle={onToggleFavorite} />
+          {total > 0 ? (
+            <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
+              <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       {total === 0 ? (
@@ -72,13 +83,21 @@ export function DailyRoutineSummaryCard({
             </Text>
           </View>
 
-          {tasks.length > MAX_VISIBLE_TASKS ? (
-            <ScrollView style={styles.tasksScroll} contentContainerStyle={styles.tasksScrollContent} nestedScrollEnabled>
-              {tasks.map((item) => renderTaskRow(item, onToggleTask))}
-            </ScrollView>
-          ) : (
-            <View style={styles.tasks}>{tasks.map((item) => renderTaskRow(item, onToggleTask))}</View>
-          )}
+          {expanded ? (
+            tasks.length > MAX_VISIBLE_TASKS ? (
+              <ScrollView
+                style={styles.tasksScroll}
+                contentContainerStyle={styles.tasksScrollContent}
+                nestedScrollEnabled
+                persistentScrollbar
+                showsVerticalScrollIndicator
+              >
+                {tasks.map((item) => renderTaskRow(item, onToggleTask))}
+              </ScrollView>
+            ) : (
+              <View style={styles.tasks}>{tasks.map((item) => renderTaskRow(item, onToggleTask))}</View>
+            )
+          ) : null}
         </>
       )}
 
@@ -102,6 +121,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  expandButton: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandTriangle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.textMuted,
   },
   title: {
     fontSize: 13,
@@ -140,7 +175,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   tasksScroll: {
-    maxHeight: 360,
+    maxHeight: 280,
   },
   tasksScrollContent: {
     gap: 10,

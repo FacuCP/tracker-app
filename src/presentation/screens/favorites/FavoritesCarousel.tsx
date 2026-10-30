@@ -46,11 +46,18 @@ export function useCarouselSwipe(itemCount: number): CarouselSwipe {
   completeTransitionRef.current = function completeTransition(direction: 1 | -1) {
     if (animating.current || widthRef.current === 0) return;
     animating.current = true;
+    // `useNativeDriver: false`: con el driver nativo, este valor queda
+    // "adjunto" a un nodo nativo y sus cambios (incluido el reseteo a 0 de
+    // abajo) viajan por un canal aparte del commit de React/Fabric que
+    // reordena current/prev/next — las dos actualizaciones podían llegar a
+    // pantalla en frames distintos y se veía un destello del ítem anterior
+    // al cambiar. Yendo por JS, el transform se aplica en el mismo commit
+    // que el reorden de hijos, siempre sincronizado.
     Animated.timing(translateX, {
       toValue: -direction * widthRef.current,
       duration: TRANSITION_MS,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(() => {
       // El reseteo de `translateX` a 0 se hace en el `useLayoutEffect` de
       // abajo, atado al cambio de `index` — si se hiciera acá mismo,
@@ -69,7 +76,7 @@ export function useCarouselSwipe(itemCount: number): CarouselSwipe {
     animating.current = true;
     Animated.spring(translateX, {
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
       speed: 20,
       bounciness: 4,
     }).start(() => {

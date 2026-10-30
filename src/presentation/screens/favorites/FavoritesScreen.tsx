@@ -121,10 +121,10 @@ export function FavoritesScreen({ navigation }: Props) {
                 onAddEntry={() => vm.openAddEntry(list)}
                 onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
                 onToggleFavorite={() => vm.toggleListFavorite(list)}
-                showPin
-                onTogglePin={() => vm.toggleListPinnedExpanded(list)}
                 onEntryToggled={vm.reload}
-                alwaysExpanded
+                defaultExpanded
+                compact
+                reloadTick={vm.reloadTick}
               />
             )}
           />
