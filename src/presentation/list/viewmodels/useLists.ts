@@ -65,6 +65,17 @@ export function useLists() {
     }, [reload]),
   );
 
+  // Mismo motivo que en `useFavorites.bumpListDone`: tildar una entrada no
+  // necesita recargar toda la pantalla (ver #112) — solo corrige el conteo
+  // de esa lista puntual para el subtítulo colapsado.
+  const bumpListDone = useCallback((listId: string, done: boolean) => {
+    setCounts((prev) => {
+      const current = prev[listId];
+      if (!current) return prev;
+      return { ...prev, [listId]: { ...current, done: Math.max(0, current.done + (done ? 1 : -1)) } };
+    });
+  }, []);
+
   const createList = useCallback(
     async (name: string, isTodo: boolean, favorite: boolean) => {
       await container.createList.execute(name, isTodo, favorite);
@@ -128,6 +139,7 @@ export function useLists() {
     openCreate: () => setCreateOpen(true),
     closeCreate: () => setCreateOpen(false),
     createList,
+    bumpListDone,
     toggleFavorite,
     togglePinnedExpanded,
     entryTarget,

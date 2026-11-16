@@ -121,7 +121,7 @@ export function FavoritesScreen({ navigation }: Props) {
                 onAddEntry={() => vm.openAddEntry(list)}
                 onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
                 onToggleFavorite={() => vm.toggleListFavorite(list)}
-                onEntryToggled={vm.reload}
+                onEntryToggled={(done) => vm.bumpListDone(list.id, done)}
                 defaultExpanded
                 compact
                 reloadTick={vm.reloadTick}

@@ -4920,6 +4920,57 @@ mucho unas pocas decenas de filas) no se nota menos fluido.
 
 ---
 
+## 112. Fix: tildar una entrada de to-do en Favoritos/Listas hacía "saltar" la pantalla — se sacó el `reload()` completo de `onEntryToggled` *(fix)*
+
+**Contexto.** Al tocar una fila de una to-do list (tildar/destildar),
+la pantalla se desplazaba — reportado en el APK, no visto todavía en
+desarrollo. `ListCard.onEntryToggled` llamaba a `vm.reload()` de la
+pantalla completa (`useFavorites`/`useLists`): releía balance,
+trackers, mood, orden guardado y, para **cada** lista favorita, sus
+entradas — y subía `reloadTick`. Como el `useEffect` de `ListCard` que
+repide sus entradas depende de `counts.total`/`counts.done` **y**
+`reloadTick`, ese único toque disparaba un re-fetch (con su spinner de
+carga, que achica y vuelve a crecer la vista) en **todas** las listas
+desplegadas de la pantalla a la vez — no solo en la que se tocó —
+además de releer todo lo demás sin necesidad. Esa cascada de
+achicarse/agrandarse en varias cards a la vez es la causa más probable
+del salto visual.
+
+**Decisión.** Dos cambios, uno en cada capa:
+
+- **`onEntryToggled` deja de llamar a `reload()`.** Pasa a avisar
+  `(done: boolean)` con el nuevo estado, y
+  `useFavorites`/`useLists` suman `bumpListDone(listId, done)`: ajusta
+  en memoria el `done` de esa lista puntual (±1) en `counts`/`cards`,
+  sin pedir nada a `AsyncStorage` ni tocar `reloadTick` — nada más
+  cambia, así que ninguna otra `ListCard` desplegada se entera ni
+  vuelve a pedir sus entradas.
+- **La propia `ListCard` tampoco debe re-pedir las suyas.** Aunque ya
+  no se dispara en cascada, `counts.done` de ESA lista sí cambia (es
+  justo lo que `bumpListDone` actualiza), y el `useEffect` que repide
+  entradas sigue viéndolo como dependencia — se agrega
+  `skipNextCountsRefetch` (un `useRef`): `toggleEntryDone` lo prende
+  antes de avisar a `onEntryToggled`, y el efecto lo apaga la primera
+  vez que lo ve sin pedir nada, en vez de re-fetchear lo que
+  `ListCard` ya tiene (correcto) en su propio estado local.
+
+**Alternativas descartadas.**
+
+- **Sacar `counts.total`/`counts.done` de las dependencias del
+  `useEffect`.** Se descartó: esas dependencias existen a propósito
+  (ver comentario de #93) para enterarse de ediciones hechas desde
+  *afuera* de esta card (p. ej. desde `ListDetailScreen`) que cambian
+  cuántas hay o cuántas están hechas; sacarlas de ahí reintroduciría
+  exactamente ese bug.
+
+**Consecuencias.** `npx tsc --noEmit` y `npx expo export --platform
+android --output-dir dist-check` corrieron limpios. No se pudo
+reproducir ni confirmar visualmente el salto (reportado solo en el
+APK instalado) — si después de este cambio sigue pasando, hace falta
+mirarlo con más detalle en el dispositivo.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { container } from '../../../core/di/container';
@@ -22,8 +22,15 @@ interface Props {
   /** Solo en Listas: muestra el botón de pin (desplegada por defecto la próxima vez). */
   showPin?: boolean;
   onTogglePin?: () => void;
-  /** Se llama después de tildar/destildar un ítem desde la vista desplegada. */
-  onEntryToggled?: () => void;
+  /**
+   * Se llama después de tildar/destildar un ítem desde la vista desplegada,
+   * con el nuevo estado (`done`) — para que quien la usa pueda actualizar
+   * el conteo de esta lista puntual sin recargar toda la pantalla (eso
+   * disparaba un re-fetch en cascada de TODAS las listas desplegadas vía
+   * `reloadTick`, con el parpadeo de carga de cada una corriendo a la vez —
+   * se veía como que la pantalla "saltaba" al tildar un ítem, ver #112).
+   */
+  onEntryToggled?: (done: boolean) => void;
   /** Con qué estado arranca desplegada/colapsada, antes de que el usuario toque el triángulo. Sin esto, arranca según `list.pinnedExpanded`. */
   defaultExpanded?: boolean;
   /** Solo en Favoritos: resumen compacto — límite más bajo antes de scrollear. */
@@ -82,6 +89,13 @@ export function ListCard({
   const [viewingEntry, setViewingEntry] = useState<ListEntry | null>(null);
   const isExpanded = expanded;
   const maxVisibleEntries = compact ? MAX_VISIBLE_ENTRIES_FAVORITES : MAX_VISIBLE_ENTRIES;
+  // `counts.done` cambia apenas se tilda un ítem acá mismo (ver
+  // `onEntryToggled`/#112) — sin esto, el efecto de abajo lo toma como "algo
+  // cambió afuera" y vuelve a pedir las entradas, mostrando el spinner de
+  // carga un instante (la vista se achica y vuelve a crecer) justo donde el
+  // usuario tocó. Se prende antes de avisar el cambio y el efecto lo apaga
+  // la primera vez que lo ve, para no pisar un refetch legítimo posterior.
+  const skipNextCountsRefetch = useRef(false);
 
   // Si se pinea desde otra parte (o al recargar), queda desplegada; nunca se
   // fuerza el colapso solo porque se despineó.
@@ -97,6 +111,10 @@ export function ListCard({
   // acá hasta cerrar y volver a abrir la vista desplegada.
   useEffect(() => {
     if (!isExpanded) return;
+    if (skipNextCountsRefetch.current) {
+      skipNextCountsRefetch.current = false;
+      return;
+    }
     let active = true;
     setLoadingEntries(true);
     container.getListEntries.execute(list.id).then((result) => {
@@ -113,8 +131,9 @@ export function ListCard({
   async function toggleEntryDone(entry: ListEntry) {
     const next = !entry.done;
     setEntries((prev) => prev?.map((e) => (e.id === entry.id ? { ...e, done: next } : e)) ?? prev);
+    skipNextCountsRefetch.current = true;
+    onEntryToggled?.(next);
     await container.setListEntryDone.execute(list.id, entry.id, next);
-    onEntryToggled?.();
   }
 
   function renderEntryRow(entry: ListEntry) {

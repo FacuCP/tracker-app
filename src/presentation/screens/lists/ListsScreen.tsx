@@ -67,7 +67,7 @@ export function ListsScreen({ navigation, route }: Props) {
                   onAddEntry={() => vm.openAddEntry(list)}
                   onOpen={() => navigation.navigate('ListDetail', { listId: list.id })}
                   onToggleFavorite={() => vm.toggleFavorite(list)}
-                  onEntryToggled={vm.reload}
+                  onEntryToggled={(done) => vm.bumpListDone(list.id, done)}
                   reloadTick={vm.reloadTick}
                   showPin
                   onTogglePin={() => vm.togglePinnedExpanded(list)}

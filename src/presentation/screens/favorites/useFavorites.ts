@@ -182,6 +182,31 @@ export function useFavorites() {
     });
   }, []);
 
+  // Tildar/destildar una entrada de una to-do list no necesita recargar toda
+  // la pantalla (balance, trackers, mood, orden, etc.) — `ListCard` ya
+  // actualiza su propia vista desplegada al toque; esto solo corrige el
+  // conteo de esa lista puntual para el subtítulo colapsado ("3/5 hechas").
+  // Antes esto llamaba a `reload()`, que entre otras cosas sube
+  // `reloadTick` y dispara en cadena un re-fetch de TODAS las listas
+  // desplegadas (cada una con su parpateo de "cargando"), lo que se veía
+  // como que la pantalla "saltaba" al tildar un ítem (ver #112).
+  const bumpListDone = useCallback((listId: string, done: boolean) => {
+    setCards((prev) =>
+      prev.map((card) => {
+        if (card.kind !== 'lists') return card;
+        const current = card.counts[listId];
+        if (!current) return card;
+        return {
+          ...card,
+          counts: {
+            ...card.counts,
+            [listId]: { ...current, done: Math.max(0, current.done + (done ? 1 : -1)) },
+          },
+        };
+      }),
+    );
+  }, []);
+
   const toggleListFavorite = useCallback(
     async (list: List) => {
       await container.setListFavorite.execute(list.id, !list.favorite);
@@ -244,6 +269,7 @@ export function useFavorites() {
     openAddEntry: setEntryTarget,
     closeEntryModal: () => setEntryTarget(null),
     saveEntry,
+    bumpListDone,
     toggleListFavorite,
     toggleFinanceFavorite,
     toggleDailyRoutineFavorite,
