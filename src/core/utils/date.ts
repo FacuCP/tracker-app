@@ -125,4 +125,29 @@ export function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/**
+ * Separador de día de un chat (Anotaciones): "Hoy", "Ayer", el día de la
+ * semana + fecha corta si es de este año ("lunes 12 ene" — pasarlo por
+ * `capitalize` para mostrarlo, igual que `formatLongDate`), o la fecha
+ * completa si es de otro año.
+ */
+export function formatChatDay(date: Date): string {
+  const today = atMidnight(new Date());
+  const target = atMidnight(date);
+  const diffDays = Math.round((today.getTime() - target.getTime()) / 86400000);
+  if (diffDays === 0) return 'Hoy';
+  if (diffDays === 1) return 'Ayer';
+  if (target.getFullYear() === today.getFullYear()) {
+    return `${WEEKDAYS_ES[target.getDay()]} ${target.getDate()} ${MONTHS_SHORT_ES[target.getMonth()]}`;
+  }
+  return formatDdMmYyyy(toIsoDate(target));
+}
+
+/** "HH:MM", 24hs, para la hora de un mensaje de chat (Anotaciones). */
+export function formatTime(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 export { MONTHS_ES, MONTHS_SHORT_ES, WEEKDAYS_ES };

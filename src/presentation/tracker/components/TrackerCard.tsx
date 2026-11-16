@@ -1,9 +1,11 @@
 import { Check, Trash } from 'lucide-react-native';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { capitalize, formatLongDate, todayIso } from '../../../core/utils/date';
 import { MAX_TRACKER_COMMENT } from '../../../domain/tracker/entities/TrackerEntry';
 import { FavoriteStar } from '../../components/FavoriteStar';
+import { FloatingTextFieldEditor } from '../../components/FloatingTextFieldEditor';
+import { FloatingOverlay } from '../../components/useFloatingOverlay';
 import { useTrackerCard } from '../viewmodels/useTrackerCard';
 import { Counter } from './Counter';
 import { TrackerOptionsSummary } from './TrackerOptionsSummary';
@@ -13,10 +15,19 @@ interface Props {
   onSeeProgress: () => void;
   /** Se llama después de marcar/desmarcar el favorito (para refrescar la lista de arriba). */
   onFavoriteToggled?: () => void;
+  /** Panel flotante compartido por toda la pantalla, ver `useFloatingOverlay`. */
+  overlay: FloatingOverlay;
 }
 
-/** Card de un tracker del usuario en el home. */
-export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Props) {
+/**
+ * Card de un tracker del usuario en el home. El comentario no se escribe
+ * directo acá: tocar su placeholder (`FloatingTextFieldEditor`) empuja el
+ * campo de verdad al panel flotante compartido de la pantalla, arriba del
+ * teclado — este campo vive adentro de una card dentro de un `ScrollView`
+ * largo (el home o Favoritos), donde el teclado lo tapaba igual que pasaba
+ * con el campo de una anotación (ver #121/#122/#131 en `docs/DECISIONS.md`).
+ */
+export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled, overlay }: Props) {
   const vm = useTrackerCard(trackerId);
   const tracker = vm.tracker;
 
@@ -82,14 +93,13 @@ export function TrackerCard({ trackerId, onSeeProgress, onFavoriteToggled }: Pro
                     );
                   })}
                 </View>
-                <TextInput
-                  style={styles.commentInput}
-                  placeholder="Comentario (opcional)"
-                  placeholderTextColor="#9ca3af"
+                <FloatingTextFieldEditor
+                  overlay={overlay}
+                  overlayKey={`tracker-comment-${trackerId}`}
                   value={vm.commentDraft}
                   onChangeText={vm.onCommentDraftChange}
+                  placeholder="Comentario (opcional)"
                   maxLength={MAX_TRACKER_COMMENT}
-                  multiline
                 />
               </>
             )
@@ -209,15 +219,6 @@ const styles = StyleSheet.create({
   saveText: {
     color: '#fff',
     fontWeight: '700',
-  },
-  commentInput: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    padding: 10,
-    minHeight: 44,
-    textAlignVertical: 'top',
-    color: '#111827',
   },
   bottomRow: {
     flexDirection: 'row',

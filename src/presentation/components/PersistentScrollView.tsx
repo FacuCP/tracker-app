@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ComponentRef, ReactNode, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -18,6 +18,13 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   nestedScrollEnabled?: boolean;
+  /**
+   * Mantiene el scroll pegado al final (como un chat): al montar arranca ya
+   * abajo (sin animación) y, si después crece el contenido (mensaje nuevo),
+   * baja con animación. Pensado para previews de chat de tamaño fijo
+   * (`NoteCard`) — el resto de los usos no lo necesita.
+   */
+  stickToBottom?: boolean;
 }
 
 /**
@@ -32,10 +39,18 @@ interface Props {
  * ver #111, crasheaba al tocar el scroll en el build de `eas build`), así
  * que se ve igual en desarrollo y en cualquier build.
  */
-export function PersistentScrollView({ children, style, contentContainerStyle, nestedScrollEnabled }: Props) {
+export function PersistentScrollView({
+  children,
+  style,
+  contentContainerStyle,
+  nestedScrollEnabled,
+  stickToBottom,
+}: Props) {
   const [containerHeight, setContainerHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const scrolledOnceRef = useRef(false);
 
   function onLayout(e: LayoutChangeEvent) {
     setContainerHeight(e.nativeEvent.layout.height);
@@ -43,6 +58,10 @@ export function PersistentScrollView({ children, style, contentContainerStyle, n
 
   function onContentSizeChange(_width: number, height: number) {
     setContentHeight(height);
+    if (stickToBottom) {
+      scrollRef.current?.scrollToEnd({ animated: scrolledOnceRef.current });
+      scrolledOnceRef.current = true;
+    }
   }
 
   function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -61,6 +80,7 @@ export function PersistentScrollView({ children, style, contentContainerStyle, n
   return (
     <View onLayout={onLayout}>
       <ScrollView
+        ref={scrollRef}
         style={style}
         contentContainerStyle={contentContainerStyle}
         onContentSizeChange={onContentSizeChange}

@@ -6,6 +6,7 @@ import { applyIdOrder } from '../../../core/utils/order';
 import { DailyRoutineTaskStatus } from '../../../domain/dailyRoutine/usecases/GetDailyRoutineSession';
 import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { List } from '../../../domain/list/entities/List';
+import { Note } from '../../../domain/note/entities/Note';
 import { Tracker } from '../../../domain/tracker/entities/Tracker';
 import { ListEntryDraft } from '../../list/components/ListEntryModal';
 import { parseRating } from '../../list/parseRating';
@@ -32,7 +33,8 @@ export type FavoriteCard =
       typeLabel: string;
       lists: List[];
       counts: Record<string, ListCounts>;
-    };
+    }
+  | { key: 'notes'; kind: 'notes'; title: string; typeLabel: string; notes: Note[] };
 
 /**
  * ViewModel de la pestaña Favoritos: arma la lista de "cards" (rutina diaria,
@@ -60,6 +62,7 @@ export function useFavorites() {
       profile,
       allTrackersRaw,
       allListsRaw,
+      allNotes,
       bal,
       savedOrder,
       dailyRoutineSession,
@@ -70,6 +73,7 @@ export function useFavorites() {
       container.getUserProfile.execute(),
       container.getTrackers.execute(),
       container.getLists.execute(),
+      container.getNotes.execute(),
       container.getCurrentBalance.execute(),
       container.getFavoritesOrder.execute(),
       container.getDailyRoutineSession.execute(),
@@ -89,6 +93,9 @@ export function useFavorites() {
     // de "dailyRoutine" de abajo (lista de tareas + % completado).
     const favTrackers = allTrackers.filter((t) => t.favorite && t.id !== ROUTINE_TRACKER_ID);
     const favLists = allLists.filter((l) => l.favorite);
+    // Sin orden manual propio todavía (no se pidió) — quedan en el orden
+    // natural de `getNotes` (de creación).
+    const favNotes = allNotes.filter((n) => n.favorite);
 
     const entryCounts: Record<string, ListCounts> = {};
     await Promise.all(
@@ -124,6 +131,16 @@ export function useFavorites() {
             counts: entryCounts,
           }
         : null;
+    const notesCard: FavoriteCard | null =
+      favNotes.length > 0
+        ? {
+            key: 'notes',
+            kind: 'notes',
+            title: 'Anotaciones',
+            typeLabel: `${favNotes.length} ${favNotes.length === 1 ? 'anotación' : 'anotaciones'}`,
+            notes: favNotes,
+          }
+        : null;
     const dailyRoutineCard: FavoriteCard = {
       key: 'dailyRoutine',
       kind: 'dailyRoutine',
@@ -153,6 +170,7 @@ export function useFavorites() {
     }
     if (trackersCard) defaultOrder.push(trackersCard);
     if (listsCard) defaultOrder.push(listsCard);
+    if (notesCard) defaultOrder.push(notesCard);
 
     const byKey = new Map<string, FavoriteCard>(defaultOrder.map((c) => [c.key, c]));
     const ordered: FavoriteCard[] = [];
@@ -235,6 +253,14 @@ export function useFavorites() {
     [reload],
   );
 
+  const toggleNoteFavorite = useCallback(
+    async (note: Note) => {
+      await container.setNoteFavorite.execute(note.id, !note.favorite);
+      await reload();
+    },
+    [reload],
+  );
+
   const toggleFinanceFavorite = useCallback(async () => {
     const financeShown = cards.some((c) => c.kind === 'finance');
     await container.updateUserProfile.execute({ financeFavorite: !financeShown });
@@ -291,6 +317,7 @@ export function useFavorites() {
     saveEntry,
     bumpListDone,
     toggleListFavorite,
+    toggleNoteFavorite,
     toggleFinanceFavorite,
     toggleDailyRoutineFavorite,
     toggleDailyRoutineTask,

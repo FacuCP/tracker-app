@@ -7,13 +7,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
 import { useHorizontalSwipe } from '../../calendar/useHorizontalSwipe';
+import { KeyboardFloatingPanel } from '../../components/KeyboardFloatingPanel';
 import { ReorderRow } from '../../components/ReorderRow';
+import { useFloatingOverlay } from '../../components/useFloatingOverlay';
 import { DailyRoutineSummaryCard } from '../../dailyRoutine/components/DailyRoutineSummaryCard';
 import { FinanceSummaryCard } from '../../finance/components/FinanceSummaryCard';
 import { GymTodayCard } from '../../gym/components/GymTodayCard';
 import { ListCard } from '../../list/components/ListCard';
 import { ListEntryModal } from '../../list/components/ListEntryModal';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
+import { NoteCard } from '../../note/components/NoteCard';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
 import { CreateChooserModal } from './CreateChooserModal';
 import { FAVORITES_CARD_GAP, FavoritesCarousel, useCarouselSwipe } from './FavoritesCarousel';
@@ -24,14 +27,17 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
 export function FavoritesScreen({ navigation }: Props) {
   const vm = useFavorites();
   const [chooserOpen, setChooserOpen] = useState(false);
+  const overlay = useFloatingOverlay();
 
   const trackersCard = vm.cards.find((c): c is Extract<FavoriteCard, { kind: 'trackers' }> => c.kind === 'trackers');
   const listsCard = vm.cards.find((c): c is Extract<FavoriteCard, { kind: 'lists' }> => c.kind === 'lists');
+  const notesCard = vm.cards.find((c): c is Extract<FavoriteCard, { kind: 'notes' }> => c.kind === 'notes');
   // Se crean siempre (nunca condicionales — son hooks), aunque ese carrusel
   // no esté presente todavía: así el gesto existe desde el primer render
   // para el `requireToFail` de abajo.
   const trackersSwipe = useCarouselSwipe(trackersCard?.trackers.length ?? 0);
   const listsSwipe = useCarouselSwipe(listsCard?.lists.length ?? 0);
+  const notesSwipe = useCarouselSwipe(notesCard?.notes.length ?? 0);
 
   // Deslizar hacia la izquierda en cualquier lado que no sea un carrusel
   // lleva a "Rutina diaria" — este swipe espera a que fallen los de los
@@ -40,13 +46,14 @@ export function FavoritesScreen({ navigation }: Props) {
   const swipe = useHorizontalSwipe({
     onSwipeLeft: () => navigation.navigate('DailyRoutines'),
     onSwipeRight: () => {},
-    requireToFail: [trackersSwipe.gesture, listsSwipe.gesture],
+    requireToFail: [trackersSwipe.gesture, listsSwipe.gesture, notesSwipe.gesture],
   });
 
-  function choose(what: 'tracker' | 'list' | 'routine') {
+  function choose(what: 'tracker' | 'list' | 'routine' | 'note') {
     setChooserOpen(false);
     if (what === 'tracker') navigation.navigate('Trackers', { create: true });
     else if (what === 'list') navigation.navigate('Lists', { create: true });
+    else if (what === 'note') navigation.navigate('Notes', { create: true });
     else navigation.navigate('Gym', { create: true });
   }
 
@@ -82,6 +89,7 @@ export function FavoritesScreen({ navigation }: Props) {
             key={card.key}
             onSeeProgress={() => navigation.navigate('MoodProgress')}
             onFavoriteToggled={vm.reload}
+            overlay={overlay}
           />
         );
       case 'gym':
@@ -104,6 +112,7 @@ export function FavoritesScreen({ navigation }: Props) {
                 trackerId={tracker.id}
                 onSeeProgress={() => navigation.navigate('TrackerProgress', { trackerId: tracker.id })}
                 onFavoriteToggled={vm.reload}
+                overlay={overlay}
               />
             )}
           />
@@ -125,6 +134,24 @@ export function FavoritesScreen({ navigation }: Props) {
                 defaultExpanded
                 compact
                 reloadTick={vm.reloadTick}
+              />
+            )}
+          />
+        );
+      case 'notes':
+        return (
+          <FavoritesCarousel
+            key={card.key}
+            items={card.notes}
+            swipe={notesSwipe}
+            renderItem={(note) => (
+              <NoteCard
+                note={note}
+                onToggleFavorite={() => vm.toggleNoteFavorite(note)}
+                onOpen={() => navigation.navigate('NoteDetail', { noteId: note.id })}
+                compact
+                reloadTick={vm.reloadTick}
+                overlay={overlay}
               />
             )}
           />
@@ -205,6 +232,10 @@ export function FavoritesScreen({ navigation }: Props) {
         onClose={vm.closeEntryModal}
         onSave={vm.saveEntry}
       />
+
+      <KeyboardFloatingPanel visible={overlay.visible} onClose={overlay.close} heightPercent={overlay.heightPercent}>
+        {overlay.content}
+      </KeyboardFloatingPanel>
     </SafeAreaView>
   );
 }

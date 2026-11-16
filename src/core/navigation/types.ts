@@ -17,6 +17,8 @@ export type RootStackParamList = {
   GymRoutineDetail: { routineId: string };
   DailyRoutines: undefined;
   Events: undefined;
+  Notes: { create?: boolean } | undefined;
+  NoteDetail: { noteId: string };
   Settings: undefined;
   MoodProgress: undefined;
   CreateTracker: undefined;

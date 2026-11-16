@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 
 import { capitalize } from '../../../core/utils/date';
 import { FavoriteStar } from '../../components/FavoriteStar';
+import { FloatingOverlay } from '../../components/useFloatingOverlay';
 import { useMoodTrackerCard } from '../viewmodels/useMoodTrackerCard';
 import { MoodEditor } from './MoodEditor';
 import { MoodEntrySummary } from './MoodEntrySummary';
@@ -11,6 +12,8 @@ interface Props {
   onSeeProgress: () => void;
   /** Se llama después de marcar/desmarcar el favorito (para refrescar la lista de arriba). */
   onFavoriteToggled?: () => void;
+  /** Panel flotante compartido por toda la pantalla, ver `useFloatingOverlay`. */
+  overlay: FloatingOverlay;
 }
 
 /**
@@ -21,7 +24,7 @@ interface Props {
  * trackers normales. En ese editor reabierto aparece también un tacho para
  * borrar el registro de hoy (con confirmación), al lado de "Actualizar".
  */
-export function MoodTrackerCard({ onSeeProgress, onFavoriteToggled }: Props) {
+export function MoodTrackerCard({ onSeeProgress, onFavoriteToggled, overlay }: Props) {
   const vm = useMoodTrackerCard();
   const locked = vm.savedEntry != null && !vm.editing;
 
@@ -77,6 +80,8 @@ export function MoodTrackerCard({ onSeeProgress, onFavoriteToggled }: Props) {
           saving={vm.saving}
           saveLabel={vm.savedEntry ? 'Actualizar' : 'Guardar'}
           onDelete={vm.savedEntry ? confirmDeleteEntry : undefined}
+          overlay={overlay}
+          overlayKey="mood-description"
           leftAction={
             <TouchableOpacity onPress={onSeeProgress}>
               <Text style={styles.progressText}>Ver progreso →</Text>

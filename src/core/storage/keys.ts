@@ -22,6 +22,8 @@ export const STORAGE_KEYS = {
   dailyRoutineTasks: '@app-celu/daily-routine-tasks/v1',
   dailyTaskProgress: '@app-celu/daily-task-progress/v1',
   events: '@app-celu/events/v1',
+  notes: '@app-celu/notes/v1',
+  noteMessages: '@app-celu/note-messages/v1',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

@@ -1,11 +1,11 @@
 # app-celu
 
 App personal hecha con **Expo + React Native + TypeScript**, organizada con
-**Clean Architecture**. Tiene siete áreas, elegibles desde el menú del header:
+**Clean Architecture**. Tiene ocho áreas, elegibles desde el menú del header:
 
 - **Favoritos** — pantalla principal por defecto (configurable en Ajustes).
-  Junta los trackers y listas marcados con la estrella; tiene un botón
-  "＋ Crear" (tracker, lista o rutina).
+  Junta los trackers, listas y anotaciones marcados con la estrella; tiene un
+  botón "＋ Crear" (tracker, lista, rutina o anotación).
 - **Trackers** — el **mood tracker** (especial y fijo) + los **trackers** que
   crea el usuario (de opciones o de número).
 - **Listas** — listas del usuario con entradas (nombre, fecha, comentario,
@@ -18,6 +18,9 @@ App personal hecha con **Expo + React Native + TypeScript**, organizada con
   color), con repetición opcional cada N días o meses.
 - **Rutina diaria** — tareas que se resetean solas todos los días, con su
   seguimiento abajo.
+- **Anotaciones** — grupos de notas tipo chat: mensajes con hora, se puede
+  responder a uno deslizándolo (como WhatsApp) y editar/borrar con selección
+  múltiple.
 
 Todo se guarda local en el teléfono y se puede exportar/importar como un único
 archivo de backup.
@@ -107,6 +110,11 @@ src/
 │   │   ├── repositories/        # ListRepository, ListEntryRepository (puertos)
 │   │   └── usecases/            # Create/Delete/GetList(s), GetListEntries (ordenadas),
 │   │                            # Save/DeleteListEntry, SetListEntryDone
+│   ├── note/
+│   │   ├── entities/            # Note (nombre), NoteMessage (texto, sentAt, replyToId?, editedAt?)
+│   │   ├── repositories/        # NoteRepository, NoteMessageRepository (puertos)
+│   │   └── usecases/            # Create/Delete/GetNote(s), GetNoteMessages,
+│   │                            # Save/DeleteNoteMessage, SetNoteFavorite
 │   ├── finance/
 │   │   ├── entities/            # FinanceCategory (+ General), FinanceTransaction (kind, monto,
 │   │   │                        # repeat mensual), occurrences.ts (fechas de impacto), FinanceReport
@@ -140,6 +148,7 @@ src/
 │   ├── mood/                    # dto + AsyncStorage datasource + repo impl
 │   ├── tracker/                 # dto + AsyncStorage datasources + repo impls
 │   ├── list/                    # dto + AsyncStorage datasources + repo impls
+│   ├── note/                    # dto + AsyncStorage datasources + repo impls
 │   ├── finance/                 # dto + AsyncStorage datasources (siembra categorías) + repo impls
 │   ├── favorites/               # FavoritesOrderRepositoryImpl (array JSON de claves)
 │   ├── gym/                     # dto + AsyncStorage datasources + repo impls
@@ -150,8 +159,9 @@ src/
 ├── core/
 │   ├── di/container.ts          # Composition root: arma todas las dependencias
 │   ├── navigation/              # Stack tipado (Onboarding, Favorites, Trackers, Lists,
-│   │                            # ListDetail, Finances, Gym, GymRoutineDetail, DailyRoutines,
-│   │                            # Events, Settings, MoodProgress, CreateTracker, EditTracker,
+│   │                            # ListDetail, Notes, NoteDetail, Finances, Gym,
+│   │                            # GymRoutineDetail, DailyRoutines, Events, Settings,
+│   │                            # MoodProgress, CreateTracker, EditTracker,
 │   │                            # TrackerProgress) + gate de primer arranque
 │   ├── storage/keys.ts          # Todas las claves de AsyncStorage (las usa el backup)
 │   ├── notifications/           # notifications.ts (agenda/cancela las locales según perfil + datos)
@@ -179,6 +189,8 @@ src/
     │   ├── trackers/            # TrackersScreen + useTrackersViewModel
     │   ├── lists/               # ListsScreen (todas las listas)
     │   ├── list-detail/         # ListDetailScreen (una lista con sus entradas)
+    │   ├── notes/               # NotesScreen (todas las anotaciones)
+    │   ├── note-detail/         # NoteDetailScreen (el chat de una anotación)
     │   ├── finances/            # FinancesScreen + useFinances
     │   ├── gym/                 # GymScreen + useGymScreen (todas las rutinas)
     │   ├── gym-routine-detail/  # GymRoutineDetailScreen (una rutina con sus ejercicios)
@@ -194,6 +206,12 @@ src/
     │   │                        # ListEntryInfoModal, ListSortSelector, DateField
     │   ├── viewmodels/          # useLists, useListDetail
     │   └── parseRating.ts       # Parseo/validación del campo Rating / Prioridad
+    ├── note/
+    │   ├── components/          # NoteCard (con estrella y vista de alto fijo), CreateNoteButton,
+    │   │                        # CreateNoteModal, NoteMessageBubble (con swipe-para-responder),
+    │   │                        # NoteDaySeparator, NoteComposer
+    │   ├── viewmodels/          # useNotes, useNoteDetail
+    │   └── groupMessagesByDay.ts # Intercala separadores de día entre los mensajes
     ├── mood/
     │   ├── components/          # MoodColorPicker, MoodEditor,
     │   │                        # MoodEntrySummary, MoodTrackerCard, DayCell,
@@ -263,19 +281,21 @@ actualiza al volver.
 
 ## Navegación
 
-El título del header de las siete pantallas principales muestra el **nombre de
+El título del header de las ocho pantallas principales muestra el **nombre de
 la pestaña actual** con una flechita ▾
 ([`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx)); al tocarlo se
 despliega un menú para moverse entre:
 
 - **Favoritos** — la pantalla principal por defecto (configurable en Ajustes):
-  los trackers y listas marcados con la estrella, y el botón "＋ Crear".
+  los trackers, listas y anotaciones marcados con la estrella, y el botón
+  "＋ Crear".
 - **Trackers** — mood tracker + todos los trackers del usuario.
 - **Listas** — las listas del usuario (ver más abajo).
 - **Finanzas** — economía actual + ingresos/gastos (ver más abajo).
 - **Gimnasio** — rutinas del usuario (ver más abajo).
 - **Eventos** — calendario de eventos (ver más abajo).
 - **Rutina diaria** — tareas diarias + seguimiento (ver más abajo).
+- **Anotaciones** — grupos de notas tipo chat (ver más abajo).
 
 Es un stack normal (`@react-navigation/native-stack`); las pantallas hub no
 muestran flecha de "volver", se cambia entre ellas por el menú, y la transición
@@ -428,12 +448,12 @@ cards y no hay una colección de "favoritos" aparte.
   listas, lo resuelve el carrusel (cambia de ítem) en vez de este swipe de
   pantalla.
 - Fuera de ese modo, cada favorito se muestra con su card normal (`TrackerCard`
-  / `ListCard` dentro de un carrusel, o `FinanceSummaryCard` / `MoodTrackerCard`
-  sueltas), con la misma estrella para sacarlo.
-- Botón **"＋ Crear"**: abre el `CreateChooserModal` (**Tracker** / **Lista** como
-  botones centrados, **Cancelar** abajo) y navega a esa
-  pestaña (con un param `{ create: true }` que la pantalla consume una vez para
-  abrir su flujo de creación).
+  / `ListCard` / `NoteCard` dentro de un carrusel, o `FinanceSummaryCard` /
+  `MoodTrackerCard` sueltas), con la misma estrella para sacarlo.
+- Botón **"＋ Crear"**: abre el `CreateChooserModal` (**Tracker** / **Lista** /
+  **Rutina** / **Anotación** como botones centrados, **Cancelar** abajo) y
+  navega a esa pestaña (con un param `{ create: true }` que la pantalla
+  consume una vez para abrir su flujo de creación).
 
 ## Trackers del usuario
 
@@ -476,8 +496,11 @@ Cada tracker tiene un **nombre** y registra por día **opciones y/o un número**
 
 ### Card del tracker
 
-- **Opciones**: se eligen 1 o 2, con el **comentario** debajo (campo de
-  texto, opcional), y se toca **Guardar** — queda a la derecha, a la misma
+- **Opciones**: se eligen 1 o 2, con el **comentario** debajo (tocar su
+  placeholder abre un panel flotante arriba del teclado —
+  [`FloatingTextFieldEditor`](src/presentation/components/FloatingTextFieldEditor.tsx)—
+  con el campo de verdad, para que el teclado no lo tape ahí adentro del
+  scroll del home/Favoritos), y se toca **Guardar** — queda a la derecha, a la misma
   altura que "Ver progreso" (fila al fondo de la card, mismo patrón que el
   mood tracker). Una vez guardadas, los chips y el comentario se ocultan y
   queda un resumen de solo lectura (puntos de color + nombres, con el
@@ -599,6 +622,62 @@ Orden de las entradas (`compareListEntries` en el dominio):
 
 La fecha se elige con el date picker nativo
 (`@react-native-community/datetimepicker`).
+
+## Anotaciones
+
+Grupos de notas con nombre (`Note`); adentro, un chat tipo WhatsApp de
+mensajes de texto (`NoteMessage`): hora de envío, separador de día
+("Hoy"/"Ayer"/día de la semana/fecha —
+[`formatChatDay`](src/core/utils/date.ts)), **links tocables** (reusa
+[`LinkedText`](src/presentation/components/LinkedText.tsx), el mismo
+componente que ya usan los comentarios de listas/trackers) y burbujas
+alineadas **a la derecha**.
+
+- **Hub** ([`notes/`](src/presentation/screens/notes/)): saludo + una
+  [`NoteCard`](src/presentation/note/components/NoteCard.tsx) por anotación
+  (orden de creación — no tiene reorden manual propio todavía) y, al final,
+  **＋ Crear anotación nueva**.
+- **`NoteCard`** (hub y Favoritos, con `compact` ahí): nombre arriba (tocarlo
+  entra al chat completo) + estrella de favorito + un **triángulo** (mismo
+  patrón que `ListCard`) que colapsa/despliega solo la vista del chat —
+  colapsada, solo quedan visibles el nombre y el campo de escribir. Desplegada,
+  debajo hay una vista **de alto fijo** del chat —
+  [`PersistentScrollView`](src/presentation/components/PersistentScrollView.tsx)
+  desde el principio, a diferencia de `ListCard` (que crece hasta un tope y
+  ahí recién empieza a scrollear) — muestra algunos mensajes o ninguno, nunca
+  más alta que eso, y arranca (y se mantiene) pegada al **último mensaje**
+  (`stickToBottom`); abajo, en vez del campo de escribir real, una vista
+  "de mentira" con la misma pinta — tocarla abre un panel flotante arriba
+  del teclado
+  ([`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx))
+  con el `NoteComposer` de verdad adentro, para que el teclado no tape el
+  campo (acá, a diferencia del chat completo, el campo vive mezclado dentro
+  del scroll del menú de Anotaciones o de Favoritos). El panel también
+  muestra una vista chica del chat arriba del campo (pegada al último
+  mensaje), para ver algo de contexto y los mensajes nuevos mientras se
+  escribe. También se puede **responder deslizando** un mensaje desde acá
+  (abre el panel con la cinta "Respondiendo a…" ya puesta), igual que en el
+  chat completo — sin selección múltiple, que sigue viviendo solo ahí.
+- **Chat completo** ([`note-detail/`](src/presentation/screens/note-detail/)):
+  los mensajes de siempre (`MessageBubble` por mensaje, separadores de día
+  intercalados) con el `NoteComposer` fijo abajo. En el header, una **lupa**
+  abre una barra de búsqueda que filtra los mensajes por texto, y
+  **"Borrar"** (con confirmación) borra la anotación y todos sus mensajes —
+  mutuamente excluyentes entre sí y con la selección múltiple.
+  - **Responder**: deslizar un mensaje hacia la derecha (como WhatsApp),
+    empezando en cualquier parte de la fila (no solo tocando el globo) — al
+    pasar el umbral, arma una cinta **"Respondiendo a: …"** arriba del campo
+    de escribir, que se manda junto con el próximo mensaje. La burbuja
+    siempre vuelve a su lugar al soltar el dedo, haya pasado el umbral o no.
+  - **Selección múltiple**: mantener presionado un mensaje lo selecciona
+    (igual que en listas/rutina diaria); con uno o más seleccionados,
+    [`SelectionBar`](src/presentation/components/SelectionBar.tsx) reemplaza
+    la vista normal — **✕** cancela, **tacho** borra (con confirmación), y un
+    **lápiz** (solo si hay exactamente uno seleccionado) precarga ese mensaje
+    en el campo de escribir, con una cinta **"Editando mensaje"**, para
+    corregirlo sin abrir nada aparte.
+  - Si el mensaje al que se respondió se borró después, la cita muestra
+    **"Mensaje eliminado"** en vez de romper nada.
 
 ## Finanzas
 

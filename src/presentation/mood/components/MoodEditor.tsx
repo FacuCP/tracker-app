@@ -6,6 +6,8 @@ import { MoodColor, getMoodColorInfo } from '../../../domain/mood/entities/MoodC
 import { NOTE_MAX, NOTE_MIN } from '../../../domain/mood/entities/MoodEntry';
 import { parseNoteInput } from '../parseNoteInput';
 import { DiagonalSplitSquare } from '../../components/DiagonalSplitSquare';
+import { FloatingTextFieldEditor } from '../../components/FloatingTextFieldEditor';
+import { FloatingOverlay } from '../../components/useFloatingOverlay';
 import { MoodColorPicker } from './MoodColorPicker';
 
 interface Props {
@@ -22,13 +24,28 @@ interface Props {
   onDelete?: () => void;
   /** Se muestra a la izquierda, a la misma altura que "Guardar"/"Borrar" — lo usa `MoodTrackerCard` para "Ver progreso". */
   leftAction?: ReactNode;
+  /**
+   * Panel flotante compartido por toda la pantalla (ver
+   * `useFloatingOverlay`) — solo lo pasa `MoodTrackerCard`, que vive
+   * adentro de un `ScrollView` largo (el home o Favoritos). Sin esto (el
+   * caso de `MoodDayModal`, que ya es su propio modal bien comportado sin
+   * ese problema) la descripción es un campo de texto común, como antes
+   * de #123.
+   */
+  overlay?: FloatingOverlay;
+  overlayKey?: string;
 }
 
 /**
  * Bloque reutilizable para cargar/editar el ánimo de un día: preview,
  * selector de colores (con la nota al costado del último, dentro de la misma
  * grilla), descripción opcional y botones. Lo usan tanto la card del home
- * como el modal de edición del calendario.
+ * como el modal de edición del calendario. En la card del home, la
+ * descripción vive adentro de un `ScrollView` largo (el teclado la tapaba
+ * igual que pasaba con el campo de una anotación, ver #121/#122/#131) — por
+ * eso ahí (`overlay` presente) no se escribe directo: tocar su placeholder
+ * empuja el campo de verdad al panel flotante compartido de la pantalla. En
+ * el modal del calendario (`overlay` ausente) sigue siendo un campo común.
  */
 export function MoodEditor({
   colors,
@@ -42,6 +59,8 @@ export function MoodEditor({
   saveLabel = 'Guardar',
   onDelete,
   leftAction,
+  overlay,
+  overlayKey,
 }: Props) {
   const hex = colors.map((c) => getMoodColorInfo(c).hex);
   const noteError = parseNoteInput(note).error;
@@ -86,14 +105,24 @@ export function MoodEditor({
         }
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Descripción (opcional)"
-        placeholderTextColor="#9ca3af"
-        value={description}
-        onChangeText={onDescriptionChange}
-        multiline
-      />
+      {overlay && overlayKey ? (
+        <FloatingTextFieldEditor
+          overlay={overlay}
+          overlayKey={overlayKey}
+          value={description}
+          onChangeText={onDescriptionChange}
+          placeholder="Descripción (opcional)"
+        />
+      ) : (
+        <TextInput
+          style={styles.input}
+          placeholder="Descripción (opcional)"
+          placeholderTextColor="#9ca3af"
+          value={description}
+          onChangeText={onDescriptionChange}
+          multiline
+        />
+      )}
 
       <View style={[styles.actions, leftAction ? styles.actionsBetween : null]}>
         {leftAction ?? null}

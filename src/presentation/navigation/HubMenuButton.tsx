@@ -6,7 +6,15 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { RootStackParamList } from '../../core/navigation/types';
 import { theme } from '../../core/theme';
 
-export type HubRoute = 'Favorites' | 'Trackers' | 'Lists' | 'Finances' | 'Gym' | 'Events' | 'DailyRoutines';
+export type HubRoute =
+  | 'Favorites'
+  | 'Trackers'
+  | 'Lists'
+  | 'Finances'
+  | 'Gym'
+  | 'Events'
+  | 'DailyRoutines'
+  | 'Notes';
 
 const ITEMS: { route: HubRoute; label: string }[] = [
   { route: 'Favorites', label: 'Favoritos' },
@@ -16,6 +24,7 @@ const ITEMS: { route: HubRoute; label: string }[] = [
   { route: 'Gym', label: 'Gimnasio' },
   { route: 'Events', label: 'Eventos' },
   { route: 'DailyRoutines', label: 'Rutina diaria' },
+  { route: 'Notes', label: 'Anotaciones' },
 ];
 
 /**

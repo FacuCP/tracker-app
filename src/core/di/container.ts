@@ -50,6 +50,18 @@ import { SetListPinnedExpanded } from '../../domain/list/usecases/SetListPinnedE
 import { ListsOrderRepositoryImpl } from '../../data/list/repositories/ListsOrderRepositoryImpl';
 import { GetListsOrder } from '../../domain/list/usecases/GetListsOrder';
 import { SaveListsOrder } from '../../domain/list/usecases/SaveListsOrder';
+import { AsyncStorageNoteLocalDataSource } from '../../data/note/datasources/NoteLocalDataSource';
+import { AsyncStorageNoteMessageLocalDataSource } from '../../data/note/datasources/NoteMessageLocalDataSource';
+import { NoteRepositoryImpl } from '../../data/note/repositories/NoteRepositoryImpl';
+import { NoteMessageRepositoryImpl } from '../../data/note/repositories/NoteMessageRepositoryImpl';
+import { CreateNote } from '../../domain/note/usecases/CreateNote';
+import { DeleteNote } from '../../domain/note/usecases/DeleteNote';
+import { DeleteNoteMessage } from '../../domain/note/usecases/DeleteNoteMessage';
+import { GetNote } from '../../domain/note/usecases/GetNote';
+import { GetNoteMessages } from '../../domain/note/usecases/GetNoteMessages';
+import { GetNotes } from '../../domain/note/usecases/GetNotes';
+import { SaveNoteMessage } from '../../domain/note/usecases/SaveNoteMessage';
+import { SetNoteFavorite } from '../../domain/note/usecases/SetNoteFavorite';
 import { AsyncStorageFinanceCategoryLocalDataSource } from '../../data/finance/datasources/FinanceCategoryLocalDataSource';
 import { AsyncStorageFinanceTransactionLocalDataSource } from '../../data/finance/datasources/FinanceTransactionLocalDataSource';
 import { FinanceCategoryRepositoryImpl } from '../../data/finance/repositories/FinanceCategoryRepositoryImpl';
@@ -131,6 +143,8 @@ const trackersOrderRepository = new TrackersOrderRepositoryImpl();
 const listRepository = new ListRepositoryImpl(new AsyncStorageListLocalDataSource());
 const listEntryRepository = new ListEntryRepositoryImpl(new AsyncStorageListEntryLocalDataSource());
 const listsOrderRepository = new ListsOrderRepositoryImpl();
+const noteRepository = new NoteRepositoryImpl(new AsyncStorageNoteLocalDataSource());
+const noteMessageRepository = new NoteMessageRepositoryImpl(new AsyncStorageNoteMessageLocalDataSource());
 
 // --- Finanzas ---
 const financeCategoryRepository = new FinanceCategoryRepositoryImpl(
@@ -209,6 +223,15 @@ export const container = {
   saveListEntry: new SaveListEntry(listRepository, listEntryRepository, generateId),
   setListEntryDone: new SetListEntryDone(listEntryRepository),
   deleteListEntry: new DeleteListEntry(listEntryRepository),
+
+  getNotes: new GetNotes(noteRepository),
+  getNote: new GetNote(noteRepository),
+  createNote: new CreateNote(noteRepository, generateId),
+  setNoteFavorite: new SetNoteFavorite(noteRepository),
+  deleteNote: new DeleteNote(noteRepository, noteMessageRepository),
+  getNoteMessages: new GetNoteMessages(noteMessageRepository),
+  saveNoteMessage: new SaveNoteMessage(noteRepository, noteMessageRepository, generateId),
+  deleteNoteMessage: new DeleteNoteMessage(noteMessageRepository),
 
   getFinanceCategories: new GetFinanceCategories(financeCategoryRepository),
   saveFinanceCategory: new SaveFinanceCategory(financeCategoryRepository, generateId),

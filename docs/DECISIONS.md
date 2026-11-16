@@ -5159,6 +5159,1109 @@ entre el resto de los archivos de Documentos.
 
 ---
 
+## 117. Nueva pestaña "Anotaciones": grupos de notas tipo chat (mensajes, responder deslizando, editar/borrar con selección múltiple) *(elección del usuario)*
+
+**Contexto.** Pestaña nueva, "Anotaciones": grupos con nombre (como las
+listas) donde adentro se escribe en un chat tipo WhatsApp — mensajes con
+hora, separador de día, links tocables, responder a un mensaje
+deslizándolo hacia la derecha, y editar/borrar con la misma selección
+múltiple (mantener presionado) que ya usan listas y rutina diaria. Los
+grupos aparecen en la pestaña Anotaciones y, si son favoritos, en
+Favoritos también — ahí (y en el propio menú de Anotaciones) la card
+muestra el nombre, una vista **de tamaño fijo** del chat (no crece,
+siempre con scroll) y un campo para mandar un mensaje sin entrar al
+grupo.
+
+**Decisión.** Capa por capa, calcada de Listas (el feature más
+parecido) en todo lo que no es nuevo:
+
+- **Dominio** (`src/domain/note/`): `Note` (`id, name, createdAt,
+  favorite`, igual que `List` sin `isTodo`/`pinnedExpanded`) y
+  `NoteMessage` (`id, noteId, text, sentAt` —fecha y hora completa,
+  no solo el día—, `replyToId?`, `editedAt?`). Usecases 1:1 con los de
+  listas: `GetNotes`/`GetNote`/`CreateNote`/`SetNoteFavorite`/
+  `DeleteNote` (borra los mensajes del grupo antes que el grupo,
+  mismo orden que `DeleteList`) y `GetNoteMessages`/`SaveNoteMessage`
+  (crear o editar según venga `id`, igual que `SaveListEntry`) /
+  `DeleteNoteMessage` (**un solo id por llamada** — el borrado de
+  varios a la vez es un loop secuencial en el viewmodel, no un usecase
+  en lote; ver más abajo).
+- **Datos** (`src/data/note/`): mismo esquema que listas — un blob
+  indexado por id para los grupos
+  (`NoteLocalDataSource`/`NoteRepositoryImpl`) y uno anidado
+  `{ [noteId]: { [messageId]: dto } }` para los mensajes
+  (`NoteMessageLocalDataSource`/`NoteMessageRepositoryImpl`, calcado
+  de `ListEntryLocalDataSource`). Dos claves nuevas en
+  `STORAGE_KEYS` (`notes`, `noteMessages`) — quedan incluidas en
+  `ALL_STORAGE_KEYS`, así que el backup las cubre sin tocar nada del
+  feature de backup.
+- **Responder deslizando**: `NoteMessageBubble` tiene su propio
+  `usePanGesture` (mismos umbrales que el resto de los swipes de la
+  app — carrusel de Favoritos, calendarios) que solo reacciona hacia
+  la derecha y se desactiva por completo mientras hay una selección
+  múltiple activa. El arrastre se maneja con `useState` común, **no**
+  con `Animated` — esta sesión ya tuvo dos bugs de producción por
+  mezclar `Animated` con el driver nativo bajo la Nueva Arquitectura
+  (#110/#111, en `PersistentScrollView`), así que para el arrastre de
+  una sola fila (donde el costo de un re-render de JS es insignificante)
+  se evitó esa clase de riesgo directamente. La burbuja siempre vuelve
+  a su lugar al soltar, haya pasado el umbral o no; si lo pasó, se
+  arma un "Respondiendo a…" arriba del campo de escribir
+  (`NoteComposer`), que se manda junto con el próximo mensaje y se
+  limpia después.
+- **Selección múltiple → editar/borrar**: mismo patrón que
+  `useListDetail` (mantener presionado arranca la selección,
+  tocar otro mensaje con selección activa lo suma/saca,
+  `deleteSelected` es un loop secuencial —no `Promise.all`— por la
+  misma razón de #91: el data source hace lectura-modificación-
+  escritura sobre el mismo blob, y en paralelo un borrado puede
+  "revivir" lo que el otro acababa de borrar). Lo nuevo:
+  [`SelectionBar`](src/presentation/components/SelectionBar.tsx) suma
+  un `onEdit?` opcional (un lápiz antes del tacho) que **quien la usa**
+  decide pasar solo cuando hay exactamente un mensaje seleccionado;
+  tocarlo precarga ese mensaje en el campo de escribir (con una cinta
+  "Editando mensaje") en vez de abrir nada aparte.
+- **Si el mensaje citado se borra**: no hay cascada ni bloqueo —
+  `replyToId` no se valida contra nada en el dominio; `NoteMessageBubble`
+  busca el mensaje citado en lo que ya tiene cargado y, si no lo
+  encuentra, muestra "Mensaje eliminado" en vez de romper nada.
+- **Card de un grupo** ([`NoteCard`](src/presentation/note/components/NoteCard.tsx)):
+  a diferencia de `ListCard` (que crece hasta un tope y ahí recién
+  empieza a scrollear), ésta es **siempre** de alto fijo —con
+  [`PersistentScrollView`](src/presentation/components/PersistentScrollView.tsx)
+  de entrada, incluso sin mensajes—, tal como se pidió ("tamaño fijo...
+  no se agranda más"). Pide sus propios mensajes directo
+  (`container.getNoteMessages`), igual que `ListCard` pide sus propias
+  entradas — ninguna pantalla que la usa necesita precargarlos.
+  Sin swipe-para-responder ni selección múltiple ahí: esas dos viven
+  solo en el chat completo, para no meter un segundo gesto horizontal
+  por fila adentro de `FavoritesCarousel` (que ya tiene el suyo).
+  (Nota: el pedido de responder se habilitó en la card después de
+  todo — ver #118; selección múltiple sigue sin estar ahí.)
+- **Favoritos**: `useFavorites` suma `getNotes()` al `Promise.all`,
+  filtra por favorito y arma una card `'notes'` igual que
+  `trackersCard`/`listsCard`, mostrada con el mismo `FavoritesCarousel`
+  si hay más de una. El botón "＋ Crear" de Favoritos
+  (`CreateChooserModal`) suma "Anotación" como cuarta opción.
+  **Sin orden manual propio** (como sí tienen listas/trackers desde
+  #95/#113) — no se pidió; quedan en el orden de creación. Queda
+  anotado como mejora pendiente si se pide después.
+- **Menú y navegación**: "Anotaciones" se agrega a
+  [`HubMenuButton`](src/presentation/navigation/HubMenuButton.tsx) (no
+  hay tabs de verdad en esta app — son pantallas de un mismo stack,
+  alcanzables desde ese menú desplegable) y dos rutas nuevas en
+  `AppNavigator`/`RootStackParamList`: `Notes` (el hub) y `NoteDetail`
+  (el chat). No se tocó `HomeTab`/`HOME_TABS` (qué pestaña abre la app
+  al iniciar) — mismo criterio que "Rutina diaria", que tampoco es
+  elegible ahí.
+
+**Alternativas descartadas.**
+
+- **Un usecase de borrado en lote** (`DeleteNoteMessages(noteId, ids)`)
+  con el loop secuencial adentro. Se descartó para quedar consistente
+  con cómo ya lo resuelve `useListDetail.deleteSelected` en este mismo
+  código base: el loop vive en el viewmodel, llamando al usecase de
+  un solo id tantas veces como haga falta — no hay un segundo patrón
+  de borrado en lote divergente.
+- **Un ícono "lápiz" para editar** en vez de precargar el mensaje en el
+  campo de escribir con una cinta. Se descartó: no hay un modal de
+  edición separado en todo este feature (a propósito, para que sea
+  "escribir y enviar" nomás); reusar el mismo campo de abajo, con una
+  cinta que avisa qué se está haciendo, es más simple y consistente
+  con cómo ya funciona "Respondiendo a…".
+
+**Consecuencias.** No se pudo probar en un dispositivo real la
+interacción de gestos (deslizar para responder mientras convive con
+mantener presionado para seleccionar, y con el scroll vertical del
+chat) — están armados con los mismos umbrales que ya usan el carrusel
+de Favoritos y los calendarios de esta app, pero si algo no se siente
+bien en el teléfono, hay que ajustarlo ahí. `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios.
+
+## 118. Anotaciones: ajustes tras el primer uso (teclado, scroll de la card, responder desde la card, buscar, burbujas a la derecha) *(elección del usuario)*
+
+**Contexto.** Primera ronda de ajustes sobre #117 después de probarlo:
+el teclado tapaba el campo de escribir en el chat completo; la
+vista recortada de la card (menú de Anotaciones) no arrancaba mostrando
+el último mensaje ni dejaba scrollear; no se podía responder desde esa
+misma card; faltaba una forma de buscar mensajes dentro de una
+anotación; y los mensajes debían salir alineados a la derecha, no a la
+izquierda (como en la mayoría de los chats, el propio usuario a la
+derecha).
+
+**Decisión.**
+
+- **Teclado tapando el campo** ([`KeyboardAvoider`](src/presentation/components/KeyboardAvoider.tsx)):
+  el chat completo es el primer uso de este componente sobre una
+  **pantalla** entera en vez de un `Modal`. En Android, una pantalla
+  normal ya se reajusta sola (`windowSoftInputMode="resize"`, default
+  de Expo) — sumarle encima el `behavior="height"` de
+  `KeyboardAvoidingView` duplicaba el ajuste y el campo quedaba tapado
+  en vez de subir. Se agregó un prop opcional
+  `disableHeightBehaviorOnAndroid` (default `false`, no toca ninguno
+  de los ~10 usos existentes dentro de modales, que sí lo necesitan) y
+  [`NoteDetailScreen`](src/presentation/screens/note-detail/NoteDetailScreen.tsx)
+  lo pasa en `true`.
+  (Nota: este diagnóstico resultó equivocado — desactivar el ajuste
+  dejó el campo igual de tapado. La causa real y el prop que lo
+  reemplazó están en #119.)
+- **La card no arrancaba abajo ni scrolleaba**
+  ([`PersistentScrollView`](src/presentation/components/PersistentScrollView.tsx)):
+  dos bugs distintos. (1) Faltaba pasar `nestedScrollEnabled` en
+  [`NoteCard`](src/presentation/note/components/NoteCard.tsx) — a
+  diferencia de `ListCard`, que ya lo pasa, acá se había quedado afuera
+  y Android dejaba que el scroll vertical lo capturara el `ScrollView`
+  de afuera (la pantalla de Anotaciones o el carrusel de Favoritos) en
+  vez del de la card. (2) No había forma de arrancar "desde abajo":
+  se agregó un prop nuevo `stickToBottom` a `PersistentScrollView`
+  (sin tocar a nadie más, que no lo pasa) que, en
+  `onContentSizeChange`, hace `scrollToEnd` — sin animación la primera
+  vez (para no verse un salto al abrir la card) y animado después (si
+  llega un mensaje nuevo mientras está abierta).
+- **Responder desde la card**: reversión deliberada de un criterio de
+  #117 ("sin swipe-para-responder... para no meter un segundo gesto
+  horizontal adentro de `FavoritesCarousel`"). El usuario lo pidió
+  explícitamente para "el item de anotación de menú", así que
+  `NoteCard` ahora tiene su propio estado `replyTarget` y pasa
+  `onSwipeReply` a cada `NoteMessageBubble` y `replyTarget`/
+  `onCancelReply` a su `NoteComposer`, igual que el chat completo. El
+  riesgo de conflicto con el gesto horizontal del carrusel de
+  Favoritos no se resolvió con un prop aparte: el swipe-para-responder
+  ya es solo-hacia-la-derecha con `failOffsetY`, y el carrusel reacciona
+  a su propio gesto en el contenedor de afuera, no en cada fila — se
+  deja así y, si en la práctica compiten mal, se ajusta después (ver
+  gap al final del archivo).
+- **Buscar mensajes**: ícono de lupa (`lucide-react-native`'s `Search`)
+  al lado de "Borrar" en el header de
+  [`NoteDetailScreen`](src/presentation/screens/note-detail/NoteDetailScreen.tsx).
+  Abre un estado `searchOpen`/`searchQuery` nuevo en
+  [`useNoteDetail`](src/presentation/note/viewmodels/useNoteDetail.ts),
+  mutuamente excluyente con la selección múltiple (abrir uno cierra el
+  otro, mismo criterio que responder/editar). Mientras está abierta,
+  una barra de búsqueda ocupa el lugar de la `SelectionBar` arriba del
+  chat, y la lista visible se filtra por texto (sin distinguir
+  mayúsculas) antes de agruparla por día — una simplificación
+  deliberada: los separadores de día quedan calculados sobre los
+  resultados filtrados, no sobre el chat completo.
+- **Burbujas a la derecha**: `NoteMessageBubble.bubble` pasa de
+  `alignSelf: 'flex-start'` a `'flex-end'` — afecta por igual al chat
+  completo y a la vista recortada de la card, porque es el mismo
+  componente y el mismo estilo en los dos lugares.
+
+**Alternativas descartadas.**
+
+- **Cambiar el default de `KeyboardAvoider` a `behavior: undefined` en
+  Android** en vez de un prop opuesto. Se descartó: cambiaría el
+  comportamiento de los ~10 usos existentes dentro de `Modal` (donde
+  Android *no* reajusta solo y sí hace falta `behavior="height"`), que
+  nunca se reportaron con problemas.
+- **Pasar una `ref` imperativa a `PersistentScrollView`** en vez de un
+  prop declarativo (`stickToBottom`). Se descartó: ningún otro uso del
+  componente necesita una ref, y el prop declarativo alcanza para el
+  único caso que lo necesita.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real si el
+swipe-para-responder dentro de la card convive bien con el gesto
+horizontal del carrusel de Favoritos (ver gap al final del archivo).
+
+## 119. Anotaciones: segunda ronda — franja completa para responder, teclado (de nuevo) y cards colapsables *(elección del usuario)*
+
+**Contexto.** El usuario probó #118 e indicó que (1) el teclado seguía
+tapando el campo de escribir del chat completo a pesar del cambio de
+#118, (2) el gesto de deslizar para responder solo se podía empezar
+tocando justo el globo del mensaje, no en cualquier parte de la fila
+("franja"), y (3) pidió que las anotaciones (card, en el menú y en
+Favoritos) se puedan colapsar mostrando solo el nombre y el campo de
+escribir.
+
+**Decisión.**
+
+- **Teclado, diagnóstico corregido**: el de #118 (doble ajuste entre
+  el `resize` nativo de Android y el `behavior="height"` de
+  `KeyboardAvoidingView`) estaba mal — desactivar el ajuste no
+  arregló nada, así que el `resize` nativo en realidad no estaba
+  compensando como se esperaba. La causa real: desde Android 15 (y el
+  edge-to-edge que trae por default Expo/React Native en SDKs
+  recientes), `windowSoftInputMode="resize"` deja de redimensionar la
+  ventana como antes — el teclado ya no corre la actividad, así que
+  **sí** hace falta que `KeyboardAvoidingView` haga el ajuste él
+  mismo. El problema entonces es `behavior="height"` específicamente:
+  ese modo necesita remedir su propio alto (`onLayout`) y restarle el
+  alto del teclado, medición que bajo edge-to-edge puede llegar tarde
+  o desactualizada. `behavior="padding"` no tiene ese problema: solo
+  suma `paddingBottom`, sin depender de remedirse. Se reemplazó el
+  prop `disableHeightBehaviorOnAndroid` (binario, apagar/prender) por
+  `androidBehavior?: 'height' | 'padding'` (default `'height'`, el
+  mismo comportamiento de siempre para los ~10 modales) en
+  [`KeyboardAvoider`](src/presentation/components/KeyboardAvoider.tsx),
+  y `NoteDetailScreen` pasa `androidBehavior="padding"`. Diagnosticado
+  vía `WebFetch` a los docs versionados de Expo (`android.softwareKeyboardLayoutMode`)
+  y una búsqueda sobre el bug conocido de edge-to-edge con
+  `KeyboardAvoidingView` en Android — no se pudo confirmar en un
+  dispositivo real, así que si `padding` tampoco alcanza, el próximo
+  paso sería `react-native-keyboard-controller` (nueva dependencia,
+  no instalada todavía).
+  (Nota: tampoco alcanzó — capturas reales mostraron el campo
+  tapado/desaparecido igual con `padding`. Se abandonó
+  `KeyboardAvoidingView` del todo para esta pantalla; ver #120.)
+- **Franja completa para responder**
+  ([`NoteMessageBubble`](src/presentation/note/components/NoteMessageBubble.tsx)):
+  el `GestureDetector` envolvía solo la burbuja (`bubble`, que tiene
+  `maxWidth: '85%'` y queda alineada a la derecha) — el swipe no se
+  podía empezar tocando el espacio vacío a la izquierda de la burbuja,
+  dentro de la misma fila. Se agregó un contenedor nuevo
+  (`swipeStrip`, ancho completo de la fila) que envuelve la burbuja y
+  el ícono de respuesta, y el `GestureDetector` ahora mide ese
+  contenedor en vez de la burbuja — el área táctil del gesto pasa a
+  ser toda la franja de la fila, no solo donde se ve el globo.
+- **Cards colapsables**
+  ([`NoteCard`](src/presentation/note/components/NoteCard.tsx)): mismo
+  patrón que el triángulo de `ListCard` — un botón al lado de la
+  estrella de favorito que alterna un estado local `expanded` (arranca
+  en `true`, sin persistir entre sesiones: no se pidió que recuerde el
+  estado, a diferencia del pin de listas). Colapsada, se esconde solo
+  la vista del chat (`PersistentScrollView`); el nombre y el
+  `NoteComposer` siguen siempre visibles, como se pidió.
+
+**Alternativas descartadas.**
+
+- **`react-native-keyboard-controller`** para el teclado. Es la
+  solución más robusta y la que recomienda la comunidad para este bug
+  específico de edge-to-edge, pero agrega una dependencia nativa nueva
+  (requiere `react-native-reanimated`, no instalado en este proyecto)
+  y un rebuild — se prueba primero la opción sin dependencias nuevas
+  (`behavior="padding"`) antes de ese costo mayor.
+- **Persistir el estado colapsado/expandido de una anotación** (como
+  `list.pinnedExpanded`). Se descartó: no se pidió, y agregaría un
+  campo nuevo a `Note` solo para esto — si después se quiere que
+  recuerde el estado, se puede agregar igual que se hizo con listas.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. El arreglo del teclado es la segunda vuelta sobre
+el mismo bug sin poder probarlo en un dispositivo real — si
+`androidBehavior="padding"` tampoco alcanza, el próximo paso realista
+es `react-native-keyboard-controller`.
+
+## 120. Anotaciones: tercer intento del teclado tapado — abandonar `KeyboardAvoidingView` en Android para esta pantalla *(elección del usuario)*
+
+**Contexto.** El usuario mandó capturas reales: con `androidBehavior="padding"`
+(#119) el campo de escribir seguía sin verse con el teclado abierto —
+en una captura el teclado de Gboard se veía reducido a solo la tira de
+sugerencias (sin las teclas), y en la otra, con el teclado ya
+desplegado del todo, el campo para escribir directamente no estaba en
+pantalla (ni tapado parcialmente: ausente). Dos intentos con
+`KeyboardAvoidingView` (`height` en #118, `padding` en #119) fallaron
+de formas distintas, así que el problema no es el modo elegido sino
+depender de `KeyboardAvoidingView` en sí en esta pantalla bajo
+edge-to-edge.
+
+**Decisión.** Se abandonó `KeyboardAvoidingView` para
+[`NoteDetailScreen`](src/presentation/screens/note-detail/NoteDetailScreen.tsx)
+en Android (en iOS, donde nunca se reportó el problema, sigue usando
+`KeyboardAvoider` igual que antes) y se reemplazó por una medición
+manual: un hook local, `useAndroidKeyboardHeight`, escucha
+`Keyboard.addListener('keyboardDidShow' | 'keyboardDidHide', ...)` —
+los mismos eventos nativos que usa por dentro `KeyboardAvoidingView` —
+y guarda `e.endCoordinates.height` en estado. Ese número se aplica
+directo como `paddingBottom` del contenedor que envuelve el chat y el
+composer (en vez de envolver todo en un `KeyboardAvoidingView`), así
+que no hay ningún remedido de alto propio de por medio (la sospecha
+en #119 sobre por qué `height` fallaba) ni nada atado al modo
+`resize`/`pan` de la ventana (la sospecha de #118) — es aritmética
+simple: cuando el teclado mide X de alto, el contenedor se achica X.
+
+**Alternativas descartadas.**
+
+- **Seguir ajustando `KeyboardAvoidingView`** (un tercer `behavior` o
+  `keyboardVerticalOffset`). Se descartó: ya se probaron sus dos únicos
+  modos (`height` y `padding`) y los dos fallaron de formas distintas
+  bajo esta combinación de edge-to-edge + pantalla completa (no
+  modal) — seguir iterando sobre el mismo componente sin poder probar
+  en un dispositivo real es apostar a ciegas.
+- **`react-native-keyboard-controller`.** Sigue siendo la opción más
+  robusta y la que recomienda la comunidad para este bug, pero agrega
+  una dependencia nativa nueva (y `react-native-reanimated` como
+  dependencia transitiva) y un rebuild completo. Se prueba primero la
+  medición manual —no agrega dependencias, y al ser un cambio 100% JS
+  se puede probar incluso vía `expo-updates` (ya instalado en este
+  proyecto) sin un build nuevo de EAS— antes de ese costo mayor.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Tercera vuelta sobre el mismo bug sin poder
+probarlo en un dispositivo real — si la medición manual tampoco
+alcanza, el próximo paso es `react-native-keyboard-controller`.
+(Nota: el usuario confirmó que #120 arregló el chat completo — el
+problema que quedaba era otro, en la card compacta de la pestaña
+Anotaciones y en Favoritos, no cubierto por este cambio; ver #121.)
+
+## 121. Anotaciones: el campo de la card compacta (menú y Favoritos) también quedaba tapado por el teclado *(elección del usuario)*
+
+**Contexto.** El usuario confirmó que #120 arregló el teclado en el
+chat completo, pero "en la pestaña anotaciones y en menú favoritos no
+anda" — ahí el campo de escribir es el de
+[`NoteCard`](src/presentation/note/components/NoteCard.tsx), que **no**
+está anclado al fondo de toda la pantalla como en el chat: vive
+mezclado con el resto de las cards dentro del `ScrollView` de
+[`NotesScreen`](src/presentation/screens/notes/NotesScreen.tsx) o de
+[`FavoritesScreen`](src/presentation/screens/favorites/FavoritesScreen.tsx).
+La solución de #120 (medir el teclado y sumar `paddingBottom` al
+contenedor entero) no aplica acá: no hay "un" campo fijo al que
+agregarle padding — podría ser el campo de cualquiera de varias cards,
+en cualquier posición del scroll.
+
+**Decisión.** Para este caso (un campo en cualquier posición dentro de
+un `ScrollView` largo, no anclado al fondo) la solución correcta es
+desplazar el scroll hasta ese campo puntual, no agregar padding global.
+En vez de reimplementar esa medición a mano, se usó el mecanismo que
+ya trae `ScrollView` para esto mismo:
+`scrollResponderScrollNativeHandleToKeyboard(nodeHandle, additionalOffset, preventNegativeScrollOffset)`
+—un método público de la instancia, confirmado leyendo el código fuente
+de `react-native` en este proyecto (no es una suposición): mide la
+posición del campo enfocado contra el propio `ScrollView` y lo
+desplaza para que quede arriba del teclado, usando el `screenY` real
+del teclado (`Keyboard.addListener('keyboardDidShow', ...)`, que
+"ScrollView" ya escucha internamente) — no depende de que la ventana se
+redimensione, así que no debería verse afectado por edge-to-edge (el
+problema de fondo en #118/#119/#120).
+
+Cambios: `NoteComposer` suma un prop `onFocus` opcional que pasa
+directo al `TextInput`; `NoteCard` suma `onComposerFocus`, que reenvía
+a `NoteComposer`; `NotesScreen` y `FavoritesScreen` tienen cada uno su
+propio `ref` al `ScrollView` principal y le pasan a cada `NoteCard` un
+`onComposerFocus` que llama a
+`scrollRef.current.scrollResponderScrollNativeHandleToKeyboard(event.target, 16, true)`
+con el handle que ya trae el propio evento de foco (`event.target`,
+tipado `number | HostInstance`, sin necesitar `findNodeHandle`).
+
+**Alternativas descartadas.**
+
+- **Medir a mano con `UIManager.measureLayout` + `scrollTo`** (igual
+  idea que #120, pero localizando el campo). Se descartó: es
+  literalmente lo que hace `scrollResponderScrollNativeHandleToKeyboard`
+  por dentro — reimplementarlo a mano solo agrega superficie para un
+  cuarto bug de teclado sin ganar nada.
+- **Agregar un `KeyboardAvoidingView` envolviendo cada `NoteCard`**. Se
+  descartó: cada card se desplazaría independientemente de las demás,
+  sin noción de "dónde está en el scroll de afuera" — el resultado
+  sería un salto raro, no un scroll suave hasta el campo.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sin poder probarlo en un dispositivo real — es la
+cuarta vuelta sobre el teclado en Anotaciones, aunque esta vez con una
+API pública y documentada de `ScrollView` en vez de una suposición
+sobre `windowSoftInputMode`/edge-to-edge.
+(Nota: tampoco funcionó — capturas reales mostraron la pantalla sin
+moverse nada al aparecer el teclado, tapando todo lo de abajo. La
+causa y el reemplazo están en #122.)
+
+## 122. Anotaciones: quinto intento del teclado — `scrollResponderScrollNativeHandleToKeyboard` no se podía usar desde `onFocus` *(elección del usuario)*
+
+**Contexto.** El usuario mandó capturas: con el cambio de #121, la
+pantalla de Favoritos (mismo problema en Anotaciones) no se movía
+*nada* al enfocar el campo de una `NoteCard` — el teclado tapaba todo
+lo de abajo exactamente igual que antes del cambio.
+
+**Decisión.** El bug de #121 era de **momento**, no de mecanismo:
+`scrollResponderScrollNativeHandleToKeyboard` calcula el
+desplazamiento usando el alto del teclado que su propio `ScrollView`
+ya tiene guardado (`_keyboardMetrics`) en el instante en que se lo
+llama — y se lo estaba llamando desde `onFocus`, que dispara **antes**
+de que el teclado termine de abrirse (en ese momento ese alto todavía
+es `0`/desconocido). Confirmado leyendo el código fuente de
+`ScrollView.js` en este proyecto: si no hay métricas, reintenta una
+sola vez con `setTimeout(0)`, un margen demasiado corto para que el
+teclado ya haya terminado de animarse.
+
+La solución: separar "cuándo se enfocó el campo" de "cuándo se
+desplaza". Se armó un hook nuevo,
+[`useScrollComposerIntoView`](src/presentation/note/useScrollComposerIntoView.ts),
+usado por ambas pantallas:
+
+- `onComposerFocus` (en `onFocus` del campo) solo guarda el *tag*
+  nativo del campo enfocado en un `ref` — no desplaza nada todavía.
+- Un listener propio de `Keyboard.addListener('keyboardDidShow', ...)`
+  —que sí trae el alto/posición real y definitiva del teclado,
+  porque ese evento recién se dispara cuando el teclado terminó de
+  abrirse— mide en ese momento dónde quedó el campo guardado
+  (`UIManager.measureInWindow`, confirmado en el código fuente de
+  `UIManager.js` que funciona igual con o sin la Nueva Arquitectura:
+  rama explícita para tags de Fabric) y, si el teclado lo tapa
+  (`top + height > endCoordinates.screenY`), desplaza el `ScrollView`
+  lo que hace falta (`scrollTo`, usando el scroll actual —trackeado a
+  mano con un `onScroll`, igual que ya hace `PersistentScrollView`—
+  más el solape más un margen de 16).
+
+**Alternativas descartadas.**
+
+- **Agrandar el `setTimeout` interno** (no es posible: es código de
+  `react-native`, no de este proyecto) o **reintentar
+  `scrollResponderScrollNativeHandleToKeyboard` varias veces con
+  reintentos propios**. Se descartó: seguiría siendo una adivinanza de
+  timing en vez de reaccionar al evento real que ya existe para esto
+  (`keyboardDidShow`).
+- **`react-native-keyboard-controller`.** Sigue siendo la opción más
+  robusta a largo plazo, pero la medición manual —ahora corregida para
+  reaccionar al evento correcto— no agrega dependencias y es 100% JS
+  (se puede probar vía `expo-updates` sin build nuevo). Se mantiene
+  como script la próxima alternativa si esto tampoco alcanza.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Quinta vuelta sobre el mismo bug sin poder probarlo
+en un dispositivo real — pero esta vez el diagnóstico es concreto y
+verificable en el código fuente de React Native (un problema de orden
+de eventos, no una suposición sobre edge-to-edge), a diferencia de los
+intentos anteriores.
+(Nota: el usuario identificó la causa de raíz antes de poder probar
+este arreglo — ver #123, que reemplaza todo este enfoque de "desplazar
+el scroll hasta el campo" por uno distinto.)
+
+## 123. Reemplazo de raíz: panel flotante arriba del teclado para campos adentro de una card con scroll (anotaciones, comentario de tracker, descripción de mood) *(elección del usuario)*
+
+**Contexto.** Después de cinco vueltas fallidas tratando de que el
+teclado no tape un campo que vive **adentro de una card, dentro de un
+`ScrollView` largo** (#109→#122, todas sobre la card de una
+anotación), el usuario identificó la causa de raíz con precisión:
+> "en una anotación, el lugar donde se muestra el texto es un
+> componente aparte y se levanta, en cambio, en el menú anotaciones/
+> favoritos es el ítem el que tiene este teclado."
+Es decir: en el chat completo, el campo está anclado al fondo de toda
+la **pantalla** (un componente aparte, fuera del scroll) y ahí sí se
+lo puede desplazar con el teclado (#120, confirmado funcionando). En
+la card compacta, el campo vive **adentro del ítem que scrollea**
+—junto con el resto de las cards del menú de Anotaciones o de
+Favoritos— y ningún mecanismo de "calculá la posición y desplazá el
+scroll" resultó confiable ahí (#121 llamaba mal la API, #122 la
+llamaba bien pero seguía siendo frágil). El usuario pidió, en vez de
+seguir en esa línea, una solución estructuralmente distinta: al tocar
+para escribir, mostrar un cuadro de texto con botón de enviar
+**temporal, arriba del teclado** — y aplicar lo mismo al comentario de
+los trackers y a la descripción del mood tracker, que tienen
+exactamente el mismo problema (campos adentro de una card con scroll).
+
+**Decisión.** En vez de mover el *scroll* hasta el campo, se mueve el
+*campo* fuera del scroll: el valor sigue viviendo donde vivía (el
+estado del viewmodel de cada card), pero el campo de texto de verdad
+ya no se renderiza adentro de la card — se renderiza en un panel
+flotante nuevo, [`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx),
+montado en un `Modal` (`transparent`, `animationType="fade"`,
+ventana nativa aparte) con el mismo `KeyboardAvoider` **por defecto**
+(`behavior="height"` en Android) que ya usan sin problemas los otros
+~10 modales de esta app — porque, a diferencia de una pantalla común,
+un `Modal` no tiene edge-to-edge, así que ese modo sí funciona ahí
+(la razón de fondo detrás de #118/#119/#120/#121/#122: todos esos
+intentos fallaron porque intentaban resolver, de distintas formas, un
+problema de pantalla-con-edge-to-edge o de scroll-con-contenido-largo;
+acá se evita directamente el problema metiendo el campo en un
+`Modal`, el único lugar donde ya se sabía, desde el principio de la
+sesión, que el teclado se maneja bien).
+
+Dentro de cada card, en el lugar donde antes estaba el campo real
+ahora hay una vista "de mentira" con la misma pinta (muestra el texto
+ya escrito o el placeholder) que, al tocarla, abre el panel:
+
+- **`NoteCard`**: el campo real (`NoteComposer`, sin cambios en sí
+  mismo más que un nuevo prop `autoFocus`) vive adentro del panel.
+  Deslizar un mensaje para responder también abre el panel
+  (`startReply` llama a `setComposerOpen(true)` además de
+  `setReplyTarget`). `NoteComposer` se remonta con un `key` distinto
+  cada vez que el panel abre/cierra, para que `autoFocus` dispare
+  siempre (un `Modal` de React Native no desmonta sus hijos al
+  ocultarse, así que un `autoFocus` normal solo dispararía la primera
+  vez).
+- **`TrackerCard`** (comentario) y **`MoodEditor`** (descripción):
+  campo más simple (sin responder/citar), así que se armó un
+  componente intermedio reutilizable,
+  [`FloatingTextFieldEditor`](src/presentation/components/FloatingTextFieldEditor.tsx)
+  (un `KeyboardFloatingPanel` con un único `TextInput` + un botón de
+  tilde) — el texto ya se guarda en tiempo real en el estado existente
+  del viewmodel (`onChangeText` apunta directo ahí), así que el botón
+  de tilde solo cierra el panel, no hace falta "confirmar" nada
+  aparte. El campo "Nota" numérico del mood tracker (corto, teclado
+  decimal) no se tocó — el usuario pidió esto para las
+  "descripciones", no para ese campo.
+
+Se revirtió por completo el enfoque de #118-#122 en las pantallas que
+contienen las cards: `NotesScreen` y `FavoritesScreen` vuelven a su
+forma simple, sin `ref` al `ScrollView` ni `onScroll`/`onComposerFocus`
+— ya no hace falta que la pantalla sepa nada sobre el teclado. Se borró
+`useScrollComposerIntoView.ts` (código muerto). El fix de #120 (chat
+completo, confirmado funcionando por el usuario) **no se tocó**.
+
+**Alternativas descartadas.**
+
+- **Seguir afinando `useScrollComposerIntoView`** (#122, ya
+  diagnosticado correctamente pero sin probar). Se descartó: aunque el
+  diagnóstico era correcto, seguía siendo "calcular a mano dónde está
+  el campo y cuánto desplazar" — una clase de solución que ya llevaba
+  cuatro intentos fallidos en este proyecto. El usuario prefirió una
+  solución que evita la pregunta "cuánto hay que desplazar" por
+  completo.
+- **Un solo componente genérico para los tres casos** (anotación,
+  comentario, descripción). Se descartó: el de anotaciones necesita
+  historial de respuesta/edición (reusa `NoteComposer` tal cual);
+  comentario/descripción son un campo simple sin eso — forzarlos al
+  mismo componente hubiera significado pasarle props que no aplican
+  a un caso o al otro. Se compartió sí la parte genérica real (el
+  panel: modal + backdrop + `KeyboardAvoider`), en
+  `KeyboardFloatingPanel`.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real, pero por
+primera vez en esta serie de intentos la solución no depende de un
+cálculo de posición/timing: reusa, sin modificarlo, el mecanismo que
+ya funciona para los modales de esta app.
+(Nota: el panel aparecía bien, pero el teclado no — había que tocar el
+campo una segunda vez, y encima tapaba la mitad del panel cuando por
+fin aparecía. Causa y arreglo en #124.)
+
+## 124. El panel flotante necesitaba un segundo toque para que apareciera el teclado *(elección del usuario)*
+
+**Contexto.** El usuario probó #123: el panel flotante aparecía al
+tocar el placeholder, pero el teclado no — había que tocar el campo
+de texto de adentro una segunda vez para que recién ahí apareciera, y
+en ese momento tapaba la mitad del cuadro. Pidió que tocar una sola
+vez muestre el campo y el teclado juntos.
+
+**Decisión.** La causa: `NoteComposer`/`FloatingTextFieldEditor`
+usaban `autoFocus` en el `TextInput`, y encima lo remontaban con un
+`key` distinto cada vez que el panel se abría (para forzar que
+`autoFocus` dispare de nuevo, porque un `Modal` de React Native no
+desmonta sus hijos al ocultarse). Ese remonte ocurre en el MISMO
+render en que el `Modal` pasa a `visible=true` — en ese instante la
+ventana nativa del modal todavía no está necesariamente adjunta, así
+que el pedido de foco de `autoFocus` se pierde en silencio. Recién al
+tocar el campo a mano (ya con la ventana nativa lista) el foco
+funciona — pero para entonces el panel ya se había dibujado sin
+contar con el teclado, y el reacomodo de `KeyboardAvoider` llegaba
+tarde y a medias (de ahí lo de "tapa la mitad").
+
+Se reemplazó `autoFocus` + remonte por `ref` + `Modal.onShow`: el
+`TextInput` expone su instancia vía `ref` (`NoteComposer` ahora es
+`forwardRef`), y recién cuando el `Modal` **ya terminó de
+mostrarse** (`onShow`, nuevo prop en
+[`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)) se
+llama `ref.current.focus()`. En ese momento la ventana nativa
+garantizado que existe, así que el foco nunca se pierde — el teclado
+sale en el mismo gesto que el panel, sin necesitar un segundo toque,
+y como ahora hay una sola transición (en vez de panel-sin-teclado →
+foco manual → teclado tarde), `KeyboardAvoider` reacciona a tiempo y
+ya no tapa nada.
+
+**Alternativas descartadas.**
+
+- **Un `setTimeout` después de abrir el panel, antes de enfocar.** Se
+  descartó: es exactamente el tipo de adivinanza de timing que ya
+  falló varias veces en esta sesión (#118-#122) — `Modal.onShow` es
+  la señal real y documentada de que la ventana está lista, no hace
+  falta adivinar cuánto esperar.
+  (Nota: `onShow` solo no alcanzó — ver #125, que sí termina usando
+  un `setTimeout` chico, pero para un problema distinto y bien acotado:
+  no "cuánto tarda el layout", sino "cuánto tarda la ventana en tener
+  el foco del sistema".)
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real.
+
+## 125. El panel flotante seguía necesitando un segundo toque: a `Modal.onShow` le faltaba un margen chico para el foco de ventana en Android *(elección del usuario)*
+
+**Contexto.** El usuario probó #124 con capturas: seguía pasando lo
+mismo — primer toque abre el panel sin teclado, hay que tocar el
+campo una segunda vez para que recién ahí aparezca (ahora sí, arriba
+del teclado, sin taparse). Pidió que un solo toque alcance.
+
+**Decisión.** `Modal.onShow` efectivamente garantiza que la ventana
+nativa del modal ya está montada — pero en Android eso no es lo
+mismo que esa ventana ya tenga el **foco de ventana** a nivel de
+sistema operativo. El teclado solo aparece cuando el campo de texto
+tiene foco de React Native **y** su ventana contenedora tiene foco de
+sistema; si se llama `.focus()` apenas se dispara `onShow`, la
+ventana puede no haber terminado de recibir ese foco todavía, y el
+pedido de foco al campo no dispara el teclado (aunque el campo quede
+"foco de React" desde el primer toque — por eso el segundo toque,
+manual, sí funciona: para entonces la ventana ya tiene foco hace
+rato). Se agregó un margen chico y documentado
+(`ANDROID_FOCUS_DELAY = 50`ms) en
+[`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx):
+en Android, el `onShow` que le pasa quien usa el panel se llama
+después de ese margen (en iOS, sin cambios, se llama directo). Queda
+centralizado ahí — ni `NoteCard` ni `FloatingTextFieldEditor`
+necesitaron cambios, siguen pasando `onShow={() => ref.current?.focus()}`
+como antes.
+
+**Alternativas descartadas.**
+
+- **Reintentar el `focus()` en un loop hasta que el teclado aparezca**
+  (detectado vía `Keyboard.addListener('keyboardDidShow', ...)`). Se
+  descartó por ahora: agrega una máquina de estados nueva para un
+  margen que, documentado, es chico y predecible — si en la práctica
+  50ms no alcanzan, subir el número es un cambio de una línea, mucho
+  más simple que un mecanismo de reintento.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real — si
+50ms no alcanzan en la práctica, subir ese número es el próximo paso
+antes de considerar algo más complejo.
+(Nota: el teclado del usuario tiene una fila propia extra —sugerencias,
+GIFs, etc.— que aparentemente no se refleja completa en el alto que
+reporta el sistema, así que el campo seguía tapado igual. El arreglo
+en #126 no depende de medir ese alto con precisión.)
+
+## 126. El teclado del teléfono tiene filas propias que no se reflejan en el alto reportado: agrandar el panel en vez de medir mejor *(elección del usuario)*
+
+**Contexto.** El usuario mandó una captura: el panel (de una entrada
+de lista, no de este feature, como referencia) con el campo bien
+visible y bastante aire debajo antes de que empiece el teclado. Explicó
+la causa de que a él le siguiera tapando el campo en los paneles
+nuevos: "el teclado de mi teléfono tiene funciones adicionales que
+tapan" — su teclado agrega una fila propia (sugerencias/GIFs/etc.)
+que, aparentemente, no está completa en el alto que
+`endCoordinates.height` reporta, así que cualquier cálculo basado en
+ese número (el de #120, #123, #124, #125) va a quedarse corto en su
+teléfono en particular. Pidió, en vez de seguir afinando esa cuenta,
+copiar lo que ya hace bien
+[`ListEntryModal`](src/presentation/list/components/ListEntryModal.tsx)
+(la hoja de "Nueva entrada"): que el cuadro suba hasta
+aproximadamente la mitad de la pantalla, completando con espacio en
+blanco por debajo.
+
+**Decisión.** Se dejó de intentar que el panel mida "justo lo que
+hace falta" y se lo hizo directamente más alto de lo necesario:
+[`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)
+suma `minHeight: '50%'` a su `panel`. El campo (hijo único de ese
+panel) sigue alineado arriba por default de Flexbox
+(`justify-content: flex-start`), así que el 50% que le sobra queda
+como aire **debajo** del campo — exactamente lo pedido. Esto no
+arregla la medición del teclado (sigue siendo la misma de #120/#125):
+lo que cambia es que, aunque esa medición quede corta por la fila
+extra del teclado del usuario, el campo ya tenía de entrada tanto
+margen de sobra que el margen que falta no llega a comérselo. Mismo
+criterio que ya usa, sin buscarlo, `ListEntryModal`: su hoja tiene
+`maxHeight: '85%'` y bastante contenido/`padding`, así que nunca se
+ajusta al pixel al contenido real — eso es, en los hechos, lo que la
+hace tolerante a este tipo de imprecisión.
+
+**Alternativas descartadas.**
+
+- **Sumar un margen fijo extra al cálculo existente** (p. ej.
+  `endCoordinates.height + 80`). Se descartó: seguiría siendo una
+  cifra inventada para un teclado específico, no necesariamente la
+  misma en otro teléfono — agrandar el panel de por sí no depende de
+  cuánto le falta a la medición, tolera cualquier excedente dentro de
+  ese 50% de margen.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real.
+(Nota: se ajustó a `40%` en #127 — el usuario pidió bajarlo un poco una
+vez confirmado que la idea general funcionaba.)
+
+## 127. Ajustes sobre el panel flotante: altura, doble toque para enviar/confirmar, vista previa del chat y Enter para mandar *(elección del usuario)*
+
+**Contexto.** Con el panel flotante (#123-#126) ya funcionando, el
+usuario pidió cuatro ajustes:
+1. Bajar un poco la altura del panel (10%).
+2. Un bug: tocar "enviar" (o el tilde de confirmar, en tracker/mood)
+   cerraba el teclado pero no mandaba/confirmaba nada — recién un
+   segundo toque lo hacía, y cerrar el panel entero necesitaba
+   todavía un toque más afuera. Para tracker/mood pidió que un solo
+   toque alcance para cerrar todo de una.
+3. Para anotaciones, ver un poco del chat (mensajes nuevos incluidos)
+   arriba del campo, dentro del panel.
+4. Para anotaciones, que apretar `Enter` en el teclado mande el
+   mensaje sin cerrar el teclado (en vez de lo que hacía antes).
+
+**Decisión.**
+
+- **Altura**: `minHeight` de
+  [`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)
+  baja de `'50%'` a `'40%'`.
+- **Doble toque para enviar/confirmar**: tanto el botón de enviar de
+  [`NoteComposer`](src/presentation/note/components/NoteComposer.tsx)
+  como el de confirmar de
+  [`FloatingTextFieldEditor`](src/presentation/components/FloatingTextFieldEditor.tsx)
+  pasan de `onPress` a `onPressIn`. Causa probable: con el teclado
+  abierto, tocar un botón vecino al campo enfocado puede hacer que
+  Android empiece a cerrar el teclado a mitad del toque — el
+  reacomodo de layout que sigue corre el botón de lugar antes de que
+  llegue el "soltar", y Android lo cuenta como gesto cancelado en vez
+  de como un toque. `onPressIn` dispara en el instante de tocar, antes
+  de que ese reacomodo tenga chance de interferir. Para
+  `FloatingTextFieldEditor` esto también resuelve el pedido de
+  tracker/mood: su botón ya llamaba `onClose` directo (cierra todo,
+  panel y teclado), así que arreglar el toque alcanza — no hizo falta
+  tocar la lógica de cierre en sí.
+- **Vista previa del chat en el panel** (solo anotaciones): se
+  extrajo el render de mensajes de
+  [`NoteCard`](src/presentation/note/components/NoteCard.tsx) a una
+  función `renderMessages()` compartida entre la vista principal
+  (expandida/colapsable) y una nueva vista chica (`PersistentScrollView`,
+  alto fijo `130`, pegada al último mensaje) adentro del panel
+  flotante, arriba del `NoteComposer`.
+- **`Enter` manda sin cerrar el teclado**: en Android, un `TextInput`
+  con `multiline` **no** dispara `onSubmitEditing` al apretar `Enter`
+  (inserta el salto de línea directo, sin importar
+  `returnKeyType`/`blurOnSubmit` — limitación conocida de React
+  Native en Android, no específica de este proyecto). Se detecta a
+  mano en `onChangeText`: si el texto nuevo creció en exactamente un
+  carácter y ese carácter es un salto de línea al final, fue un
+  `Enter` (no un pegado de varias líneas) — se manda el mensaje en vez
+  de agregarlo. `returnKeyType="send"` queda igual, solo para que el
+  ícono del `Enter` en el teclado se vea como de enviar.
+
+**Alternativas descartadas.**
+
+- **`onSubmitEditing` + `blurOnSubmit={false}`** para lo de `Enter`.
+  Se descartó después de confirmar (documentación de React Native)
+  que no dispara en Android para campos `multiline` — cualquier
+  solución basada en ese evento iba a fallar igual en el teléfono del
+  usuario.
+- **Mantener `onPress` y agregar un `setTimeout` antes de leer el
+  estado del botón**, para el bug de doble toque. Se descartó:
+  `onPressIn` resuelve la causa de raíz (no depender del "soltar")
+  sin inventar una demora.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real.
+(Nota: bajar el panel a `40%` se revirtió en #128 — el usuario lo
+pidió de vuelta a `50%` después de probarlo. El `Enter` seguía
+cerrando el teclado pese al arreglo de acá; la causa real y el
+arreglo están en #128.)
+
+## 128. Enter seguía cerrando el teclado: era `returnKeyType`, no `onSubmitEditing` *(elección del usuario)*
+
+**Contexto.** El usuario probó #127 y pidió tres cosas: (1) revertir
+la altura del panel a `50%` (la bajada del 10% no convenció una vez
+probada), (2) que apretar `Enter` en anotaciones siga sin cerrar el
+teclado —seguía cerrándolo pese al arreglo de #127— "como WhatsApp",
+y (3) confirmó explícitamente el contraste que debía tener cada
+botón principal: en tracker/mood, el tilde cierra **todo** (cuadro y
+teclado); en anotaciones, enviar (por botón o por `Enter`) no debe
+cerrar **nada** — solo manda el mensaje, en el primer toque.
+
+**Decisión.**
+
+- **Altura**: `minHeight` de
+  [`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)
+  vuelve a `'50%'`.
+- **`Enter` seguía cerrando el teclado**: el arreglo de #127 (detectar
+  el salto de línea a mano en `onChangeText`) evita el problema de
+  `onSubmitEditing` no disparando, pero no tocaba la causa real de
+  que el teclado se cerrara: `returnKeyType="send"` le pide a Android
+  una tecla de acción IME (`IME_ACTION_SEND`) que, del lado nativo,
+  **cierra el teclado por default al apretarla** — ese cierre lo hace
+  el sistema operativo directamente, no pasa por `onSubmitEditing` ni
+  por ningún código de este proyecto, así que nada de lo agregado en
+  #127 podía evitarlo. Se sacó `returnKeyType` del
+  [`TextInput`](src/presentation/note/components/NoteComposer.tsx)
+  de `NoteComposer` (vuelve al tipo por default, una tecla de salto
+  de línea común, sin semántica de "acción" que dispare ese cierre).
+  Como respaldo —por si el toque al botón de enviar también llega a
+  soltar el foco— se agregó `handleSend()`: manda el mensaje y
+  enseguida vuelve a pedirle el foco al campo a mano
+  (`inputRef.current.focus()`), así el teclado queda abierto siempre,
+  tanto si se manda por botón como por `Enter`. `NoteComposer` ahora
+  guarda su propio `inputRef` interno y lo expone hacia afuera con
+  `useImperativeHandle` (sigue funcionando igual para `NoteCard`, que
+  lo usa para enfocar el campo cuando se abre el panel — ver #124).
+- **Tracker/mood**: sin cambios — el botón de tilde ya llamaba
+  `onClose` directo (cierra panel y teclado juntos), que es
+  exactamente lo que el usuario pidió reconfirmar.
+
+**Alternativas descartadas.**
+
+- **Un `returnKeyType` distinto que tampoco cierre** (p. ej. `"none"`
+  explícito). Se descartó: sacar la prop del todo es más simple y
+  llega al mismo resultado (el tipo por default para un campo
+  `multiline` ya es una tecla de salto de línea sin acción).
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real.
+(Nota: el usuario pidió revertir el `Enter` manda mensajes por
+completo — ver #129, que también separa la altura del panel por
+caso de uso en vez de compartir un solo número.)
+
+## 129. Alturas de panel por separado y reversión completa de "Enter manda" en anotaciones *(elección del usuario)*
+
+**Contexto.** El usuario pidió cuatro cosas, ya con el panel
+funcionando bien en lo básico:
+1. Subir el panel de anotaciones un 5% más (de `50%` a `55%`).
+2. Bajar el panel de tracker/mood un 10% (de `50%` a `40%`).
+3. Que `Enter` en anotaciones **no** mande el mensaje — solo que
+   agregue un salto de línea, dejando que mandar sea cosa solo del
+   botón.
+4. Reconfirmó el contraste ya logrado en #127/#128: el botón de
+   enviar de anotaciones manda al primer toque sin cerrar nada; el de
+   confirmar en tracker/mood cierra todo (cuadro y teclado) y aplica
+   el texto escrito.
+
+**Decisión.**
+
+- **Alturas separadas**: hasta ahora
+  [`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)
+  tenía un `minHeight: '50%'` fijo, compartido por los tres usos. Se
+  agregó un prop `heightPercent` (default `50`, sin cambiar nada para
+  quien no lo pase) — `NoteCard` pasa `55`, `FloatingTextFieldEditor`
+  (tracker y mood, mismo componente para los dos) pasa `40`.
+- **`Enter` ya no manda**: se sacó por completo la detección a mano
+  del salto de línea en `onChangeText` que agregó #127/#128 —
+  [`NoteComposer`](src/presentation/note/components/NoteComposer.tsx)
+  vuelve a un `onChangeText` directo, sin lógica extra. `Enter` queda
+  como en cualquier campo `multiline` común: agrega un salto de línea
+  y nada más. Mandar sigue siendo solo del botón (`onPressIn`
+  + reenfoque después de mandar, de #127/#128, sin cambios).
+- **Tracker/mood (punto 4)**: no necesitó cambios —
+  [`FloatingTextFieldEditor`](src/presentation/components/FloatingTextFieldEditor.tsx)
+  ya hacía exactamente eso: `onChangeText` escribe en tiempo real
+  sobre el estado del viewmodel (así que lo escrito ya está aplicado
+  cuando se toca el tilde) y el tilde usa `onPressIn={onClose}`, que
+  cierra panel y teclado juntos en el primer toque.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real.
+(Nota: el doble toque seguía pasando en las pantallas con varias
+cards — causa real y arreglo en #130: no era un problema de
+`onPress` vs. `onPressIn`, sino de `Modal` tragándose el primer
+toque a nivel nativo.)
+
+## 130. El doble toque en las pantallas de varias cards era un bug conocido de Android+Modal, no de `onPressIn` *(elección del usuario)*
+
+**Contexto.** El usuario reportó que enviar/confirmar seguía
+cerrando el teclado sin mandar/guardar nada hasta un segundo toque
+—pero **solo** en las pantallas con varias cards juntas (pestaña
+Anotaciones, pestaña Trackers, Favoritos), no en el chat completo de
+una anotación en particular. El primer intento de arreglarlo
+(`onPressIn` en vez de `onPress`, #127) no alcanzaba acá.
+
+**Decisión.** La diferencia real entre "funciona" y "no funciona" no
+era la cantidad de cards sino **si el botón vive adentro de un
+`Modal`**: el chat completo no usa `Modal` (su campo está anclado al
+fondo de la pantalla, #120); el panel flotante de las cards sí. Una
+búsqueda confirmó que esto es un bug conocido y documentado de React
+Native en Android (`facebook/react-native#28871` y varios reportes
+relacionados): dentro de un `Modal`, el primer toque sobre cualquier
+vista que no sea el campo enfocado **lo consume el sistema operativo
+para cerrar el teclado**, antes de que llegue a cualquier manejador
+de React Native — ni `onPress` ni `onPressIn` pueden evitarlo, porque
+el evento nunca llega a ese nivel en absoluto. Recién el segundo
+toque, con el teclado ya cerrado, le llega normal al botón.
+
+La solución documentada es `keyboardShouldPersistTaps` — un prop que
+solo existe en `ScrollView` (y variantes) — seteado en `"always"`.
+Se reemplazó el `Pressable` que envolvía el contenido de
+[`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)
+por un `ScrollView` con `keyboardShouldPersistTaps="always"`, aunque
+su contenido no siempre necesite scrollear — es el único lugar donde
+existe ese comportamiento. Como la vista previa del chat dentro del
+panel de anotaciones (`PersistentScrollView`, en
+[`NoteCard`](src/presentation/note/components/NoteCard.tsx)) queda
+ahora anidada adentro de este nuevo `ScrollView`, se le sumó
+`nestedScrollEnabled` (mismo criterio que en cualquier otro lugar de
+la app con scrolls anidados).
+
+**Alternativas descartadas.**
+
+- **Seguir ajustando el manejo de toques del botón** (otro cambio en
+  `onPress`/`onPressIn`, o un `setTimeout`). Se descartó en cuanto se
+  confirmó (con una fuente externa, no una suposición propia) que el
+  toque ni siquiera llega a React Native la primera vez — no hay
+  manejador de botón posible que lo arregle, porque el problema está
+  un nivel más abajo.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real — pero
+por primera vez en toda esta serie de intentos el diagnóstico tiene
+una fuente externa (un issue conocido de React Native) en vez de ser
+una hipótesis propia sin confirmar.
+(Nota: `keyboardShouldPersistTaps` tampoco alcanzó — el usuario pidió
+directamente sacar el `Modal` de la ecuación. Ver #131, que reemplaza
+toda esta línea de arreglos por un panel que ya no vive en un
+`Modal`.)
+
+## 131. Reemplazo de raíz: el panel deja de ser un `Modal`, pasa a ser un único panel por pantalla *(elección del usuario)*
+
+**Contexto.** `keyboardShouldPersistTaps="always"` (#130) tampoco
+arregló el doble toque. El usuario, en vez de pedir un sexto intento
+sobre el mismo síntoma, pidió cambiar la pieza de fondo: que tocar un
+campo abra "un modal y el teclado" —en anotaciones con un fragmento
+del chat + el campo, en trackers solo el campo—, que enviar en
+anotaciones mande sin cerrar nada, y que confirmar en trackers
+cierre todo y aplique el texto escrito. Repreguntando, confirmó que
+el síntoma (se cierra el teclado sin hacer nada hasta un segundo
+toque) pasa **siempre** en estas pantallas (no solo con 2+ cards) y
+**no** pasa en el chat completo de una anotación en particular — la
+diferencia real no era la cantidad de cards sino que el chat completo
+nunca usó `Modal` para su campo (#120).
+
+**Decisión.** Se sacó `Modal` de la ecuación por completo para este
+panel. En Android, dentro de un `Modal`, el primer toque sobre
+cualquier cosa que no sea el campo enfocado lo consume el sistema
+para cerrar el teclado antes de que llegue a React Native — es un
+comportamiento de la ventana nativa del diálogo, no algo que
+`keyboardShouldPersistTaps`, `onPress` ni `onPressIn` puedan evitar
+(confirmado en #130 con `facebook/react-native#28871`, y confirmado
+en la práctica en #130 cuando el prop tampoco alcanzó). Sin `Modal`
+de por medio, ese comportamiento no existe.
+
+- **[`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)**
+  deja de envolver un `Modal`: ahora es un `View` absoluto normal
+  (`position: 'absolute'`, cubre toda la pantalla), renderizado **una
+  sola vez por pantalla** (no una por card) como hermano del
+  `ScrollView` de esa pantalla, nunca adentro — adentro de un
+  `ScrollView` un `View` absoluto queda recortado por sus límites, así
+  que tiene que vivir afuera para cubrir la pantalla entera. Al dejar
+  de vivir en un `Modal` (que no tiene edge-to-edge, la ventaja que
+  se aprovechaba desde #123), hace falta resolver el teclado a mano en
+  Android — reusa, sin modificarla, la misma técnica ya confirmada
+  funcionando en el chat completo de una anotación
+  (`useAndroidKeyboardHeight`, extraída de `NoteDetailScreen` a
+  [`useAndroidKeyboardHeight.ts`](src/presentation/components/useAndroidKeyboardHeight.ts)
+  para reusarla acá). También se sacó el margen `ANDROID_FOCUS_DELAY`
+  de #125: ese margen era para esperar a que una *ventana nativa
+  nueva* (la del `Modal`) recibiera el foco del sistema — sin ventana
+  nueva, ese problema tampoco existe.
+- **Un panel por pantalla, no uno por card**: como un `View` absoluto
+  queda recortado por el `ScrollView` que lo contiene si se renderiza
+  adentro de una card, el estado de "qué se está mostrando en el
+  panel" se subió a la pantalla
+  ([`useFloatingOverlay`](src/presentation/components/useFloatingOverlay.ts)):
+  guarda qué card está activa (`activeKey`) y qué contenido mostrar.
+  Cada card (`NoteCard`, `TrackerCard`/`FloatingTextFieldEditor`,
+  `MoodEditor`/`FloatingTextFieldEditor`) sigue dueña de su propio
+  estado (texto escrito, mensajes, a quién responde) exactamente como
+  antes — lo único que cambia es que, en vez de pasárselo a su propio
+  `Modal`, lo empuja al panel de la pantalla (`overlay.open`/
+  `overlay.update`) mientras es la card activa. `NotesScreen`,
+  `TrackersScreen` y `FavoritesScreen` ahora crean un `useFloatingOverlay()`
+  y lo pasan a cada card que lo necesita, y renderizan un único
+  `KeyboardFloatingPanel` al final, fuera del `ScrollView`.
+- **`FloatingTextFieldEditor`** pasa de ser "el contenido de un panel
+  ajeno" a ser el componente completo (placeholder + lógica de
+  empujar/actualizar el panel compartido) — lo que antes vivía
+  repartido entre `TrackerCard`/`MoodEditor` (el placeholder) y este
+  componente (el campo) ahora vive todo acá.
+- **`MoodEditor`** ahora recibe `overlay`/`overlayKey` como props
+  **opcionales**: `MoodTrackerCard` (vive en un `ScrollView` largo) los
+  pasa y usa `FloatingTextFieldEditor`; `MoodDayModal` (ya es su
+  propio modal bien comportado, con `keyboardShouldPersistTaps="handled"`
+  de antes — nunca tuvo este problema) no los pasa y sigue con un
+  campo de texto común, como antes de #123. Meterle el panel flotante
+  también ahí habría sido un `Modal` adentro de otro `Modal`, sin
+  necesidad real.
+
+**Alternativas descartadas.**
+
+- **Seguir iterando sobre el `Modal`** (otro prop, otra librería de
+  modal). Se descartó: el comportamiento de "comerse el primer toque"
+  es del sistema operativo sobre la ventana del diálogo, no de React
+  Native — no hay prop de `Modal` que lo evite.
+- **Una librería de portales** (`@gorhom/portal` o similar) para que
+  cada card siga "dueña" de su propio panel sin necesitar que la
+  pantalla lo centralice. Se descartó: agrega una dependencia nueva
+  para resolver algo que ya se puede resolver subiendo un poco de
+  estado (`useFloatingOverlay`), sin dependencias nuevas.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real — pero
+esta vez el diseño directamente evita la causa de raíz confirmada en
+#130, en vez de trabajar alrededor de ella.
+(Nota: el usuario confirmó que #131 arregló el toque — ver #132 para
+los ajustes finos que quedaban: el campo lejos del teclado, el teclado
+sin abrir a la primera en tracker/mood, y un tirador para cerrar.)
+
+## 132. Ajustes finos sobre el panel flotante: contenido pegado abajo, tirador para cerrar, y foco más robusto *(elección del usuario)*
+
+**Contexto.** El usuario confirmó que #131 arregló lo de tocar los
+botones. Con capturas, pidió tres cosas más:
+1. El campo de escribir quedaba muy arriba, con un hueco en blanco
+   grande entre el campo y el teclado (capturas de anotaciones y de
+   la descripción del mood tracker, las dos en Favoritos) — lo quiere
+   **inmediatamente** arriba del teclado.
+2. Arriba del chat, algo para deslizar hacia abajo y cerrar el panel.
+3. En trackers (y por extensión mood, mismo componente), el teclado
+   seguía sin abrirse al primer toque.
+4. Bajar un 20% el alto del panel en general.
+
+**Decisión.**
+
+- **Contenido pegado abajo**: la causa del hueco era que el
+  contenido (chat+campo, o solo el campo) quedaba arriba del todo
+  dentro del panel (alto por `heightPercent`, de sobra a propósito
+  desde #126), dejando el resto como hueco **abajo**. Se le agregó
+  `flexGrow: 1, justifyContent: 'flex-end'` al `contentContainerStyle`
+  del `ScrollView` de
+  [`KeyboardFloatingPanel`](src/presentation/components/KeyboardFloatingPanel.tsx)
+  — ahora el contenido queda pegado abajo, y el margen de sobra (el
+  colchón contra teclados con filas propias, #126) queda **arriba**
+  del contenido en vez de abajo, donde no se nota.
+- **Tirador para cerrar**: arriba del contenido (afuera del
+  `ScrollView`, para no competir con su propio scroll) hay una barra
+  chica (mismo aspecto que el tirador de `ListEntryModal`/
+  `CreateNoteModal`) con un gesto de arrastre hacia abajo
+  (`usePanGesture`, mismos umbrales que el resto de los swipes de la
+  app, sin `Animated` — mismo motivo de siempre, #110/#111): pasado
+  un umbral, cierra el panel; si no, vuelve a su lugar.
+- **Foco más robusto**: se armó un hook chico,
+  [`useFocusOnOpen`](src/presentation/components/useFocusOnOpen.ts),
+  usado por `NoteCard` y `FloatingTextFieldEditor` (antes cada uno
+  tenía su propia copia de la misma lógica). En vez de un solo
+  `requestAnimationFrame`, encadena dos: el panel recién se montó en
+  este mismo render, así que un frame puede no alcanzar para que el
+  layout esté asentado antes de pedir el foco — un segundo frame da
+  ese margen sin inventar un número de milisegundos a ciegas. No se
+  pudo confirmar la causa exacta de por qué fallaba más seguido en
+  tracker/mood que en anotaciones, pero la lógica era idéntica en los
+  dos lugares, así que el refuerzo se aplicó por igual.
+- **Alturas**: `PANEL_HEIGHT_PERCENT` en `NoteCard` baja de `55` a
+  `35`; el default de `FloatingTextFieldEditor` baja de `40` a `20`.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin confirmarse en un dispositivo real si el
+foco más robusto alcanza para que el teclado abra siempre a la
+primera en tracker/mood — si no, el próximo paso sería investigar con
+más detalle por qué ese caso puntual pierde el foco (o, si se vuelve
+recurrente, `react-native-keyboard-controller`).
+(Nota: el usuario confirmó que #132 ya anda bien — #133 es solo un
+ajuste fino de posición, sin tocar el alto del panel.)
+
+## 133. Separar el contenido del borde de abajo del panel, sin agrandarlo *(elección del usuario)*
+
+**Contexto.** El usuario confirmó que #132 ya funciona bien. Pidió un
+ajuste chico: que el cuadro de texto y el chat salgan un 5% más
+arriba, pero sin que el panel en sí se agrande.
+
+**Decisión.** El contenido queda pegado abajo del todo del panel
+(`justifyContent: 'flex-end'`, desde #132) — para separarlo del borde
+de abajo sin tocar el alto del panel, se le sumó un `paddingBottom`
+extra al final del contenido, dentro del mismo `ScrollView`: un 5%
+del alto de pantalla (`Dimensions.get('window').height * 0.05`,
+constante — la app está fija en portrait, no hace falta escuchar
+cambios de `Dimensions`). Al ser `padding` *dentro* del área que ya
+mide `heightPercent`, el panel no crece: lo que crece es el margen
+entre el contenido y el borde de abajo, a costa del margen que había
+arriba del contenido (que se achica en la misma medida).
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para
@@ -5177,3 +6280,41 @@ entre el resto de los archivos de Documentos.
   número finito.
 - **El backup es manual:** hay que acordarse de exportarlo; no hay backup
   automático ni a la nube (ver #30).
+- **Las anotaciones (#117) no tienen orden manual propio** (como sí
+  listas/trackers desde #95/#113): en Anotaciones y en Favoritos quedan en
+  orden de creación.
+- **El gesto de deslizar para responder un mensaje (#117/#118/#119) no se
+  probó en un dispositivo real:** ahora el área táctil es toda la fila (ver
+  #119), así que conviene revisar de nuevo si convive bien con mantener
+  presionado (seleccionar), con el scroll vertical del chat, o (desde #118,
+  que lo habilitó también en la card) con el gesto horizontal del carrusel
+  de Favoritos.
+- **El arreglo del teclado para campos adentro de una card con scroll
+  (`KeyboardFloatingPanel`, #123-#127 — anotaciones en la pestaña/
+  Favoritos, comentario de tracker, descripción de mood) sigue sin probarse
+  en un dispositivo real:** #123 reemplazó cuatro intentos fallidos de
+  desplazar el scroll hasta el campo (#118/#121/#122) por un panel flotante
+  en un `Modal`; #124 cambió `autoFocus` por `ref` + `Modal.onShow`; #125 le
+  sumó a `onShow` un margen chico (`ANDROID_FOCUS_DELAY = 50`ms); #126
+  agrandó el panel para tolerar que el teclado de algunos teléfonos (con
+  filas propias de sugerencias/GIFs) sea más alto que lo que reporta el
+  sistema; #127 cambió los botones de enviar/confirmar a `onPressIn`; #128
+  sacó `returnKeyType="send"` de `NoteComposer`; #129 separó la altura por
+  caso de uso y sacó "Enter manda" en anotaciones; #130 identificó la causa
+  real del doble toque (`Modal` en Android se come el primer toque fuera
+  del campo enfocado — bug conocido, `facebook/react-native#28871`) pero
+  `keyboardShouldPersistTaps="always"` no alcanzó para arreglarlo; #131
+  sacó `Modal` de la ecuación por completo — el panel ahora es un único
+  `View` absoluto por pantalla (`useFloatingOverlay`, fuera del
+  `ScrollView`), con el teclado resuelto a mano en Android
+  (`useAndroidKeyboardHeight`, la misma técnica de #120) — **confirmado por
+  el usuario que el toque ya funciona**; #132 pegó el contenido abajo del
+  panel, sumó un tirador para cerrar deslizando, bajó las alturas un 20% y
+  reforzó el foco al abrir (`useFocusOnOpen`, doble `requestAnimationFrame`)
+  sin confirmar todavía si eso alcanza para que el teclado de tracker/mood
+  abra siempre a la primera. Si sigue sin abrir, el próximo paso es
+  investigar más a fondo ese caso puntual o, si se repite en más lugares,
+  `react-native-keyboard-controller` (dependencia nueva, requiere
+  `react-native-reanimated`). El chat completo (#120, campo anclado al
+  fondo de la pantalla, no adentro de una card) sigue aparte y el usuario
+  ya confirmó que funciona.

@@ -5,7 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../../../core/navigation/types';
 import { theme } from '../../../core/theme';
+import { KeyboardFloatingPanel } from '../../components/KeyboardFloatingPanel';
 import { ReorderRow } from '../../components/ReorderRow';
+import { useFloatingOverlay } from '../../components/useFloatingOverlay';
 import { MoodTrackerCard } from '../../mood/components/MoodTrackerCard';
 import { CreateTrackerButton } from '../../tracker/components/CreateTrackerButton';
 import { TrackerCard } from '../../tracker/components/TrackerCard';
@@ -15,6 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Trackers'>;
 
 export function TrackersScreen({ navigation, route }: Props) {
   const vm = useTrackersViewModel();
+  const overlay = useFloatingOverlay();
 
   useEffect(() => {
     if (route.params?.create) {
@@ -37,7 +40,7 @@ export function TrackersScreen({ navigation, route }: Props) {
         <Text style={styles.subtitle}>Tus trackers de hoy</Text>
 
         {!vm.reorderMode ? (
-          <MoodTrackerCard onSeeProgress={() => navigation.navigate('MoodProgress')} />
+          <MoodTrackerCard onSeeProgress={() => navigation.navigate('MoodProgress')} overlay={overlay} />
         ) : null}
 
         {vm.reorderMode
@@ -57,6 +60,7 @@ export function TrackersScreen({ navigation, route }: Props) {
                 key={tracker.id}
                 trackerId={tracker.id}
                 onSeeProgress={() => navigation.navigate('TrackerProgress', { trackerId: tracker.id })}
+                overlay={overlay}
               />
             ))}
 
@@ -64,6 +68,10 @@ export function TrackersScreen({ navigation, route }: Props) {
           <CreateTrackerButton onPress={() => navigation.navigate('CreateTracker')} />
         ) : null}
       </ScrollView>
+
+      <KeyboardFloatingPanel visible={overlay.visible} onClose={overlay.close} heightPercent={overlay.heightPercent}>
+        {overlay.content}
+      </KeyboardFloatingPanel>
     </SafeAreaView>
   );
 }
