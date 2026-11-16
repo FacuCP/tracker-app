@@ -11,7 +11,7 @@ import { UserNameCard } from '../../user/components/UserNameCard';
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export function SettingsScreen({ navigation }: Props) {
-  const { status, exportData, importData } = useBackup();
+  const { status, exportData, downloadData, importData } = useBackup();
   const working = status.kind === 'working';
 
   function confirmImport() {
@@ -55,7 +55,19 @@ export function SettingsScreen({ navigation }: Props) {
             {status.kind === 'working' && status.action === 'export' ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryText}>Exportar datos (guardar backup)</Text>
+              <Text style={styles.primaryText}>Exportar backup</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.secondary, working && styles.buttonDisabled]}
+            onPress={downloadData}
+            disabled={working}
+          >
+            {status.kind === 'working' && status.action === 'download' ? (
+              <ActivityIndicator color="#1e3a8a" />
+            ) : (
+              <Text style={styles.secondaryText}>Descargar backup</Text>
             )}
           </TouchableOpacity>
 
@@ -67,7 +79,7 @@ export function SettingsScreen({ navigation }: Props) {
             {status.kind === 'working' && status.action === 'import' ? (
               <ActivityIndicator color="#1e3a8a" />
             ) : (
-              <Text style={styles.secondaryText}>Importar datos (restaurar backup)</Text>
+              <Text style={styles.secondaryText}>Importar backup</Text>
             )}
           </TouchableOpacity>
 
@@ -76,8 +88,12 @@ export function SettingsScreen({ navigation }: Props) {
         </View>
 
         <Text style={styles.hint}>
-          El backup es un archivo <Text style={styles.mono}>.json</Text>. Podés
-          mandártelo por mail o WhatsApp, o guardarlo en Google Drive.
+          El backup es un archivo <Text style={styles.mono}>.json</Text>.
+          "Exportar" abre el menú para compartir (mail, WhatsApp, Drive);
+          "Descargar" lo guarda directo en{' '}
+          <Text style={styles.mono}>Documentos/TrackerAppBackups</Text>, sin
+          pasar por ahí — la primera vez pide confirmar la carpeta Documentos
+          (ya abre ahí, solo hay que aceptar), después no vuelve a preguntar.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -27,3 +27,12 @@ export const STORAGE_KEYS = {
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
 
 export const ALL_STORAGE_KEYS: StorageKey[] = Object.values(STORAGE_KEYS);
+
+/**
+ * Carpeta elegida para "Descargar backup" (URI de permiso de SAF en
+ * Android). A propósito NO forma parte de `STORAGE_KEYS`/`ALL_STORAGE_KEYS`:
+ * es un detalle de este dispositivo/instalación, no datos del usuario —
+ * incluirla haría que un backup exportado acá "pisara" la carpeta elegida en
+ * otro teléfono (o en una reinstalación) con una URI que ahí no existe.
+ */
+export const BACKUP_FOLDER_URI_KEY = '@app-celu/backup-folder-uri/v1';

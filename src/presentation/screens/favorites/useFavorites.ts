@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { container } from '../../../core/di/container';
+import { applyIdOrder } from '../../../core/utils/order';
 import { DailyRoutineTaskStatus } from '../../../domain/dailyRoutine/usecases/GetDailyRoutineSession';
 import { ROUTINE_TRACKER_ID } from '../../../domain/dailyRoutine/usecases/SyncRoutineTracker';
 import { List } from '../../../domain/list/entities/List';
@@ -54,7 +55,17 @@ export function useFavorites() {
   const [reloadTick, setReloadTick] = useState(0);
 
   const reload = useCallback(async () => {
-    const [message, profile, allTrackers, allLists, bal, savedOrder, dailyRoutineSession] = await Promise.all([
+    const [
+      message,
+      profile,
+      allTrackersRaw,
+      allListsRaw,
+      bal,
+      savedOrder,
+      dailyRoutineSession,
+      trackersOrder,
+      listsOrder,
+    ] = await Promise.all([
       container.getWelcomeMessage.execute(),
       container.getUserProfile.execute(),
       container.getTrackers.execute(),
@@ -62,7 +73,16 @@ export function useFavorites() {
       container.getCurrentBalance.execute(),
       container.getFavoritesOrder.execute(),
       container.getDailyRoutineSession.execute(),
+      container.getTrackersOrder.execute(),
+      container.getListsOrder.execute(),
     ]);
+
+    // Mismo orden manual que cada uno usa en su propia pestaña (Trackers/
+    // Listas, ver #95) — antes acá quedaban en el orden que devuelve el
+    // repositorio (de creación), sin importar cómo los reordenó el usuario
+    // en su pestaña.
+    const allTrackers = applyIdOrder(allTrackersRaw, trackersOrder);
+    const allLists = applyIdOrder(allListsRaw, listsOrder);
 
     // "Seguimiento de Rutina" es de uso interno (solo lo lee el calendario de
     // Rutina diaria) — no aparece acá como tracker más, lo reemplaza la card

@@ -4971,6 +4971,194 @@ mirarlo con más detalle en el dispositivo.
 
 ---
 
+## 113. Favoritos respeta el orden manual de Trackers/Listas; nuevo botón para ciclar el orden de las entradas de una lista en Favoritos *(elección del usuario)*
+
+**Contexto.** Dos pedidos:
+
+1. En Favoritos, los trackers y las listas salían en el orden de
+   creación (el que devuelve el repositorio), sin importar el orden
+   manual que el usuario ya armó en su propia pestaña (Trackers/Listas,
+   con las flechas ▲▼ de #95) — si el tracker B se movió primero en su
+   pestaña, en Favoritos seguía saliendo después del A.
+2. Un botón nuevo en la card de una lista **en Favoritos**, a la
+   izquierda del triángulo ▾/▸, que cicle cómo se ordenan sus entradas
+   (fecha / alfabético / prioridad), cambiando de ícono según cuál esté
+   activo (calendario / A-Z / bandera).
+
+**Decisión.**
+
+- **Orden de Favoritos = orden de la pestaña.** `useFavorites.reload()`
+  suma `container.getTrackersOrder.execute()` y
+  `container.getListsOrder.execute()` a la carga en paralelo, y les
+  aplica `applyIdOrder` (de `core/utils/order.ts`, la misma función que
+  ya usan `useTrackersViewModel`/`useLists`) a `allTrackers`/`allLists`
+  **antes** de filtrar por favorito — como `.filter()` preserva el
+  orden relativo, los favoritos quedan en el mismo orden que tienen en
+  su pestaña, sin tocar el orden *entre categorías* (rutina/finanzas/
+  mood/gimnasio/trackers/listas), que sigue siendo el de
+  `favoritesOrder` (el reordenamiento de Favoritos en sí, con sus
+  propias flechas).
+- **Nuevo [`ListSortButton`](src/presentation/list/components/ListSortButton.tsx)**:
+  botón de un solo ícono (sin texto, para entrar en el header
+  compacto) que cicla `date → alpha → rating → date…` y muestra el
+  ícono correspondiente (`Calendar`/`ArrowDownAZ`/`Flag` de
+  `lucide-react-native`). `ListCard` suma estado `sort` (local,
+  `ListSort`, por defecto prioridad en to-do / fecha en normales —
+  mismo criterio que `useListDetail`) y lo pasa como segundo argumento
+  a `container.getListEntries.execute(list.id, sort)` (el *usecase* ya
+  soportaba un `sort` opcional, usado hasta ahora solo por el detalle
+  completo de la lista). El botón se muestra únicamente cuando
+  `compact` (Favoritos) — el detalle completo de una lista sigue con su
+  propio selector segmentado (`ListSortSelector`, con texto, en vez de
+  íconos) sin cambios.
+
+**Alternativas descartadas.**
+
+- **Guardar el criterio elegido** (por lista, persistido) en vez de
+  que arranque siempre en el valor por defecto. Se descartó: el pedido
+  no lo menciona, y es consistente con cómo ya se comporta el
+  selector completo del detalle de la lista (`sortOverride` arranca en
+  `null`/por defecto cada vez que se entra, en `useListDetail`).
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 114. Backup: opción de "Descargar" directo a una carpeta, sin pasar por compartir *(elección del usuario)*
+
+**Contexto.** "Exportar datos" solo ofrecía `Sharing.shareAsync` —
+abre el selector de apps de Android (mail, WhatsApp, Drive, etc.).
+Se pidió una opción para **descargar el backup directo** a una carpeta
+del teléfono, sin tener que elegir una app para mandarlo a ningún
+lado.
+
+**Decisión.** Nueva función `downloadData` en `useBackup.ts`, y un
+botón **"Descargar backup (elegir carpeta)"** en `SettingsScreen`, al
+lado del de "Exportar". Usa la API nueva de `expo-file-system` (la
+que viene del import `'expo-file-system'` normal, no `/legacy` — la
+app ya usaba la vieja ahí para `cacheDirectory`/`writeAsStringAsync`,
+que sigue igual para "Exportar"): `Directory.pickDirectoryAsync()`
+abre el picker nativo de carpetas (Storage Access Framework en
+Android — el usuario puede navegar a "Descargas" o cualquier otra), y
+`directory.createFile(nombre, 'application/json')` +
+`file.write(json)` escribe el backup ahí directo. Si el usuario
+cierra el picker sin elegir carpeta, la librería tira una excepción
+("the file picker was cancelled..."); se detecta por texto
+(`isPickerCancelled`, busca "cancel" en el mensaje) y se trata como
+`idle`, no como error. (Nota: en #115 se agregó recordar la carpeta
+elegida y abrir el picker ya posicionado en Descargas, para que en la
+práctica no haga falta elegir nada después de la primera vez.)
+
+**Alternativas descartadas.**
+
+- **Guardar directo en una carpeta fija** (p. ej. el directorio
+  público de Descargas) sin picker. Se descartó: en Android moderno
+  escribir en almacenamiento público fuera del sandbox de la app
+  necesita permisos de almacenamiento o el picker de SAF — no hay una
+  ruta "directorio de descargas" writeable sin pedirle algo al
+  usuario de todos modos, así que el picker (que además lo deja elegir
+  cualquier carpeta, no solo Descargas) no agrega fricción extra real.
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 115. "Descargar backup" va directo a Descargas, sin elegir carpeta cada vez *(elección del usuario)*
+
+**Contexto.** #114 abría el picker de carpetas **cada vez** que se
+tocaba "Descargar". Se pidió que vaya directo a **Descargas**, sin
+elegir carpeta.
+
+**Decisión.** Android no deja escribir en una carpeta pública sin
+algún permiso de por medio — no existe una ruta 100% silenciosa sin
+que el usuario intervenga ni una sola vez (ver "Alternativas
+descartadas" de #114) —, así que la solución es acercarse lo más
+posible a eso con dos cambios:
+
+- **El picker abre directo en Descargas.**
+  `Directory.pickDirectoryAsync(initialUri)` acepta una URI inicial;
+  se le pasa la URI "bien conocida" de la carpeta pública de Descargas
+  en Android
+  (`content://com.android.externalstorage.documents/document/primary%3ADownload`),
+  así que el picker nativo ya abre ahí — alcanza con tocar "Usar esta
+  carpeta", sin tener que navegar. (Nota: en #116 pasó a ser Documentos
+  en vez de Descargas, con una subcarpeta propia.)
+- **Se recuerda la elección.** Nuevo
+  [`BackupFolderRepository`](src/domain/backup/repositories/BackupFolderRepository.ts)
+  (con su impl en AsyncStorage y los usecases
+  `GetBackupFolderUri`/`SaveBackupFolderUri`, mismo patrón que
+  `ListsOrderRepository` de #95): guarda la URI que devolvió el picker.
+  La próxima vez que se toca "Descargar", `getDownloadFolder()`
+  reconstruye un `Directory` con esa URI guardada y, si `.exists` da
+  `true` (sigue existiendo y el permiso de SAF —persistente, Android lo
+  retiene entre reinicios— sigue vigente), escribe ahí directo **sin
+  mostrar el picker**. Si la carpeta ya no existe o el permiso se
+  revocó, cae de nuevo al picker (ya posicionado en Descargas). Esta
+  URI es a propósito **independiente del backup en sí**: vive en su
+  propia clave de AsyncStorage (`BACKUP_FOLDER_URI_KEY`), fuera de
+  `STORAGE_KEYS`/`ALL_STORAGE_KEYS` — es un detalle de este
+  dispositivo/instalación (una URI de SAF no tiene sentido en otro
+  teléfono o tras reinstalar), así que no viaja dentro de un backup
+  exportado ni se pisa al importar uno.
+
+**Alternativas descartadas.**
+
+- **Guardar la URI como parte de `userProfile` u otra clave ya
+  incluida en el backup.** Se descartó exactamente por lo anterior:
+  mezclarla con datos que sí viajan en el backup la expondría a
+  pisarse con una URI inválida de otro dispositivo al importar.
+
+**Consecuencias.** La primera vez que se usa "Descargar" en una
+instalación (o si el permiso se revoca más adelante desde Ajustes de
+Android) todavía hace falta confirmar el picker una vez — no hay forma
+de evitarlo del todo en Android sin permisos de almacenamiento más
+amplios, que no se pidieron. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
+## 116. "Descargar backup" va a Documentos/TrackerAppBackups en vez de Descargas *(elección del usuario)*
+
+**Contexto.** Se pidió cambiar el destino de #115 de Descargas a
+**Documentos**, y que ahí se cree (o reuse) una subcarpeta propia
+llamada **"TrackerAppBackups"** en vez de dejar los backups sueltos
+entre el resto de los archivos de Documentos.
+
+**Decisión.**
+
+- **`ANDROID_DOCUMENTS_URI`** reemplaza a la URI de Descargas que
+  usaba `pickDirectoryAsync` como `initialUri` — mismo mecanismo de
+  #115, el picker ahora abre directo en Documentos.
+- **Nueva `ensureBackupSubfolder(parent)`**: lista el contenido de la
+  carpeta elegida (`parent.list()`, sincrónico) buscando una `Directory`
+  ya llamada `TrackerAppBackups`; si no está, la crea
+  (`parent.createDirectory('TrackerAppBackups')`). Hace falta este
+  paso en vez de crearla a ciegas cada vez porque `createDirectory`
+  sobre Storage Access Framework no es idempotente — si ya existe una
+  con ese nombre, el proveedor de documentos crea otra con el nombre
+  repetido (p. ej. "TrackerAppBackups (1)") en vez de reusarla o
+  fallar, así que sin este chequeo cada descarga iría generando una
+  subcarpeta nueva.
+- `getDownloadFolder()` guarda (`saveBackupFolderUri`) la URI de la
+  **subcarpeta** en sí (no la de Documentos) — así, la próxima vez,
+  reusarla directo (vía `.exists`) no necesita repetir el paso de
+  buscar/crear la subcarpeta, solo en la primera vez o si hay que
+  volver a pedir permiso.
+
+**Alternativas descartadas.**
+
+- **Guardar la URI de Documentos y recalcular la subcarpeta en cada
+  descarga.** Se descartó: guardar directo la URI de la subcarpeta
+  evita repetir el `list()`/`createDirectory` de más en el caso común
+  (que ya existe y el permiso sigue vigente).
+
+**Consecuencias.** Ninguna. `npx tsc --noEmit` y `npx expo export
+--platform android --output-dir dist-check` corrieron limpios.
+
+---
+
 - **`container` como singleton de módulo:** habrá que poder inyectar un
   repositorio *fake* cuando se agreguen tests.
 - **`getEntriesInRange` lee todo el blob y filtra en memoria:** bien para

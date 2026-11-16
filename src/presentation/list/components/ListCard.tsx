@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { container } from '../../../core/di/container';
 import { theme } from '../../../core/theme';
 import { List } from '../../../domain/list/entities/List';
-import { ListEntry } from '../../../domain/list/entities/ListEntry';
+import { ListEntry, ListSort } from '../../../domain/list/entities/ListEntry';
 import { Checkbox } from '../../components/Checkbox';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { InfoButton } from '../../components/InfoButton';
@@ -12,6 +12,7 @@ import { PersistentScrollView } from '../../components/PersistentScrollView';
 import { PinButton } from '../../components/PinButton';
 import { ListCounts } from '../viewmodels/useLists';
 import { ListEntryInfoModal } from './ListEntryInfoModal';
+import { ListSortButton } from './ListSortButton';
 
 interface Props {
   list: List;
@@ -68,7 +69,11 @@ function subtitle(list: List, counts: ListCounts): string {
  * pin hace que quede desplegada por defecto la próxima vez
  * (`list.pinnedExpanded`); en Favoritos arranca desplegada siempre
  * (`defaultExpanded`), sin pin (no tiene sentido ahí — ya está desplegada
- * por defecto y el triángulo ya deja colapsarla para esa sesión).
+ * por defecto y el triángulo ya deja colapsarla para esa sesión). Solo en
+ * Favoritos (`compact`), a la izquierda del triángulo, un `ListSortButton`
+ * cicla el orden de las entradas mostradas (fecha → A-Z → prioridad/rating),
+ * sin afectar el detalle completo de la lista (que tiene su propio
+ * selector, `ListSortSelector`, y arranca siempre en su orden por defecto).
  */
 export function ListCard({
   list,
@@ -87,6 +92,10 @@ export function ListCard({
   const [entries, setEntries] = useState<ListEntry[] | null>(null);
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<ListEntry | null>(null);
+  // Solo se puede cambiar desde Favoritos (`ListSortButton`, a la izquierda
+  // del triángulo) — mismo criterio por defecto que `useListDetail`:
+  // prioridad en las to-do lists, fecha en las normales.
+  const [sort, setSort] = useState<ListSort>(list.isTodo ? 'rating' : 'date');
   const isExpanded = expanded;
   const maxVisibleEntries = compact ? MAX_VISIBLE_ENTRIES_FAVORITES : MAX_VISIBLE_ENTRIES;
   // `counts.done` cambia apenas se tilda un ítem acá mismo (ver
@@ -117,7 +126,7 @@ export function ListCard({
     }
     let active = true;
     setLoadingEntries(true);
-    container.getListEntries.execute(list.id).then((result) => {
+    container.getListEntries.execute(list.id, sort).then((result) => {
       if (active) {
         setEntries(result);
         setLoadingEntries(false);
@@ -126,7 +135,7 @@ export function ListCard({
     return () => {
       active = false;
     };
-  }, [isExpanded, list.id, counts.total, counts.done, reloadTick]);
+  }, [isExpanded, list.id, counts.total, counts.done, reloadTick, sort]);
 
   async function toggleEntryDone(entry: ListEntry) {
     const next = !entry.done;
@@ -196,6 +205,8 @@ export function ListCard({
             }}
           />
         ) : null}
+
+        {compact ? <ListSortButton sort={sort} onChange={setSort} /> : null}
 
         <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
           <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>

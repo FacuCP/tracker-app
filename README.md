@@ -72,6 +72,12 @@ a la derecha, en cualquiera de las pestañas):
 
 - **Exportar datos**: genera un archivo `.json` con todo y abre el menú de
   compartir (mandátelo a Google Drive / mail / WhatsApp).
+- **Descargar backup**: genera el mismo archivo pero lo guarda directo en
+  **Documentos/TrackerAppBackups** (crea esa subcarpeta la primera vez si no
+  existe), sin pasar por el menú de compartir. La primera vez abre el
+  selector nativo de carpetas de Android (`Directory.pickDirectoryAsync` de
+  `expo-file-system`) ya posicionado en Documentos — alcanza con confirmar
+  la carpeta; después recuerda esa elección y no vuelve a preguntar.
 - **Importar datos**: elegís un `.json` exportado antes y **reemplaza** todos
   los datos actuales. Sirve para restaurar tras reinstalar o para pasar de
   teléfono.
@@ -408,9 +414,14 @@ cards y no hay una colección de "favoritos" aparte.
   con flechas **▲ / ▼** para subirlo o bajarlo. El orden se guarda como
   una lista de claves (`"dailyRoutine"`, `"finance"`, `"mood"`, `"gym"`,
   `"trackers"`, `"lists"`) en `@app-celu/favorites-order/v1`; al cargar,
-  los ítems no guardados van al final. No hay forma de reordenar a mano
-  **dentro** de un carrusel (qué tracker o lista aparece primero) ni de
-  la lista de tareas de "Rutina diaria".
+  los ítems no guardados van al final. No hay una flecha propia para
+  reordenar **dentro** de un carrusel, pero el orden ahí no es arbitrario:
+  `useFavorites` le aplica a los trackers/listas el mismo orden manual que
+  tienen en su propia pestaña (`trackersOrder`/`listsOrder`, de #95) antes
+  de filtrar por favorito, así que un tracker o lista que se movió primero
+  en Trackers/Listas también sale primero en su carrusel de Favoritos.
+  "Rutina diaria" no tiene esto: su lista de tareas no se reordena a mano
+  en ningún lado.
 - **Deslizar hacia la izquierda, fuera de un carrusel, navega a "Rutina
   diaria"** (`useHorizontalSwipe`, mismo hook que usan los calendarios y
   el propio carrusel). Si el gesto arranca sobre una card de trackers o
@@ -531,7 +542,13 @@ esa vista pasa a ser un
 (alto máximo en vez de crecer sin límite) con una barra de scroll siempre
 visible calculada en JS —no la nativa de Android (`persistentScrollbar`),
 que no se veía en los APK de `eas build`— para que quede claro que hay
-más; sin eso, parecía que la lista terminaba justo ahí.
+más; sin eso, parecía que la lista terminaba justo ahí. A la izquierda del
+triángulo, solo en Favoritos, un
+[`ListSortButton`](src/presentation/list/components/ListSortButton.tsx)
+(un ícono nomás, sin texto) cicla el orden de esas entradas — **Fecha /
+A-Z / Prioridad**, igual que el selector completo del detalle de la
+lista, pero mostrando un ícono distinto según cuál esté activo (calendario
+/ A-Z / bandera) en vez del selector segmentado con texto.
 
 ### Pantallas
 

@@ -14,9 +14,12 @@ import { DeleteMoodEntry } from '../../domain/mood/usecases/DeleteMoodEntry';
 import { GetMoodEntry } from '../../domain/mood/usecases/GetMoodEntry';
 import { GetMoodRange } from '../../domain/mood/usecases/GetMoodRange';
 import { SaveMoodEntry } from '../../domain/mood/usecases/SaveMoodEntry';
+import { BackupFolderRepositoryImpl } from '../../data/backup/BackupFolderRepositoryImpl';
 import { BackupRepositoryImpl } from '../../data/backup/BackupRepositoryImpl';
 import { ExportBackup } from '../../domain/backup/usecases/ExportBackup';
+import { GetBackupFolderUri } from '../../domain/backup/usecases/GetBackupFolderUri';
 import { ImportBackup } from '../../domain/backup/usecases/ImportBackup';
+import { SaveBackupFolderUri } from '../../domain/backup/usecases/SaveBackupFolderUri';
 import { CreateTracker } from '../../domain/tracker/usecases/CreateTracker';
 import { DeleteTracker } from '../../domain/tracker/usecases/DeleteTracker';
 import { DeleteTrackerEntry } from '../../domain/tracker/usecases/DeleteTrackerEntry';
@@ -169,6 +172,7 @@ const eventRepository = new EventRepositoryImpl(new AsyncStorageEventLocalDataSo
 
 // --- Backup ---
 const backupRepository = new BackupRepositoryImpl();
+const backupFolderRepository = new BackupFolderRepositoryImpl();
 
 export const container = {
   getUserProfile: new GetUserProfile(userRepository),
@@ -255,6 +259,8 @@ export const container = {
 
   exportBackup: new ExportBackup(backupRepository),
   importBackup: new ImportBackup(backupRepository),
+  getBackupFolderUri: new GetBackupFolderUri(backupFolderRepository),
+  saveBackupFolderUri: new SaveBackupFolderUri(backupFolderRepository),
 };
 
 export type Container = typeof container;
