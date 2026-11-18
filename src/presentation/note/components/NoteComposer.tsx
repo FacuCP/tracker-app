@@ -1,22 +1,30 @@
-import { Send, X } from 'lucide-react-native';
-import { ComponentRef, forwardRef, useImperativeHandle, useRef } from 'react';
+import { Paperclip, Send, X } from 'lucide-react-native';
+import { ComponentRef, forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { theme } from '../../../core/theme';
-import { MAX_NOTE_MESSAGE_LENGTH } from '../../../domain/note/entities/NoteMessage';
-import { NoteMessage } from '../../../domain/note/entities/NoteMessage';
+import {
+  MAX_NOTE_MESSAGE_LENGTH,
+  NoteMessage,
+  NoteMessageMedia,
+  noteMessagePreviewText,
+} from '../../../domain/note/entities/NoteMessage';
+import { AudioRecordButton } from './AudioRecordButton';
 
 interface Props {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
-  sending?: boolean;
   /** Si viene, muestra la cinta "Respondiendo a: …" arriba del campo. */
   replyTarget?: NoteMessage | null;
   onCancelReply?: () => void;
   /** Si viene, muestra la cinta "Editando mensaje" en vez de la de responder (son mutuamente excluyentes). */
   editing?: boolean;
   onCancelEditing?: () => void;
+  /** Si viene, muestra el clip a la izquierda del campo para mandar fotos/documentos. No se muestra mientras se edita un mensaje. */
+  onAttach?: () => void;
+  /** Si viene, el botón de enviar se convierte en micrófono cuando el campo está vacío (mantenerlo graba un audio). Sin esto, vacío simplemente deshabilita enviar. */
+  onSendAudio?: (media: NoteMessageMedia) => void;
 }
 
 /**
@@ -45,18 +53,20 @@ export const NoteComposer = forwardRef<ComponentRef<typeof TextInput>, Props>(fu
     value,
     onChangeText,
     onSend,
-    sending = false,
     replyTarget,
     onCancelReply,
     editing = false,
     onCancelEditing,
+    onAttach,
+    onSendAudio,
   },
   forwardedRef,
 ) {
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   useImperativeHandle(forwardedRef, () => inputRef.current as ComponentRef<typeof TextInput>);
+  const [isRecording, setIsRecording] = useState(false);
 
-  const canSend = value.trim().length > 0 && !sending;
+  const canSend = value.trim().length > 0;
 
   function handleSend() {
     onSend();
@@ -70,7 +80,7 @@ export const NoteComposer = forwardRef<ComponentRef<typeof TextInput>, Props>(fu
           <View style={styles.chipTexts}>
             <Text style={styles.chipTitle}>Respondiendo a</Text>
             <Text style={styles.chipText} numberOfLines={1}>
-              {replyTarget.text}
+              {noteMessagePreviewText(replyTarget)}
             </Text>
           </View>
           <TouchableOpacity onPress={onCancelReply} hitSlop={8}>
@@ -87,23 +97,36 @@ export const NoteComposer = forwardRef<ComponentRef<typeof TextInput>, Props>(fu
       ) : null}
 
       <View style={styles.row}>
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          placeholder="Escribí un mensaje"
-          placeholderTextColor={theme.colors.textMuted}
-          value={value}
-          onChangeText={onChangeText}
-          maxLength={MAX_NOTE_MESSAGE_LENGTH}
-          multiline
-        />
-        <TouchableOpacity
-          style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
-          onPressIn={handleSend}
-          disabled={!canSend}
-        >
-          <Send size={18} color="#fff" />
-        </TouchableOpacity>
+        {!isRecording ? (
+          <>
+            {onAttach && !editing ? (
+              <TouchableOpacity style={styles.attachButton} onPress={onAttach} hitSlop={8}>
+                <Paperclip size={20} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            ) : null}
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              placeholder="Escribí un mensaje"
+              placeholderTextColor={theme.colors.textMuted}
+              value={value}
+              onChangeText={onChangeText}
+              maxLength={MAX_NOTE_MESSAGE_LENGTH}
+              multiline
+            />
+          </>
+        ) : null}
+        {canSend ? (
+          <TouchableOpacity style={styles.sendButton} onPressIn={handleSend}>
+            <Send size={18} color="#fff" />
+          </TouchableOpacity>
+        ) : onSendAudio ? (
+          <AudioRecordButton onRecordingChange={setIsRecording} onSendAudio={onSendAudio} />
+        ) : (
+          <View style={[styles.sendButton, styles.sendButtonDisabled]}>
+            <Send size={18} color="#fff" />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -139,6 +162,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
+  },
+  attachButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,

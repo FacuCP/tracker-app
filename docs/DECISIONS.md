@@ -6260,6 +6260,869 @@ arriba del contenido (que se achica en la misma medida).
 `npx expo export --platform android --output-dir dist-check`
 corrieron limpios.
 
+## 134. Mandar un mensaje de anotación, instantáneo: actualización optimista en vez de guardar-y-releer *(elección del usuario)*
+
+**Contexto.** El usuario notó un delay al mandar mensajes de
+anotaciones y pidió que sea instantáneo al tocar enviar.
+
+**Decisión.** El delay no era de UI (animaciones, renders) sino de
+E/S: cada envío hacía **dos** vueltas completas a `AsyncStorage` en
+serie antes de que el mensaje apareciera.
+[`NoteMessageLocalDataSource.write`](src/data/note/datasources/NoteMessageLocalDataSource.ts)
+ya lee el blob entero antes de escribirlo (lectura-modificación-escritura
+sobre `{ [noteId]: { [messageId]: dto } }`, con TODAS las anotaciones
+adentro, no solo la que se está editando); encima, tanto
+[`NoteCard`](src/presentation/note/components/NoteCard.tsx) como
+[`useNoteDetail`](src/presentation/note/viewmodels/useNoteDetail.ts)
+volvían a pedir **todos** los mensajes (`getNoteMessages`/`reload()`)
+después de guardar, en vez de usar el mensaje que el propio
+`saveNoteMessage.execute(...)` ya devuelve — una tercera (y hasta
+cuarta, en el chat completo, que además releía la anotación) vuelta
+al mismo blob, innecesaria.
+
+Se cambió a actualización optimista, el mismo criterio que ya usa
+`ListCard.toggleEntryDone` en este proyecto: el mensaje se arma en el
+momento (`createNoteMessage` + `generateId`, las mismas funciones que
+usa el usecase por dentro) y se suma a `messages` **antes** de
+guardarlo — sin ningún `await` de por medio, el mensaje aparece en la
+misma pasada de React que el toque del botón. El guardado real
+(`saveNoteMessage.execute`, con el mismo `id` ya usado, así que es el
+mismo registro) sigue atrás, en segundo plano, sin que la UI espere
+nada; si llegara a fallar (en la práctica no pasa — es solo
+almacenamiento local), el próximo `reloadTick`/`reload()` natural de
+esa pantalla lo corrige solo. Edición de un mensaje existente
+(`useNoteDetail`, chat completo) sigue el mismo criterio, reemplazando
+el mensaje en `messages` por id en vez de agregarlo.
+
+Como consecuencia, el estado `sending` (que existía para des/habilitar
+el botón mientras el `await` estaba en curso) quedó sin uso — se sacó
+de `NoteCard`, `useNoteDetail` y `NoteComposer` (su prop `sending` ya
+no lo pasa nadie).
+
+**Alternativas descartadas.**
+
+- **Dejar el guardado como estaba y solo sacar la relectura
+  (`getNoteMessages`/`reload()`) posterior**, sin optimismo (esperar
+  el `await saveNoteMessage.execute(...)` y recién ahí actualizar
+  `messages` con el valor que devuelve). Se descartó: igual queda un
+  `await` de por medio (una vuelta a `AsyncStorage`) entre el toque y
+  que el mensaje aparezca — la version optimista no tiene ninguna.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios.
+
+---
+
+## 135. Un mensaje de anotación puede pertenecer a varias anotaciones a la vez, y copiarse *(elección del usuario)*
+
+**Contexto.** El usuario pidió que un mensaje pueda pertenecer a más
+de una anotación (mandado en A, se le puede agregar B después, y
+sacarlo de A sin que deje de estar en B — sin tocar nada más del
+mensaje) y, además, que seleccionar uno o más mensajes permita
+copiarlos. Es la base de datos para todo lo que viene después (fotos/
+audio/documentos, descripción de anotación) — ver el plan completo en
+la conversación de esta sesión.
+
+**Decisión.** [`NoteMessage.noteId: string`](src/domain/note/entities/NoteMessage.ts)
+pasó a ser **`noteIds: readonly string[]`**, nunca vacío
+(`createNoteMessage` lo valida — llegar a 0 significa "borrar el
+mensaje", una acción propia y separada, nunca un efecto implícito de
+sacarlo de todas sus anotaciones).
+
+El blob de `AsyncStorage` cambió de forma: de
+`{ [noteId]: { [messageId]: dto } }` (un solo dueño por diseño) a
+**plano**, `{ [messageId]: dto }` con `dto.noteIds: string[]` adentro
+— misma `STORAGE_KEY`, el backup no se entera (itera
+`ALL_STORAGE_KEYS` sin saber su forma interna).
+
+El usuario ya tenía mensajes reales en el disco con la forma vieja.
+Para no perderlos, [`NoteMessageLocalDataSource.readAll`](src/data/note/datasources/NoteMessageLocalDataSource.ts)
+migra **en memoria, solo al leer, sin escribir nada como efecto
+secundario** — mismo criterio ya usado para el rename
+`time`→`timeFrom` de `EventDto` y el cambio de forma de
+`FinanceTransactionDto` (`intervalDays`→`intervalValue`/
+`intervalUnit`). La primera escritura real después de leer (mandar,
+editar o cambiar a qué anotaciones pertenece cualquier mensaje) deja
+la forma nueva persistida sola — no hace falta un paso explícito de
+"migrar todo ahora". La detección no mira solo la primera entrada
+(`remove()` nunca borraba un bucket que quedaba vacío, así que podía
+haber `{ algunNoteId: {} }` dando vueltas): escanea **todos** los
+valores de primer nivel buscando alguno con `typeof value.text ===
+'string'` directamente — si lo encuentra, ya es la forma nueva; si no,
+cada bucket de primer nivel se aplana con `noteIds: [eseNoteId]`.
+
+Cambios de superficie en `NoteMessageRepository`: `getForNote(noteId)`
+ahora filtra `noteIds.includes(noteId)` sobre el blob entero (acepta
+leer todo en vez de un solo bucket — mismo trade-off ya aceptado para
+el N+1 de `useLists`); nuevo `getById(messageId)` (hace falta para el
+arreglo de citas de abajo); `deleteMessage` perdió el parámetro
+`noteId` (ya no hace falta, y ahora es sin ambigüedad "borrar este
+mensaje en todos lados"); `deleteAllForNote` se renombró
+`detachFromNote` y hace **un** `readAll()` + loop en memoria + **un**
+`persist()` (no una escritura por mensaje — mismo motivo que
+`deleteSelected` ya evita `Promise.all`: escrituras en paralelo se
+pisan sobre este blob). Si sacar la anotación deja a un mensaje sin
+ninguna, se borra entero (limpieza de archivo incluida cuando llegue
+la Parte B); si no, se reescribe sin ese id.
+
+Nuevo usecase `SetNoteMessageNotes(messageId, noteIds)`: reemplazo
+completo y "tonto" de `noteIds`, sin tocar texto/`sentAt`/`replyToId`/
+`editedAt` — la implementación literal de "no se debe modificar nada
+del mensaje, solo a dónde pertenece". La UI de edición masiva de
+membership se simplificó a **dos acciones explícitas** en vez de una
+grilla de checkboxes estilo etiquetas de Gmail (una grilla tri-state
+es más potente de lo que esta app necesita): "Agregar a otra
+anotación" (ícono `FolderPlus`, elegir una nota de una lista — nuevo
+[`PickNoteModal`](src/presentation/note/components/PickNoteModal.tsx),
+mismo patrón de `Modal` que `CreateChooserModal` pero con lista
+dinámica) y "Quitar de esta anotación" (ícono `FolderMinus`, solo en
+el chat completo — no tiene sentido en la card compacta). Si "quitar"
+dejaría algún mensaje sin ninguna anotación, ese mensaje se saltea (no
+se llama al usecase — no es un error, es una rama esperada de la UI) y
+se cuenta; si se salteó alguno se avisa con un `Alert.alert`, mismo
+estilo que `confirmDeleteSelected`. Las dos acciones loopean
+secuencialmente en `useNoteDetail`, mismo motivo que `deleteSelected`.
+
+**Bug real que este cambio introducía, y su arreglo.** Antes, citar un
+mensaje (`replyToId`) se resolvía buscando en `vm.messages`, que ya
+está filtrado a la anotación actual. Ahora que un mensaje puede
+sacarse de la anotación A y seguir en la B, uno en A que cita al que
+se sacó mostraría "Mensaje eliminado" sin estarlo. Se arregló con un
+nuevo usecase `GetNoteMessage(messageId)` usado como *fallback*: si la
+cita no está en `messages`, se busca con él (una vez por mensaje
+faltante, al recargar) y se guarda en un mapa
+`externalReplyTargets: Record<string, NoteMessage | null>`; recién si
+tampoco aparece ahí se muestra "Mensaje eliminado". Implementado igual
+en `useNoteDetail` (chat completo) y `NoteCard` (card compacta).
+
+**Copiar mensaje.** `SelectionBar` ganó tres props opcionales nuevas
+(`onCopy?`, `onAddToNote?`, `onRemoveFromNote?`), mismo criterio ya
+usado por `onEdit?` (quien la usa decide cuándo pasarlas — a diferencia
+de `onEdit`, que solo tiene sentido con exactamente 1 seleccionado,
+estas valen con 1 o más). `useNoteDetail.copySelectedText()` junta los
+mensajes seleccionados en orden de `sentAt`, con texto tal cual y un
+placeholder (`[Foto]`/`[Documento]`/`[Audio]`) para los que todavía no
+son de texto, unidos con salto de línea; `NoteDetailScreen` lo manda a
+`expo-clipboard` (`Clipboard.setStringAsync`, dependencia nueva, sin
+plugin ni permiso que configurar).
+
+**Alternativas descartadas.**
+
+- **Guardar cada mensaje duplicado, una copia por anotación a la que
+  pertenece.** Se descartó: editar el texto obligaría a propagar el
+  cambio a todas las copias (o aceptar que diverjan, que no es lo que
+  se pidió), y requeriría un id compartido aparte para saber que son
+  "el mismo" mensaje a efectos de edición.
+- **Migrar la forma vieja escribiéndola de nuevo apenas se detecta**,
+  en vez de solo en memoria. Se descartó por ser la primera vez en
+  este proyecto que se se haría una escritura como efecto secundario de
+  una lectura — rompe el patrón ya establecido sin necesidad real.
+- **Grilla de checkboxes (una fila por anotación) para edición masiva
+  de membership.** Se descartó: para una app personal, con como mucho
+  unas pocas anotaciones, dos botones cubren exactamente lo que se
+  pidió sin construir un editor genérico de etiquetas.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Falta todavía: fotos/audio/documentos (Parte B del
+plan), descripción corta al crear una anotación (Parte D) — ninguna de
+las dos depende de lo de acá, pero sí dependen de este cambio de forma
+de `NoteMessage`, que ya está hecho. El renderizado de cada tipo de
+mensaje (`NoteMessageBubble`) todavía no distingue `selectionMode` por
+tipo porque solo existe el tipo `'text'` — hace falta revisarlo cuando
+se agreguen los demás.
+
+---
+
+## 136. Descripción corta opcional al crear una anotación *(elección del usuario)*
+
+**Contexto.** El usuario pidió poder agregarle a una anotación una
+descripción corta al crearla.
+
+**Decisión.** `Note` ganó `description?: string`, tope nuevo
+`MAX_NOTE_DESCRIPTION = 100` (al lado de `MAX_NOTE_NAME`, mismo
+criterio que `MAX_EVENT_DESCRIPTION`/`MAX_TASK_DESCRIPTION` en
+eventos/rutina diaria), validada/recortada en `createNote` igual que
+`name`. Solo al crear: `CreateNoteModal` suma un segundo `TextInput`
+opcional; no hay edición después de creada ni se muestra en el header
+del chat completo — nada en el pedido implica que haga falta ahí. Se
+muestra como subtítulo chico y gris debajo del nombre, solo en
+`NoteCard` (hub y Favoritos).
+
+**Alternativas descartadas.** Ninguna — es un campo opcional más,
+mismo patrón ya usado en otras entidades.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios.
+
+---
+
+## 137. Mandar fotos y documentos en anotaciones, verlos en una galería aparte *(elección del usuario)*
+
+**Contexto.** Siguiente parte del pedido original de #135: mandar
+fotos/documentos/audio en el chat (clip a la izquierda del campo, tope
+de 5 por vez) y una pantalla de galería aparte (ícono de libro, dos
+secciones como en WhatsApp). Esta entrada cubre la parte sin gesto
+nuevo — foto/documento de punta a punta y la galería — dejando afuera
+a propósito **grabar** audio (gesto de mantener presionado/deslizar
+para cancelar, sin construir todavía) y mandar audio en sí, para no
+mezclar lo probado con lo más arriesgado en el mismo paso.
+
+**Decisión.** `NoteMessage.kind`/`media` (ver
+[`NoteMessage.ts`](src/domain/note/entities/NoteMessage.ts)) ya
+existían desde el cambio de forma de #135 — esta parte los usa por
+primera vez de verdad.
+
+Dependencias nuevas, instaladas directo con `npm install` (el wrapper
+`npx expo install` tira `EALLOWSCRIPTS` en este entorno —
+`allow-scripts` del `.npmrc` de usuario no cubre instalaciones
+project-scoped; se instaló a mano en la versión exacta que
+`expo/bundledNativeModules.json` marca para el SDK 58): `expo-clipboard`
+(`~8.0.7`, para #135 también), `expo-image-picker` y `expo-audio`
+(`~58.0.10` las dos). `app.json` suma sus plugins
+(`microphonePermission`/`photosPermission`) — todavía sin build EAS
+nueva, así que nada de esto se probó en un dispositivo real.
+
+[`noteMediaStorage.ts`](src/data/note/noteMediaStorage.ts) (capa de
+datos, mismo criterio que `useBackup.ts` ya usa para tocar
+`expo-file-system` directo): carpeta privada de la app
+(`Paths.document/NoteMedia`, no la pública que usa el backup — esto no
+necesita ser visible), `copyIntoNoteMedia` copia ahí cualquier archivo
+elegido con un nombre propio (nunca se guarda la uri del picker, que
+puede dejar de ser válida), `noteMediaUri` la resuelve de nuevo para
+mostrar/reproducir, `noteMediaExists` dice si el archivo sigue
+estando (`false` después de restaurar un backup, que nunca incluyó el
+archivo — solo la referencia `fileName`/`mimeType` dentro del
+mensaje). [`pickNoteMedia.ts`](src/presentation/note/pickNoteMedia.ts)
+envuelve los dos pickers: fotos usa el tope propio de
+`selectionLimit: 5` de `expo-image-picker`; documentos no tiene tope
+propio (`expo-document-picker`), así que se recorta a mano a 5 con un
+`Alert` si se eligieron más.
+
+El clip nuevo de `NoteComposer` (ícono `Paperclip`, no se muestra
+mientras se edita un mensaje) abre
+[`AttachChooserModal`](src/presentation/note/components/AttachChooserModal.tsx)
+(Foto/Documento, mismo patrón que `CreateChooserModal`). Mandar varios
+de una es optimista igual que mandar texto (#134): todos los mensajes
+aparecen en la lista de una, antes de guardar nada — pero el guardado
+real de cada uno **no** puede ir en paralelo
+(`NoteMessageLocalDataSource.write` relee-modifica-escribe el blob
+entero, no solo el mensaje nuevo), así que una función de fondo los
+guarda uno por uno, en orden, aparte de la UI (que no espera nada de
+eso). Implementado dos veces, con la misma lógica, en
+`useNoteDetail.sendMediaBatch` (chat completo) y
+`NoteCard.sendMediaBatch` (card compacta) — mismo motivo de siempre
+para no compartir estado entre ambos (cada uno ya tenía su propio
+`send()`/`sendMessage()` por separado desde el principio).
+
+`NoteMessageBubble` ahora rama según `message.kind`: `'image'` muestra
+una miniatura (`Image`, sin recorte) que abre un visor a pantalla
+completa sin zoom; `'document'` una fila con ícono, nombre y tamaño
+formateado, tocarla llama a `Sharing.shareAsync` (mismo mecanismo que
+ya usa la exportación del backup — no se construyó ningún visor de
+documentos propio); `'audio'` un reproductor chico nuevo,
+[`NoteAudioPlayer`](src/presentation/note/components/NoteAudioPlayer.tsx)
+(`useAudioPlayer`/`useAudioPlayerStatus` de `expo-audio`, play/pause +
+tiempo transcurrido/total, sin forma de onda) — queda sin usar hasta
+que exista una forma de grabar, pero ya puede reproducir cualquier
+audio que llegue (por ejemplo, restaurado o copiado a mano). Si el
+archivo de un mensaje de medios no está (backup restaurado, o se borró
+por fuera de la app), se muestra "Archivo no encontrado" en vez de
+romper — mismo criterio en la burbuja y en la galería. Cada tipo de
+contenido nuevo recibe `disabled={selectionMode}` para que su propio
+toque (ver foto, abrir documento, reproducir) no compita con
+seleccionar el mensaje.
+
+Se centralizó en una función de dominio,
+`noteMessagePreviewText(message)` (en `NoteMessage.ts`), el texto
+corto para mostrar un mensaje donde no entra el contenido real
+(`'[Foto]'`/`'[Documento]'`/`'[Audio]'`, o el texto tal cual si es de
+texto) — antes estaba duplicado en la cita de respuesta, en la cinta
+"Respondiendo a…" del composer y en copiar mensaje (#135); ahora las
+tres lo usan.
+
+Nueva pantalla [`NoteMediaScreen`](src/presentation/screens/note-media/NoteMediaScreen.tsx)
+(ruta `NoteMedia`, parámetro `{ noteId }`), sin usecase propio — pide
+los mismos `getNoteMessages.execute(noteId)` que ya usa el chat y los
+separa en dos secciones client-side: fotos en cuadrícula (`flexWrap`,
+no un `FlatList` — a esta escala no hace falta virtualizar) y
+documentos en lista. Se llega desde un ícono nuevo (`Book`) a la
+izquierda de la lupa, en el header del chat completo.
+
+**Alternativas descartadas.**
+
+- **Guardar la uri que devuelve el picker/grabador tal cual**, en vez
+  de copiar el archivo a una carpeta propia. Se descartó: esas uris
+  (sobre todo las de `content://` de Android) pueden dejar de ser
+  válidas en cualquier momento — ya es el motivo documentado en el
+  propio `noteMediaStorage.ts`.
+- **Visor de documentos propio** (por tipo de archivo) en vez de
+  `Sharing.shareAsync`. Se descartó: el sistema ya sabe abrir cada
+  tipo con la app correspondiente — es exactamente lo que ya hace la
+  exportación del backup.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios — verifican tipos y bundling, no grabación, picking
+ni clipboard de verdad (nativo, necesita una build EAS nueva). Falta
+todavía: grabar audio (gesto de mantener presionado, trabar/cancelar
+estilo WhatsApp, explícitamente sin traba en la primera versión, ver
+el plan de la sesión) — es la única pieza que queda del pedido
+original de #135.
+
+---
+
+## 138. Grabar audio manteniendo presionado el micrófono, sin traba (última pieza del pedido original de #135) *(elección del usuario)*
+
+**Contexto.** Última parte del pedido de #135: el botón de enviar se
+convierte en micrófono cuando el campo está vacío; mantenerlo
+presionado grava un audio estilo WhatsApp (se puede deslizar para
+cancelar); soltar normal lo manda. El usuario eligió explícitamente,
+ante una pregunta directa sobre el alcance, **no** construir la traba
+(mantener grabando después de soltar) en esta primera versión — un
+fast-follow aparte, una vez que el gesto base esté confirmado andando
+en un dispositivo real.
+
+**Decisión.** [`AudioRecordButton`](src/presentation/note/components/AudioRecordButton.tsx)
+usa un solo `usePanGesture` con `activateAfterLongPress: 150`ms, en vez
+de componer un gesto de mantener presionado (`useLongPressGesture`)
+con uno de arrastre por separado, como proponía el plan original de la
+sesión: `activateAfterLongPress` es una opción nativa del propio
+`usePanGesture` — activa el gesto recién después de ese tiempo sin
+soltar, y a partir de ahí el arrastre (`onUpdate`/`translationX`) se
+sigue igual que cualquier otro `usePanGesture` de esta app (swipe para
+responder, tirador del panel flotante). Un solo tipo de gesto, ya
+probado en este código base, en vez de dos combinados por primera vez
+— menos riesgo para una pieza que de por sí ya era "la más nueva y
+arriesgada" del plan.
+
+El componente se mantiene **montado siempre** mientras el campo está
+vacío (lo decide `NoteComposer`, mismo lugar donde antes iba el botón
+de enviar) — nunca se desmonta/remonta entre "mic quieto" y "grabando
+en curso": si React lo reemplazara por otro elemento a mitad de un
+toque, el gesto en curso (que vive del lado nativo) se cortaría solo.
+Adentro, cambia de verse como un ícono chico a ocupar toda la fila
+(con un punto rojo, el tiempo transcurrido y "‹ Deslizá para
+cancelar") según su propio estado `isRecording` — `NoteComposer` solo
+usa ese booleano (recibido por `onRecordingChange`) para ocultar el
+campo de texto y el clip mientras tanto, nunca para decidir si
+desmontar el botón.
+
+Grabación con `expo-audio`: `useAudioRecorder(RecordingPresets.HIGH_QUALITY)`
++ `useAudioRecorderState(recorder, 100)` para el tiempo en vivo.
+`onActivate` (ya pasado el `activateAfterLongPress`) pide permiso
+(`requestRecordingPermissionsAsync`) y arranca a grabar — con un
+`activeRef` que evita arrancar si el dedo ya se soltó mientras el
+diálogo de permiso (un `await`) todavía estaba en pantalla.
+`onDeactivate` decide cancelar o mandar según `e.canceled` (el propio
+gesto se canceló, por ejemplo por el sistema) **o** si se deslizó más
+de `CANCEL_THRESHOLD = 90` puntos a la izquierda; si no se cancela,
+copia el archivo grabado a la carpeta de medios
+(`copyIntoNoteMedia`, mismo helper que fotos/documentos de #137) y
+llama a `onSendAudio`, que en cada pantalla termina armando y mandando
+un mensaje `kind: 'audio'` con el mismo `sendMediaBatch` ya construido
+en #137 (un elemento, en vez de un array de varios).
+
+**Alternativas descartadas.**
+
+- **Componer `useLongPressGesture` + `usePanGesture`** (lo que
+  proponía el plan original). Se descartó al escribir el código: un
+  solo `usePanGesture` con `activateAfterLongPress` logra lo mismo sin
+  combinar dos gestos por primera vez en este código base — menos
+  superficie nueva para una pieza ya marcada como la más riesgosa.
+- **Traba (lock) para seguir grabando después de soltar.** Cortada a
+  propósito de esta versión — elección explícita del usuario.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios — verifican tipos y bundling, nada más. **Esto no se
+probó en ningún dispositivo real** (no hay build EAS nueva todavía) —
+es, con diferencia, la pieza menos probada de toda la sesión: combina
+un permiso nativo async en medio de un gesto, un `activateAfterLongPress`
+nunca usado antes en este código base, y la pantalla cambiando de
+forma a mitad de un toque. Dado el historial de esta app con gestos
+que necesitaron varias rondas después del primer uso real (#118-#133,
+toda la saga del teclado/panel flotante de Anotaciones), hay que
+asumir que esto también va a necesitar ajustes — quedó agregado al
+listado de deuda técnica conocida, al final de este documento, para no
+perderlo de vista.
+
+---
+
+## 139. Fotos agrupadas en un solo mensaje (tope 4), y galería que muestra una sola sección a la vez *(elección del usuario)*
+
+**Contexto.** Dos ajustes sobre lo de #137/#138: el tope de fotos
+mandadas juntas bajó de 5 a 4, y ahora tienen que verse como **un solo
+mensaje** con cuadrícula (dos arriba, dos abajo) en vez de un mensaje
+por foto; y en la pantalla de galería, en vez de mostrar fotos y
+documentos a la vez, el usuario pidió elegir una sección u otra, con
+el mismo control segmentado que ya usan los trackers para elegir
+Semana/Mes/Año.
+
+**Decisión.** `NoteMessage` suma `mediaItems?: readonly NoteMessageMedia[]`
+(en [`NoteMessage.ts`](src/domain/note/entities/NoteMessage.ts)), para
+`kind: 'image'` con más de una foto — `media` (singular) sigue
+existiendo para documentos/audio, y también sigue siendo válido para
+fotos de **antes** de este cambio (una foto, mandada antes de que
+existiera `mediaItems`). Nueva función de dominio
+`noteMessageMediaItems(message)` lee cualquiera de los dos casos de
+forma uniforme (`mediaItems` si está, si no `[media]`, si no `[]`) —
+la usan tanto la burbuja como la galería, para no tener que repetir
+ese `if` en cada lugar. Nuevo tope `MAX_NOTE_IMAGE_ITEMS = 4` (al lado
+de `MAX_NOTE_MESSAGE_LENGTH`), validado en `createNoteMessage`: un
+mensaje de imagen necesita 1 a 4 archivos, ni más ni menos.
+
+[`pickNoteMedia.ts`](src/presentation/note/pickNoteMedia.ts):
+`pickNotePhotos` ahora devuelve un **único** `PickedNoteMedia` con las
+fotos elegidas en `mediaItems` (antes, un elemento por foto) —
+`selectionLimit` del picker bajó de 5 a `MAX_NOTE_IMAGE_ITEMS`.
+Documentos no cambia: siguen siendo mensajes separados, tope 5 (el
+usuario solo pidió agrupar fotos). `sendMediaBatch`
+(`useNoteDetail`/`NoteCard`) ya recibía una lista de "cosas para
+mandar" sin asumir cuántos archivos tiene cada una, así que no hizo
+falta ningún cambio de lógica ahí — solo pasar `mediaItems` además de
+`media` en cada punto donde ya se pasaba este último.
+
+`NoteMessageBubble` rama antes de llegar al `if (!media)` de siempre:
+con `kind === 'image'`, lee `noteMessageMediaItems(message)` y, si hay
+más de una, las dibuja en una cuadrícula de 2 columnas (`flexWrap`,
+mismo ancho total que una foto sola — así la burbuja no cambia de
+tamaño según la cantidad); una sola foto se sigue viendo grande, como
+antes. Si algún archivo puntual de la cuadrícula no está (por ejemplo,
+después de restaurar un backup), esa casilla puntual muestra "No
+encontrada" en vez de tirar abajo el mensaje entero.
+
+[`NoteMediaScreen`](src/presentation/screens/note-media/NoteMediaScreen.tsx):
+nuevo control segmentado (`SectionSwitch`, calcado del estilo de
+[`CalendarViewSwitch`](src/presentation/calendar/CalendarViewSwitch.tsx)
+que ya usan los trackers) para elegir Fotos o Documentos — nunca las
+dos secciones a la vez. La cuadrícula de fotos ahora junta **todas**
+las fotos de todos los mensajes con `.flatMap(noteMessageMediaItems)`
+— se ven todas juntas en una sola grilla plana, sin importar si se
+mandaron de una en una o agrupadas de a varias (mismo criterio que
+usa la pantalla de medios de WhatsApp).
+
+**Alternativas descartadas.**
+
+- **Reutilizar `CalendarViewSwitch` directamente**, en vez de copiar
+  su estilo en un componente nuevo. Se descartó: está tipado a
+  `CalendarView` (`'week' | 'month' | 'year'`), específico del
+  calendario — generalizarlo para que sirviera también acá era más
+  cambio que simplemente copiar los ~20 líneas de estilo que hacen
+  falta.
+- **Cuadrícula de WhatsApp real** (una foto grande + el resto más
+  chicas, recortadas, cuando hay 3). Se descartó: el pedido fue
+  literal ("dos arriba y dos abajo") — una cuadrícula pareja de 2
+  columnas ya cumple eso para 1 a 4 fotos, sin construir el layout más
+  elaborado de WhatsApp.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real (mismo
+motivo que #137/#138 — hace falta una build EAS nueva).
+
+---
+
+## 140. Deslizar entre fotos y entre secciones de la galería; tocar el nombre de la anotación también abre la galería; 4 fotos por fila *(elección del usuario)*
+
+**Contexto.** Cuatro ajustes sobre #137/#139: (1) tocar el nombre de
+la anotación, arriba del chat completo, tiene que llevar también a la
+galería de medios (ya se podía desde el ícono de libro — esto suma
+una segunda forma, no lo reemplaza); (2) al abrir una foto a pantalla
+completa, deslizar tiene que pasar a la siguiente/anterior; (3) en la
+pestaña de medios, deslizar tiene que cambiar entre Fotos y Documentos
+(ya se podía tocando el control segmentado — esto suma el gesto); (4)
+la cuadrícula de fotos de la galería tiene que entrar exactamente 4
+por fila.
+
+**Decisión.** Nuevo componente compartido
+[`ImageViewerModal`](src/presentation/note/components/ImageViewerModal.tsx)
+(antes vivía duplicado, sin deslizar, adentro de `NoteMessageBubble` y
+de `NoteMediaScreen`): recibe `photos: string[] | null` (la lista
+completa por la que se puede deslizar) y `startIndex`, y usa
+`useHorizontalSwipe` — el mismo gesto que ya usan los trackers para
+moverse de período — para pasar de foto dentro de esa lista, clavado
+en las puntas (no da la vuelta). Un contador ("2/4") se muestra arriba
+cuando hay más de una. Lo usan los dos lugares que antes tenían su
+propio visor sin deslizar:
+- `NoteMessageBubble`: la lista es las fotos de **ese mensaje**
+  (`noteMessageMediaItems`, filtradas a las que de verdad existen) —
+  deslizar adentro de la cuadrícula 2x2 de una foto agrupada (#139)
+  recorre esas mismas.
+- `NoteMediaScreen`: la lista es **todas** las fotos de la galería
+  (`existingPhotoUris`, ya aplanada con `flatMap` desde #139) —
+  deslizar sobre una foto abierta desde la cuadrícula recorre la
+  galería entera, sin importar en qué mensaje se mandó cada una.
+
+En los dos casos, el índice que se le pasa al visor se calcula sobre
+la lista de archivos que **sí existen** (no sobre la lista cruda de
+`mediaItems`/mensajes) — si faltara alguno (backup restaurado), no
+rompe la numeración de las que sí se pueden ver.
+
+`NoteMediaScreen` suma un segundo `useHorizontalSwipe` (distinto del
+de arriba, que es sobre fotos individuales) envolviendo el
+`ScrollView` de toda la pantalla: deslizar a la izquierda pasa de
+Fotos a Documentos, a la derecha al revés — clavado en las puntas
+(deslizar en Documentos hacia la derecha, o en Fotos hacia la
+izquierda, no hace nada), igual que el control segmentado al que
+complementa. El `failOffsetY` propio de `useHorizontalSwipe` es lo
+que deja que el scroll vertical de la lista de documentos / cuadrícula
+de fotos siga funcionando sin pisarse con este gesto horizontal nuevo
+— mismo mecanismo con el que convive el swipe de período de los
+trackers con el calendario que tienen adentro.
+
+La cuadrícula de la galería pasó de un ancho fijo (100px) a calculado
+con `useWindowDimensions`: `(ancho de pantalla − padding × 2 − hueco ×
+3) / 4`, así entran exactamente 4 por fila sin importar el ancho real
+del teléfono (antes, cuántas entraban por fila dependía de la pantalla
+y no estaba garantizado).
+
+`NoteDetailScreen` reemplaza su `title` (string, no tocable) por un
+`headerTitle` a medida: un `TouchableOpacity` con el nombre de la
+anotación adentro, que navega a `NoteMedia` — mismo destino que ya
+tenía el ícono de libro, ahora con una segunda entrada.
+
+**Alternativas descartadas.**
+
+- **Dejar cada visor con su propia copia del código**, sumándole el
+  deslizar a cada uno por separado. Se descartó: la lógica de
+  deslizar-dentro-de-una-lista-de-fotos es idéntica en los dos
+  lugares — tenerla una sola vez evita que diverjan con el tiempo.
+- **Dar la vuelta al llegar a la última foto** (volver a la primera).
+  Se descartó sin que el usuario lo pidiera — clavarse en las puntas
+  es el comportamiento más común en visores de fotos y evita
+  confusión sobre "cuántas hay".
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Sigue sin probarse en un dispositivo real (mismo
+motivo que #137/#138/#139).
+
+---
+
+## 141. Primera prueba real: deslizar en el visor de fotos solo cerraba, y no se podían mandar documentos *(elección del usuario)*
+
+**Contexto.** Primer uso real, en un dispositivo, de lo de #137-#140
+(ya con una build EAS nueva). Dos problemas:
+1. Deslizar en el visor de fotos (chat o galería) no cambiaba de foto
+   — solo la cerraba, en los dos lugares.
+2. No se podían mandar documentos (las fotos sí funcionaban).
+
+**Decisión — visor de fotos (causa confirmada).**
+[`ImageViewerModal`](src/presentation/note/components/ImageViewerModal.tsx)
+(#140) mezclaba, sobre la misma vista, un `Pressable` (el sistema de
+toques de React Native) para "tocar cierra" con un `GestureDetector`
+(el sistema de Gesture Handler) envolviéndolo para "deslizar cambia de
+foto". Los dos sistemas no se arbitran entre sí de forma confiable: el
+`Pressable` ganaba siempre su `onPress` al soltar el dedo, cerrando el
+visor antes de que se llegara a ver el cambio de foto — aunque el
+gesto de deslizar sí calculaba bien el índice nuevo por dentro, nunca
+se mostraba porque el modal ya se había cerrado.
+
+Se sacó el `Pressable` de la ecuación: ahora un solo `usePanGesture`
+resuelve las dos cosas. Al activar (moverse más de `minDistance: 2`)
+guarda que se activó (`activatedRef`); al soltar
+(`onDeactivate`, solo se llama si llegó a activarse), si se deslizó
+más de `MIN_SWIPE = 60`px para un lado u otro cambia de foto, si se
+movió menos que eso pero algo, cierra (mismo resultado que un toque);
+si nunca llegó a activarse (toque quieto, sin mover nada), lo agarra
+`onFinalize` (que se llama siempre, se haya activado o no) y cierra
+ahí. Nunca hay dos sistemas de toques compitiendo por la misma vista —
+mismo principio que ya usa el resto de los gestos de esta app (un
+`GestureDetector` por vista, nunca un `Touchable`/`Pressable` debajo
+de él en el mismo lugar).
+
+**Decisión — documentos (causa no confirmada con certeza, reforzado
+por las dudas más probables).** Sin logs del dispositivo no se pudo
+confirmar la causa exacta, así que se reforzaron las dos sospechas más
+creíbles en vez de una sola:
+1. [`copyIntoNoteMedia`](src/data/note/noteMediaStorage.ts) armaba el
+   nombre del archivo copiado pegando el nombre **original** del
+   documento tal cual (`asset.name`) — a diferencia de una foto (que
+   llega con un nombre "de cámara" predecible), un documento elegido
+   por el usuario puede traer espacios, acentos, paréntesis o
+   cualquier otro carácter, y terminar generando un nombre de archivo
+   que la carpeta de medios no pudiera crear. Nueva función
+   `sanitizeFileNamePart`: cualquier carácter que no sea
+   letra/número/punto/guión se reemplaza por `_`, recortado a 80
+   caracteres — se aplica solo al nombre del archivo guardado
+   (`fileName`), nunca al `originalName` que se muestra (ese sigue
+   siendo el nombre real, sin tocar).
+2. [`pickNoteMedia.ts`](src/presentation/note/pickNoteMedia.ts) suma
+   `copyToCacheDirectory: true` explícito a `getDocumentAsync` (ya era
+   el default, pero a propósito, por las dudas de que algo lo
+   cambiara) y, más importante, **tanto `NoteDetailScreen` como
+   `NoteCard`** ahora envuelven todo `chooseAttach` (elegir + copiar +
+   mandar) en un `try`/`catch` con `Alert.alert` mostrando el mensaje
+   real del error (mismo criterio que ya usa `useBackup.ts`) — antes,
+   si `pickNoteDocuments`/`copyIntoNoteMedia` tiraban una excepción, no
+   había ningún `catch` en la cadena de llamadas hasta el toque del
+   botón: la promesa quedaba rechazada sin que nadie la atendiera, y en
+   release eso no muestra nada — exactamente "no pasa nada" visto
+   desde afuera. Si vuelve a fallar, ahora debería aparecer un cartel
+   con el motivo real, en vez de silencio.
+
+**Alternativas descartadas.**
+
+- **Seguir usando `Pressable` para cerrar, pero deshabilitarlo mientras
+  el gesto de deslizar está activo** (en vez de sacarlo del todo). Se
+  descartó: seguiría habiendo dos sistemas de toques sobre la misma
+  vista, con el mismo riesgo de arbitrarse mal en algún caso borde —
+  sacar el `Pressable` por completo es la solución de raíz, no un
+  parche sobre el síntoma.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. El arreglo del visor de fotos tiene una causa clara
+y debería quedar resuelto; el de documentos es una mejora defensiva
+sobre las sospechas más probables, no una causa confirmada — falta
+confirmar en el dispositivo real si esto lo resuelve, o si el próximo
+intento al menos muestra un error que ayude a encontrar la causa de
+verdad.
+
+---
+
+## 142. Las causas reales de #141: `Modal` necesita su propio `GestureHandlerRootView`, y los documentos necesitan `copyAsync` (no `File.copy()`) *(elección del usuario)*
+
+**Contexto.** El arreglo de #141 no alcanzó: deslizar en el visor de
+fotos seguía sin cambiar de foto, y mandar un documento seguía
+fallando — ahora con el error real, mostrado gracias al `Alert.alert`
+que #141 agregó: `Call to function 'FileSystemFile.copy' has been
+rejected. → Caused by: Missing 'READ' permission for accessing the
+file.`. Con ese mensaje, y volviendo a pensar el problema del visor, se
+pudo confirmar la causa de los dos.
+
+**Decisión — visor de fotos.** El arreglo de #141 (sacar el
+`Pressable`, dejar todo en un solo `usePanGesture`) atacaba el
+síntoma equivocado: el gesto nunca se activaba, con o sin `Pressable`
+de por medio. La causa real es más básica —
+[`ImageViewerModal`](src/presentation/note/components/ImageViewerModal.tsx)
+pone su `GestureDetector` adentro de un `<Modal>` de React Native, que
+renderiza su contenido en una **ventana nativa aparte** (un `Dialog`
+en Android). El único `GestureHandlerRootView` de la app vive en
+`App.tsx`, envolviendo la pantalla principal — no llega a esa ventana
+aparte, así que Gesture Handler nunca recibía los toques ahí dentro.
+Arreglo: un `GestureHandlerRootView` propio, anidado, como hijo directo
+del `Modal` — es literalmente lo que pide la documentación de Gesture
+Handler para cualquier gesto adentro de un `Modal`.
+
+**Decisión — documentos.** El mensaje de error lo dice todo:
+`FileSystemFile.copy` (la API nueva de `expo-file-system`, la que
+usaba `copyIntoNoteMedia`) no puede leer la uri `content://` que
+devuelve el selector de documentos del sistema (SAF) — le falta el
+permiso de lectura que esa API no sabe pedir/usar para esas uris.
+[`noteMediaStorage.ts`](src/data/note/noteMediaStorage.ts) cambió la
+copia a `copyAsync` de **`expo-file-system/legacy`** (`{ from:
+sourceUri, to: destination.uri }`) — la propia documentación de esa
+función dice explícitamente que sirve para "copiar contenido
+compartido por otras apps al sistema de archivos local", y es el mismo
+mecanismo que `useBackup.ts` ya usa (con el mismo picker) para
+importar un backup, donde nunca dio este problema. Se cambió para
+**los tres tipos** (foto/documento/audio), no solo documentos: aunque
+las fotos no mostraron el error, usar un solo mecanismo de copia,
+probado, para todo, es menos riesgo que mantener dos (uno por tipo de
+uri) que puedan divergir en silencio más adelante.
+
+**Alternativas descartadas.**
+
+- **Seguir con la API nueva (`File`/`Directory`) y buscar cómo pedirle
+  permiso de lectura a una uri SAF a mano** (p. ej.
+  `takePersistableUriPermissionAsync` del lado nativo). Se descartó:
+  `copyAsync` ya resuelve exactamente este caso, documentado, y sin
+  agregar código nuevo — `File`/`Directory` se siguen usando para todo
+  lo demás (crear la carpeta, armar la uri de destino, borrar, chequear
+  si existe), que no tuvo ningún problema.
+- **Un segundo `GestureHandlerRootView` a nivel de toda la pantalla de
+  Anotaciones**, en vez de uno local al `Modal`. Se descartó: más
+  amplio de lo que hace falta — el problema es específicamente que el
+  contenido vive en una ventana nativa aparte (el `Modal`), no que
+  falte un root view en general; uno local, justo donde se necesita,
+  es más simple y no puede afectar a nada más de la pantalla.
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Las dos causas están confirmadas con evidencia
+real (el error exacto, para documentos; el razonamiento sobre
+`Modal`+Gesture Handler, documentado por la propia librería, para el
+visor) — a diferencia de #141, acá no queda ninguna duda abierta sobre
+cuál es el problema, solo falta la confirmación final en el
+dispositivo.
+
+---
+
+## 143. `copyAsync` tampoco servía: ni fotos ni documentos se podían copiar — se resolvió leyendo y escribiendo en base64, sin "copiar" nada *(elección del usuario)*
+
+**Contexto.** El arreglo de #142 (pasar de `File.copy()` a `copyAsync`
+de `expo-file-system/legacy`) no alcanzó tampoco: después de probarlo,
+las fotos dejaron de mostrarse (antes funcionaban, con `File.copy()`)
+y los documentos siguieron fallando — ahora con un error distinto:
+`Call to function 'ExponentFileSystem.copyAsync' has been rejected. →
+Caused by: java.io.IOException: Location
+'file:///data/user/0/host.exp.exponent/cache/DocumentPicker/....pdf'
+isn't readable.` Dos datos importantes de este mensaje: (1) la ruta ya
+era `file://`, local, de la caché de la propia app (no `content://`)
+— `copyToCacheDirectory: true` sí había copiado el documento antes de
+que `copyIntoNoteMedia` hiciera nada — y aun así `copyAsync` no pudo
+leerla; (2) el paquete `host.exp.exponent` confirma que la prueba es
+dentro de **Expo Go**, no una build EAS propia — lo cual, al ser todos
+módulos oficiales de Expo (`expo-audio`/`expo-image-picker`/
+`expo-clipboard`/`expo-document-picker`), es válido y no hace falta
+una build nueva para probarlos; la suposición repetida en #135-#142 de
+que hacía falta una build EAS para probar esto era innecesariamente
+conservadora.
+
+**Decisión.** Ni `File.copy()` (#135) ni `copyAsync` (#142) resultaron
+confiables para copiar un archivo cuyo origen viene de otro módulo
+(picker/grabador) — cada uno falló con una uri distinta, lo que
+sugiere que el problema de fondo es la operación de **copiar entre dos
+uris** en sí (depende de que ambas APIs de archivo —origen y
+destino— sean compatibles entre sí), no un detalle puntual de cuál
+uri en particular. Se reemplazó "copiar" por **leer todo el archivo
+como texto `base64` y escribirlo en el destino**
+(`FileSystemLegacy.readAsStringAsync(sourceUri, { encoding: 'base64'
+})` + `writeAsStringAsync(destination.uri, base64, { encoding:
+'base64' })`) — mismo mecanismo, con el mismo picker, que ya usa
+`useBackup.ts` para importar un backup (ahí lee como texto UTF-8 en
+vez de base64, por ser JSON, pero es la misma función). Leer no
+depende de la uri de destino para nada, y escribir no depende de la
+uri de origen para nada — se eliminó la única operación (copiar) que
+había fallado dos veces seguidas, de dos formas distintas, con dos
+APIs distintas.
+
+**Alternativas descartadas.**
+
+- **Probar una tercera función de copiar** (por ejemplo, alguna
+  variante específica para SAF). Se descartó: dos intentos fallidos
+  con dos mecanismos de copiar distintos es señal suficiente de que el
+  problema es la operación en sí en este entorno (Expo Go), no la
+  función puntual elegida — leer+escribir evita la categoría entera de
+  problema.
+- **Mantener `copyAsync` solo para documentos y `File.copy()` para
+  fotos/audio** (como estaba antes de unificar en #142). Se descartó
+  de nuevo: con las fotos ahora también rotas con `copyAsync`, no hay
+  ningún mecanismo de copiar que haya demostrado ser confiable para
+  los tres tipos — leer+escribir si lo es (es, además, el único de
+  los tres que ya tenía un uso real y probado en esta app, en
+  `useBackup.ts`).
+
+**Consecuencias.** `npx tsc --noEmit` y
+`npx expo export --platform android --output-dir dist-check`
+corrieron limpios. Costo aceptado: el archivo entero pasa por memoria
+codificado en base64 (~33% más grande que el archivo real) en vez de
+copiarse en streaming — aceptable a la escala personal de esta app
+(fotos/documentos sueltos, no archivos de GBs). Falta la confirmación
+en el dispositivo real — esta vez debería andar para los tres tipos,
+dado que es el mismo mecanismo que ya funciona hoy para importar un
+backup.
+
+---
+
+## 144. La causa real de "isn't readable": Expo Go solo deja leer su carpeta aislada; el picker de documentos ahora devuelve `content://` y la copia prueba varias estrategias *(elección del usuario)*
+
+**Contexto.** Después de #143 seguía el error `isn't readable` para
+`.../cache/DocumentPicker/....pdf`, las fotos no se veían al entrar a
+la galería y pasar de Anotación a Fotos fallaba igual.
+
+**Decisión.** En Expo Go el permiso de lectura de `expo-file-system` se
+calcula por carpeta *aislada de la experiencia*, pero
+`expo-document-picker` (y el de imágenes) copian a la caché general de
+la app (`context.cacheDir`), fuera de esa carpeta — de ahí "isn't
+readable" aunque la ruta sea `file://` propia, y por eso ni `copyAsync`
+ni leer base64 sirven sobre esa copia. Cambios:
+1. `pickNoteDocuments` usa `copyToCacheDirectory: false`: devuelve la uri
+   `content://` original, que sí se puede leer.
+2. `copyIntoNoteMedia` prueba en orden `copyAsync` (legacy),
+   leer+escribir base64 y `File.copy`, y solo falla si las tres fallan
+   (devuelve el último error); además verifica que el destino exista.
+   Las fotos (que también se veían vacías porque el archivo nunca
+   llegaba a existir) pasan por la misma ruta.
+
+**Consecuencias.** `npx tsc --noEmit` limpio; falta confirmar en el
+dispositivo. Las fotos/documentos que ya fallaron antes no existen en
+disco y hay que volver a mandarlos.
+
+---
+
+## 145. Abrir documentos con su app (`ACTION_VIEW`) y visor de fotos con tamaño explícito *(elección del usuario)*
+
+**Contexto.** Tocar un documento solo ofrecía "compartir", y el visor de
+una foto recién mandada mostraba solo el fondo oscuro y el contador, sin
+la imagen.
+
+**Decisión.** Nueva dependencia `expo-intent-launcher` (`~58.0.3`).
+`openNoteDocument` (en `noteMediaStorage.ts`) lanza un intent
+`android.intent.action.VIEW` con una uri `content://`
+(`getContentUriAsync`) y el `mimeType` del mensaje; si no hay app capaz
+de abrirlo, o en iOS, cae a `Sharing.shareAsync`. Burbuja y galería lo
+usan. En `ImageViewerModal` la imagen pasó de `100%`/`100%` a
+`useWindowDimensions()` explícito (el porcentaje no resolvía dentro del
+`Modal`) y se sacó el fondo oscuro duplicado (`root` transparente,
+`backdrop` oscuro).
+
+**Consecuencias.** `tsc` limpio; sin probar en dispositivo. Como se
+agregó un módulo nativo, Expo Go lo trae (`expo-intent-launcher` es
+oficial); una build EAS propia necesita regenerarse.
+
+---
+
+## 146. Mover un pack de fotos fallaba; selección más rápida con vibración; un solo botón de anotaciones; mensajes favoritos con su pestaña *(elección del usuario)*
+
+**Contexto.** Cuatro pedidos juntos sobre el chat de anotaciones.
+
+**Decisión.**
+1. **Bug del pack de 4 fotos.** `SetNoteMessageNotes` reconstruía el
+   mensaje con `createNoteMessage` sin pasarle `mediaItems`, y para
+   `kind: 'image'` eso se leía como "sin archivo" (`Falta el archivo del
+   mensaje`). Ahora pasa `mediaItems` (y `favorite`).
+2. **Selección rápida + vibración.** La burbuja usa
+   `delayLongPress={220}` (default de RN: 500 ms). La vibración
+   (`expo-haptics`, `~58.0.7`, `ImpactFeedbackStyle.Medium`) se dispara en
+   `useNoteDetail.startSelection`, no en la burbuja, para que la card de la
+   pestaña (donde mantener presionado no hace nada) no vibre.
+3. **Un solo botón de anotaciones.** `PickNoteModal` y el botón "quitar"
+   se reemplazaron por `ManageNotesModal`: lista todas las anotaciones con
+   checkbox lleno/vacío (lleno = TODOS los mensajes seleccionados ya
+   pertenecen; con varios, una anotación a la que pertenecen solo algunos
+   aparece vacía). Los cambios se aplican recién con "Guardar"
+   (`applyNoteMembership`). Un mensaje que quedaría sin ninguna anotación
+   no se toca y se avisa (misma regla de siempre: no existe `noteIds: []`).
+4. **Favoritos.** `NoteMessage.favorite?` (nuevo, en el mensaje — vale para
+   todas las anotaciones donde esté), usecase `SetNoteMessageFavorite`,
+   estrella en `SelectionBar` junto al lápiz (a diferencia del lápiz,
+   funciona con varios: si todos ya son favoritos los desmarca, si no marca
+   a todos), y estrellita en la hora de la burbuja. Editar texto conserva
+   el favorito. En la galería, nueva pestaña "Favoritos" (después de
+   Documentos; el deslizar lateral ahora recorre las tres). Tocar un favorito
+   hace `popTo('NoteDetail', { noteId, focusMessageId })`: el chat lee el
+   parámetro, cierra la búsqueda, scrollea al mensaje (posición por
+   `onLayout` de cada fila) y lo resalta ~1,8 s; mientras tanto se
+   suspende el scroll automático al final.
+
+**Consecuencias.** `tsc` limpio; sin probar en dispositivo. Mensajes ya
+guardados siguen válidos (`favorite` es opcional).
+
+---
+
+## 147. El build de EAS fallaba en R8 por `expo-clipboard@~8.0.7`: corregido a `~58.0.4`
+
+**Contexto.** `eas build -p android --profile preview` fallaba en
+`:app:minifyReleaseWithR8` con `Missing class
+expo.modules.kotlin.types.LazyKType (referenced from:
+expo.modules.clipboard.ClipboardModule)`.
+
+**Causa.** #137 instaló `expo-clipboard` en `~8.0.7`, una versión de un SDK
+viejo (la numeración de los paquetes `expo-*` se alineó con el SDK a partir
+de entonces); en `expo/bundledNativeModules.json` del SDK 58 es `~58.0.4`.
+La 8.x usa clases de `expo-modules-core` que ya no existen. En Expo Go no
+se notaba (trae su propia copia); solo explota al compilar nativo.
+
+**Decisión.** `npm install expo-clipboard@~58.0.4`. Regla: instalar siempre
+la versión que marca `bundledNativeModules.json`, nunca una "parecida".
+Las demás diferencias que muestra `npx expo install --check` son de parche
+y no son la causa.
+
 ---
 
 - **`container` como singleton de módulo:** habrá que poder inyectar un
@@ -6318,3 +7181,12 @@ corrieron limpios.
   `react-native-reanimated`). El chat completo (#120, campo anclado al
   fondo de la pantalla, no adentro de una card) sigue aparte y el usuario
   ya confirmó que funciona.
+- **Grabar audio manteniendo presionado el micrófono (`AudioRecordButton`,
+  #138) no se probó en ningún dispositivo real todavía:** combina, por
+  primera vez en este código base, un permiso nativo async
+  (`requestRecordingPermissionsAsync`) a mitad de un gesto activo y
+  `activateAfterLongPress` de `usePanGesture` (nunca usado antes acá). Sin
+  traba (lock) en esta versión, a propósito (elección del usuario). Dado
+  el historial de esta app con gestos (#118-#133), hay que asumir que
+  necesitará ajustes después del primer uso real — y recién ahí conviene
+  evaluar si agregar la traba.

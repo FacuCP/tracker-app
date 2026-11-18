@@ -11,25 +11,27 @@ import {
 } from 'react-native';
 
 import { theme } from '../../../core/theme';
-import { MAX_NOTE_NAME } from '../../../domain/note/entities/Note';
+import { MAX_NOTE_DESCRIPTION, MAX_NOTE_NAME } from '../../../domain/note/entities/Note';
 import { Checkbox } from '../../components/Checkbox';
 import { KeyboardAvoider } from '../../components/KeyboardAvoider';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onCreate: (name: string, favorite: boolean) => Promise<void> | void;
+  onCreate: (name: string, favorite: boolean, description?: string) => Promise<void> | void;
 }
 
-/** Modal para crear una anotación nueva (nombre y si es favorita). */
+/** Modal para crear una anotación nueva (nombre, descripción corta opcional, y si es favorita). */
 export function CreateNoteModal({ visible, onClose, onCreate }: Props) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [favorite, setFavorite] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setName('');
+      setDescription('');
       setFavorite(false);
       setSaving(false);
     }
@@ -39,7 +41,7 @@ export function CreateNoteModal({ visible, onClose, onCreate }: Props) {
     if (name.trim().length === 0) return;
     setSaving(true);
     try {
-      await onCreate(name, favorite);
+      await onCreate(name, favorite, description.trim() || undefined);
     } finally {
       setSaving(false);
     }
@@ -61,6 +63,15 @@ export function CreateNoteModal({ visible, onClose, onCreate }: Props) {
               autoFocus
               returnKeyType="done"
               onSubmitEditing={submit}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Descripción corta (opcional)"
+              placeholderTextColor={theme.colors.textMuted}
+              value={description}
+              onChangeText={setDescription}
+              maxLength={MAX_NOTE_DESCRIPTION}
+              returnKeyType="done"
             />
             <TouchableOpacity
               style={styles.favoriteRow}

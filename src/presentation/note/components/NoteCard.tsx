@@ -1,16 +1,19 @@
 import { Send } from 'lucide-react-native';
 import { ComponentRef, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { container } from '../../../core/di/container';
+import { generateId } from '../../../core/utils/id';
 import { theme } from '../../../core/theme';
 import { Note } from '../../../domain/note/entities/Note';
-import { NoteMessage } from '../../../domain/note/entities/NoteMessage';
+import { NoteMessage, createNoteMessage } from '../../../domain/note/entities/NoteMessage';
 import { FavoriteStar } from '../../components/FavoriteStar';
 import { PersistentScrollView } from '../../components/PersistentScrollView';
 import { useFocusOnOpen } from '../../components/useFocusOnOpen';
 import { FloatingOverlay } from '../../components/useFloatingOverlay';
 import { buildNoteTimeline } from '../groupMessagesByDay';
+import { PickedNoteMedia, pickNoteDocuments, pickNotePhotos } from '../pickNoteMedia';
+import { AttachChooserModal } from './AttachChooserModal';
 import { NoteComposer } from './NoteComposer';
 import { NoteDaySeparator } from './NoteDaySeparator';
 import { NoteMessageBubble } from './NoteMessageBubble';
@@ -52,10 +55,11 @@ const PANEL_HEIGHT_PERCENT = 35;
  */
 export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, reloadTick, overlay }: Props) {
   const [messages, setMessages] = useState<NoteMessage[] | null>(null);
+  const [externalReplyTargets, setExternalReplyTargets] = useState<Record<string, NoteMessage | null>>({});
   const [draftText, setDraftText] = useState('');
-  const [sending, setSending] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NoteMessage | null>(null);
   const [expanded, setExpanded] = useState(true);
+  const [attachOpen, setAttachOpen] = useState(false);
   const composerInputRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const overlayKey = `note-${note.id}`;
@@ -63,35 +67,117 @@ export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, relo
 
   useEffect(() => {
     let active = true;
-    container.getNoteMessages.execute(note.id).then((result) => {
-      if (active) setMessages(result);
+    container.getNoteMessages.execute(note.id).then(async (result) => {
+      if (!active) return;
+      setMessages(result);
+
+      // Igual que en `useNoteDetail`: una cita puede apuntar a un mensaje
+      // que ya no está en ESTA anotación (se lo sacó, pero sigue en otra) —
+      // se resuelve aparte para no mostrarlo como "Mensaje eliminado".
+      const localIds = new Set(result.map((m) => m.id));
+      const missingReplyIds = [
+        ...new Set(result.map((m) => m.replyToId).filter((id): id is string => id != null && !localIds.has(id))),
+      ];
+      if (missingReplyIds.length === 0) {
+        setExternalReplyTargets({});
+        return;
+      }
+      const resolved = await Promise.all(missingReplyIds.map((id) => container.getNoteMessage.execute(id)));
+      if (!active) return;
+      const map: Record<string, NoteMessage | null> = {};
+      missingReplyIds.forEach((id, index) => {
+        map[id] = resolved[index];
+      });
+      setExternalReplyTargets(map);
     });
     return () => {
       active = false;
     };
   }, [note.id, reloadTick]);
 
-  async function send() {
+  // Optimista: actualiza `messages` al toque, antes de que termine de
+  // guardarse — sin esperar ningún `await` ni volver a pedir los mensajes
+  // enteros después (eso eran dos vueltas completas a AsyncStorage de más).
+  // El guardado real sigue atrás con el mismo `id` que ya se usó acá, así
+  // que es el mismo registro, no uno duplicado; si llegara a fallar (en la
+  // práctica no pasa, es solo almacenamiento local), el próximo `reloadTick`
+  // lo corrige solo. Mismo criterio que ya usa `ListCard.toggleEntryDone`.
+  function send() {
     const text = draftText.trim();
     if (!text) return;
-    setSending(true);
-    try {
-      await container.saveNoteMessage.execute({
-        noteId: note.id,
-        text,
+    const message = createNoteMessage({
+      id: generateId(),
+      noteIds: [note.id],
+      text,
+      sentAt: new Date().toISOString(),
+      replyToId: replyTarget?.id,
+    });
+    setMessages((prev) => [...(prev ?? []), message]);
+    setDraftText('');
+    setReplyTarget(null);
+    container.saveNoteMessage
+      .execute({
+        id: message.id,
+        noteIds: [...message.noteIds],
+        text: message.text,
+        sentAt: message.sentAt,
+        replyToId: message.replyToId,
+      })
+      .catch(() => {});
+  }
+
+  // Mismo criterio optimista que `send()`, pero para los mensajes de medios
+  // elegidos de una (ver `pickNoteMedia.ts`): todos aparecen de una en
+  // `messages`; el guardado real de cada uno va uno por vez, en orden
+  // (nunca en paralelo — mismo motivo que `useNoteDetail.sendMediaBatch`).
+  function sendMediaBatch(items: PickedNoteMedia[]) {
+    if (items.length === 0) return;
+    const newMessages = items.map(({ kind, media, mediaItems }) =>
+      createNoteMessage({
+        id: generateId(),
+        noteIds: [note.id],
+        kind,
+        media,
+        mediaItems,
         sentAt: new Date().toISOString(),
-        replyToId: replyTarget?.id,
-      });
-      setDraftText('');
-      setReplyTarget(null);
-      setMessages(await container.getNoteMessages.execute(note.id));
-    } finally {
-      setSending(false);
+      }),
+    );
+    setMessages((prev) => [...(prev ?? []), ...newMessages]);
+    (async () => {
+      for (const message of newMessages) {
+        await container.saveNoteMessage
+          .execute({
+            id: message.id,
+            noteIds: [...message.noteIds],
+            kind: message.kind,
+            media: message.media,
+            mediaItems: message.mediaItems ? [...message.mediaItems] : undefined,
+            text: message.text,
+            sentAt: message.sentAt,
+          })
+          .catch(() => {});
+      }
+    })();
+  }
+
+  async function chooseAttach(what: 'photo' | 'document') {
+    setAttachOpen(false);
+    try {
+      const items = what === 'photo' ? await pickNotePhotos() : await pickNoteDocuments();
+      sendMediaBatch(items);
+    } catch (error) {
+      Alert.alert('No se pudo adjuntar', error instanceof Error ? error.message : 'Ocurrió un error');
     }
   }
 
   const timeline = messages ? buildNoteTimeline(messages) : [];
-  const byId = new Map((messages ?? []).map((m) => [m.id, m]));
+
+  function getRepliedMessage(message: NoteMessage): NoteMessage | null | undefined {
+    if (message.replyToId === undefined) return undefined;
+    const local = (messages ?? []).find((m) => m.id === message.replyToId);
+    if (local) return local;
+    return externalReplyTargets[message.replyToId] ?? null;
+  }
 
   function renderMessages() {
     if (messages == null) return <ActivityIndicator style={styles.loader} />;
@@ -103,9 +189,7 @@ export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, relo
         <NoteMessageBubble
           key={entry.key}
           message={entry.message}
-          repliedMessage={
-            entry.message.replyToId !== undefined ? byId.get(entry.message.replyToId) ?? null : undefined
-          }
+          repliedMessage={getRepliedMessage(entry.message)}
           selectionMode={false}
           selected={false}
           onLongPress={() => {}}
@@ -133,9 +217,10 @@ export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, relo
           value={draftText}
           onChangeText={setDraftText}
           onSend={send}
-          sending={sending}
           replyTarget={replyTarget}
           onCancelReply={() => setReplyTarget(null)}
+          onAttach={() => setAttachOpen(true)}
+          onSendAudio={(media) => sendMediaBatch([{ kind: 'audio', media }])}
         />
       </View>
     );
@@ -147,7 +232,7 @@ export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, relo
   useEffect(() => {
     if (isOpen) overlay.update(overlayKey, panelContent());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, draftText, sending, replyTarget, messages]);
+  }, [isOpen, draftText, replyTarget, messages]);
 
   useFocusOnOpen(isOpen, composerInputRef);
 
@@ -163,9 +248,16 @@ export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, relo
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={onOpen} activeOpacity={0.7}>
-        <Text style={styles.name} numberOfLines={1}>
-          {note.name}
-        </Text>
+        <View style={styles.headerTexts}>
+          <Text style={styles.name} numberOfLines={1}>
+            {note.name}
+          </Text>
+          {note.description ? (
+            <Text style={styles.description} numberOfLines={1}>
+              {note.description}
+            </Text>
+          ) : null}
+        </View>
         <FavoriteStar favorite={note.favorite} onToggle={onToggleFavorite} />
         <TouchableOpacity style={styles.expandButton} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
           <Text style={styles.expandTriangle}>{expanded ? '▾' : '▸'}</Text>
@@ -192,6 +284,8 @@ export function NoteCard({ note, onToggleFavorite, onOpen, compact = false, relo
         </Text>
         <Send size={16} color={theme.colors.textMuted} />
       </TouchableOpacity>
+
+      <AttachChooserModal visible={attachOpen} onClose={() => setAttachOpen(false)} onChoose={chooseAttach} />
     </View>
   );
 }
@@ -211,11 +305,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
-  name: {
+  headerTexts: {
     flex: 1,
+    gap: 1,
+  },
+  name: {
     fontSize: 16,
     fontWeight: '800',
     color: theme.colors.text,
+  },
+  description: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
   },
   expandButton: {
     width: 28,

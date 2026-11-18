@@ -636,9 +636,12 @@ alineadas **a la derecha**.
 - **Hub** ([`notes/`](src/presentation/screens/notes/)): saludo + una
   [`NoteCard`](src/presentation/note/components/NoteCard.tsx) por anotación
   (orden de creación — no tiene reorden manual propio todavía) y, al final,
-  **＋ Crear anotación nueva**.
-- **`NoteCard`** (hub y Favoritos, con `compact` ahí): nombre arriba (tocarlo
-  entra al chat completo) + estrella de favorito + un **triángulo** (mismo
+  **＋ Crear anotación nueva** — al crearla se le puede poner, además del
+  nombre, una **descripción corta opcional** (solo en ese momento, no se
+  edita después).
+- **`NoteCard`** (hub y Favoritos, con `compact` ahí): nombre arriba (y, si
+  tiene, la descripción como subtítulo chico debajo) — tocarlo entra al chat
+  completo — + estrella de favorito + un **triángulo** (mismo
   patrón que `ListCard`) que colapsa/despliega solo la vista del chat —
   colapsada, solo quedan visibles el nombre y el campo de escribir. Desplegada,
   debajo hay una vista **de alto fijo** del chat —
@@ -672,12 +675,47 @@ alineadas **a la derecha**.
   - **Selección múltiple**: mantener presionado un mensaje lo selecciona
     (igual que en listas/rutina diaria); con uno o más seleccionados,
     [`SelectionBar`](src/presentation/components/SelectionBar.tsx) reemplaza
-    la vista normal — **✕** cancela, **tacho** borra (con confirmación), y un
+    la vista normal — **✕** cancela, **tacho** borra (con confirmación), un
     **lápiz** (solo si hay exactamente uno seleccionado) precarga ese mensaje
     en el campo de escribir, con una cinta **"Editando mensaje"**, para
-    corregirlo sin abrir nada aparte.
+    corregirlo sin abrir nada aparte, **copiar** junta el texto de todos los
+    seleccionados (orden cronológico) al portapapeles, **carpeta con +**
+    agrega los seleccionados a otra anotación (elegida de una lista) sin
+    sacarlos de esta, y **carpeta con -** los saca de esta anotación (si
+    alguno quedaría sin ninguna, no se saca y se avisa cuántos).
   - Si el mensaje al que se respondió se borró después, la cita muestra
-    **"Mensaje eliminado"** en vez de romper nada.
+    **"Mensaje eliminado"** en vez de romper nada — pero si solo se lo sacó
+    de esta anotación y sigue en otra, la cita se resuelve igual y se
+    muestra normalmente.
+  - Un mensaje puede pertenecer a **más de una anotación a la vez**
+    (`NoteMessage.noteIds`): se manda en una, puede agregarse a otras
+    después, y sacarse de algunas sin tocar el texto ni nada más — solo
+    cambia dónde aparece.
+  - Tocar el **nombre de la anotación**, arriba, o el ícono de **libro** a
+    la izquierda de la lupa, llevan los dos a una **galería** aparte
+    ([`note-media/`](src/presentation/screens/note-media/)): un control
+    segmentado (igual al de Semana/Mes/Año de los trackers) elige **Fotos**
+    (cuadrícula de 4 por fila, con todas juntas) o **Documentos** (lista) —
+    nunca las dos secciones a la vez; deslizar a los costados también
+    cambia de sección.
+- **Fotos, documentos y audio**: el **clip** a la izquierda del campo de
+  escribir (en el chat completo y en la card compacta) deja elegir fotos o
+  documentos. Las fotos (hasta **4 juntas**) se mandan como **un solo
+  mensaje** con cuadrícula (dos arriba, dos abajo); los documentos (hasta 5
+  por vez) van cada uno en su propio mensaje. Tocar una foto la agranda a
+  pantalla completa, y ahí **deslizar pasa a la siguiente o anterior**
+  (dentro de las fotos de ese mensaje si se abrió desde el chat, o de toda
+  la galería si se abrió desde ahí); un documento muestra ícono + nombre +
+  tamaño y, al tocarlo, lo comparte con el selector del sistema (misma vía
+  que ya usa exportar el backup); un audio tiene un reproductor chico
+  (play/pausa + tiempo). Los archivos
+  viven en una carpeta propia de la app (nunca en el backup — si se
+  restaura uno, el mensaje queda pero avisa "Archivo no encontrado" en vez
+  de romper). El botón de enviar se convierte en **micrófono** cuando el
+  campo está vacío: mantenerlo presionado grava un audio (estilo
+  WhatsApp — deslizar a la izquierda cancela, soltar normal lo manda); sin
+  traba (lock) todavía, a propósito. Sin probar en un dispositivo real
+  (ver `docs/DECISIONS.md` #138).
 
 ## Finanzas
 

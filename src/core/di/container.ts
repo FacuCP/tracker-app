@@ -58,10 +58,13 @@ import { CreateNote } from '../../domain/note/usecases/CreateNote';
 import { DeleteNote } from '../../domain/note/usecases/DeleteNote';
 import { DeleteNoteMessage } from '../../domain/note/usecases/DeleteNoteMessage';
 import { GetNote } from '../../domain/note/usecases/GetNote';
+import { GetNoteMessage } from '../../domain/note/usecases/GetNoteMessage';
 import { GetNoteMessages } from '../../domain/note/usecases/GetNoteMessages';
 import { GetNotes } from '../../domain/note/usecases/GetNotes';
 import { SaveNoteMessage } from '../../domain/note/usecases/SaveNoteMessage';
 import { SetNoteFavorite } from '../../domain/note/usecases/SetNoteFavorite';
+import { SetNoteMessageNotes } from '../../domain/note/usecases/SetNoteMessageNotes';
+import { SetNoteMessageFavorite } from '../../domain/note/usecases/SetNoteMessageFavorite';
 import { AsyncStorageFinanceCategoryLocalDataSource } from '../../data/finance/datasources/FinanceCategoryLocalDataSource';
 import { AsyncStorageFinanceTransactionLocalDataSource } from '../../data/finance/datasources/FinanceTransactionLocalDataSource';
 import { FinanceCategoryRepositoryImpl } from '../../data/finance/repositories/FinanceCategoryRepositoryImpl';
@@ -230,8 +233,11 @@ export const container = {
   setNoteFavorite: new SetNoteFavorite(noteRepository),
   deleteNote: new DeleteNote(noteRepository, noteMessageRepository),
   getNoteMessages: new GetNoteMessages(noteMessageRepository),
+  getNoteMessage: new GetNoteMessage(noteMessageRepository),
   saveNoteMessage: new SaveNoteMessage(noteRepository, noteMessageRepository, generateId),
   deleteNoteMessage: new DeleteNoteMessage(noteMessageRepository),
+  setNoteMessageNotes: new SetNoteMessageNotes(noteMessageRepository),
+  setNoteMessageFavorite: new SetNoteMessageFavorite(noteMessageRepository),
 
   getFinanceCategories: new GetFinanceCategories(financeCategoryRepository),
   saveFinanceCategory: new SaveFinanceCategory(financeCategoryRepository, generateId),

@@ -18,7 +18,8 @@ export type RootStackParamList = {
   DailyRoutines: undefined;
   Events: undefined;
   Notes: { create?: boolean } | undefined;
-  NoteDetail: { noteId: string };
+  NoteDetail: { noteId: string; focusMessageId?: string };
+  NoteMedia: { noteId: string };
   Settings: undefined;
   MoodProgress: undefined;
   CreateTracker: undefined;

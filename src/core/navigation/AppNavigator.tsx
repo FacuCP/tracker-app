@@ -18,6 +18,7 @@ import { ListDetailScreen } from '../../presentation/screens/list-detail/ListDet
 import { ListsScreen } from '../../presentation/screens/lists/ListsScreen';
 import { MoodProgressScreen } from '../../presentation/screens/mood-progress/MoodProgressScreen';
 import { NoteDetailScreen } from '../../presentation/screens/note-detail/NoteDetailScreen';
+import { NoteMediaScreen } from '../../presentation/screens/note-media/NoteMediaScreen';
 import { NotesScreen } from '../../presentation/screens/notes/NotesScreen';
 import { OnboardingScreen } from '../../presentation/screens/onboarding/OnboardingScreen';
 import { SettingsScreen } from '../../presentation/screens/settings/SettingsScreen';
@@ -139,6 +140,7 @@ export function AppNavigator() {
         <Stack.Screen name="Events" component={EventsScreen} options={hubOptions('Events')} />
         <Stack.Screen name="Notes" component={NotesScreen} options={hubOptions('Notes')} />
         <Stack.Screen name="NoteDetail" component={NoteDetailScreen} options={{ title: 'Anotación' }} />
+        <Stack.Screen name="NoteMedia" component={NoteMediaScreen} options={{ title: 'Medios' }} />
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}

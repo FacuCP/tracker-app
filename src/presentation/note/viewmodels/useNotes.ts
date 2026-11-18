@@ -42,8 +42,8 @@ export function useNotes() {
   );
 
   const createNote = useCallback(
-    async (name: string, favorite: boolean) => {
-      await container.createNote.execute(name, favorite);
+    async (name: string, favorite: boolean, description?: string) => {
+      await container.createNote.execute(name, favorite, description);
       setCreateOpen(false);
       await reload();
     },

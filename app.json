@@ -30,6 +30,18 @@
         {
           "color": "#2563eb"
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Se usa el micrófono para grabar audios en Anotaciones."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Se usa la galería para mandar fotos en Anotaciones."
+        }
       ]
     ],
     "extra": {
